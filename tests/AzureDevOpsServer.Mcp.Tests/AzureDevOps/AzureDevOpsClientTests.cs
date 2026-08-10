@@ -451,6 +451,131 @@ public sealed class AzureDevOpsClientTests
         Assert.Empty(handler.Requests);
     }
 
+    [Fact]
+    public async Task GetPullRequestsAsync_DefaultsToActiveStatus()
+    {
+        const string json =
+            """
+            {
+              "count": 1,
+              "value": [
+                {
+                  "pullRequestId": 7,
+                  "title": "Add feature",
+                  "description": "Feature description",
+                  "status": "active",
+                  "sourceRefName": "refs/heads/develop",
+                  "targetRefName": "refs/heads/main",
+                  "createdBy": { "displayName": "Sebastian", "uniqueName": "sebastian@example.local" }
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var pullRequests = await client.GetPullRequestsAsync(
+            "WebApp",
+            "Alpha",
+            null,
+            TestContext.Current.CancellationToken
+        );
+
+        var pullRequest = Assert.Single(pullRequests);
+        Assert.Equal(7, pullRequest.PullRequestId);
+        Assert.Equal("refs/heads/develop", pullRequest.SourceRefName);
+        Assert.Equal("Sebastian", pullRequest.CreatedBy!.DisplayName);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/pullrequests?searchCriteria.status=active&api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetPullRequestsAsync_WithStatus_UsesGivenStatus()
+    {
+        using var response = JsonResponse("""{ "count": 0, "value": [] }""");
+        var client = CreateClient(out var handler, response);
+
+        var pullRequests = await client.GetPullRequestsAsync(
+            "WebApp",
+            "Alpha",
+            "completed",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Empty(pullRequests);
+        Assert.Contains(
+            "searchCriteria.status=completed",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetPullRequestAsync_ReturnsPullRequest()
+    {
+        const string json =
+            """
+            {
+              "pullRequestId": 7,
+              "title": "Add feature",
+              "status": "active",
+              "sourceRefName": "refs/heads/develop",
+              "targetRefName": "refs/heads/main"
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var pullRequest = await client.GetPullRequestAsync("WebApp", 7, "Alpha", TestContext.Current.CancellationToken);
+
+        Assert.Equal(7, pullRequest.PullRequestId);
+        Assert.Null(pullRequest.Description);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/pullrequests/7?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task CreatePullRequestAsync_NormalizesBranchRefs()
+    {
+        const string json =
+            """
+            {
+              "pullRequestId": 8,
+              "title": "New PR",
+              "status": "active",
+              "sourceRefName": "refs/heads/develop",
+              "targetRefName": "refs/heads/main"
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var pullRequest = await client.CreatePullRequestAsync(
+            "WebApp",
+            "develop",
+            "refs/heads/main",
+            "New PR",
+            "Description",
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(8, pullRequest.PullRequestId);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/pullrequests?api-version=7.0",
+            request.RequestUri!.AbsoluteUri
+        );
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("sourceRefName").ValueEquals("refs/heads/develop"));
+        Assert.True(body.RootElement.GetProperty("targetRefName").ValueEquals("refs/heads/main"));
+        Assert.True(body.RootElement.GetProperty("title").ValueEquals("New PR"));
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _responses;

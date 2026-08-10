@@ -203,6 +203,81 @@ public sealed class AzureDevOpsClient
             throw new AzureDevOpsClientException($"The response for item '{path}' could not be parsed.");
     }
 
+    public async Task<IReadOnlyList<GitPullRequest>> GetPullRequestsAsync(
+        string repository,
+        string? project,
+        string? status,
+        CancellationToken cancellationToken)
+    {
+        var effectiveStatus = string.IsNullOrWhiteSpace(status) ?
+            "active" :
+            status;
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests?searchCriteria.status={Uri.EscapeDataString(effectiveStatus)}&api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<GitPullRequest>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<GitPullRequest> GetPullRequestAsync(
+        string repository,
+        int pullRequestId,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests/{pullRequestId}?api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var pullRequest = await response.Content.ReadFromJsonAsync<GitPullRequest>(cancellationToken);
+        return pullRequest ??
+            throw new AzureDevOpsClientException($"The response for pull request {pullRequestId} could not be parsed.");
+    }
+
+    public async Task<GitPullRequest> CreatePullRequestAsync(
+        string repository,
+        string sourceBranch,
+        string targetBranch,
+        string title,
+        string? description,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests?api-version={_options.Value.ApiVersion}",
+            new
+            {
+                sourceRefName = ToRefName(sourceBranch),
+                targetRefName = ToRefName(targetBranch),
+                title,
+                description
+            },
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var pullRequest = await response.Content.ReadFromJsonAsync<GitPullRequest>(cancellationToken);
+        return pullRequest ??
+            throw new AzureDevOpsClientException("The create pull request response could not be parsed.");
+    }
+
+    private static string ToRefName(string branch)
+    {
+        return branch.StartsWith("refs/", StringComparison.Ordinal) ?
+            branch :
+            $"refs/heads/{branch}";
+    }
+
     private static HttpContent CreateJsonPatchContent(IReadOnlyDictionary<string, string> fields)
     {
         if (fields.Count == 0)
