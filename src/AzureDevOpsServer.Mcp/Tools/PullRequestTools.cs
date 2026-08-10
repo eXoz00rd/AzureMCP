@@ -19,7 +19,7 @@ public sealed class PullRequestTools
         _options = options;
     }
 
-    [McpServerTool(Name = "list_pull_requests")]
+    [McpServerTool(Name = "list_pull_requests", ReadOnly = true)]
     [Description("Lists pull requests of a Git repository filtered by status.")]
     public Task<IReadOnlyList<GitPullRequest>> ListPullRequestsAsync(
         [Description("Repository name or id.")] string repository,
@@ -32,7 +32,7 @@ public sealed class PullRequestTools
         return _client.GetPullRequestsAsync(repository, EffectiveProject(project), status, cancellationToken);
     }
 
-    [McpServerTool(Name = "get_pull_request")]
+    [McpServerTool(Name = "get_pull_request", ReadOnly = true)]
     [Description("Gets the details of a single pull request.")]
     public Task<GitPullRequest> GetPullRequestAsync(
         [Description("Repository name or id.")] string repository,
@@ -44,7 +44,7 @@ public sealed class PullRequestTools
         return _client.GetPullRequestAsync(repository, pullRequestId, EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "create_pull_request")]
+    [McpServerTool(Name = "create_pull_request", Destructive = false)]
     [Description("Creates a pull request from a source branch to a target branch.")]
     public Task<GitPullRequest> CreatePullRequestAsync(
         [Description("Repository name or id.")] string repository,
@@ -71,7 +71,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "get_pull_request_changes")]
+    [McpServerTool(Name = "get_pull_request_changes", ReadOnly = true)]
     [Description("Lists the files changed in a pull request, based on its latest iteration.")]
     public Task<IReadOnlyList<PullRequestChange>> GetPullRequestChangesAsync(
         [Description("Repository name or id.")] string repository,
@@ -88,7 +88,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "list_pull_request_threads")]
+    [McpServerTool(Name = "list_pull_request_threads", ReadOnly = true)]
     [Description("Lists the comment threads of a pull request, including file context and authors.")]
     public Task<IReadOnlyList<PullRequestThread>> ListPullRequestThreadsAsync(
         [Description("Repository name or id.")] string repository,
@@ -105,7 +105,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "add_pull_request_comment")]
+    [McpServerTool(Name = "add_pull_request_comment", Destructive = false)]
     [Description("Adds a comment to a pull request as a new thread, optionally anchored to a file and line.")]
     public Task<PullRequestThread> AddPullRequestCommentAsync(
         [Description("Repository name or id.")] string repository,
@@ -130,7 +130,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "vote_on_pull_request")]
+    [McpServerTool(Name = "vote_on_pull_request", Destructive = false)]
     [Description("Casts the authenticated user's vote on a pull request.")]
     public Task<PullRequestReviewer> VoteOnPullRequestAsync(
         [Description("Repository name or id.")] string repository,
@@ -162,7 +162,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "update_pull_request_status")]
+    [McpServerTool(Name = "update_pull_request_status", Destructive = true)]
     [Description("Completes, abandons, or reactivates a pull request.")]
     public Task<GitPullRequest> UpdatePullRequestStatusAsync(
         [Description("Repository name or id.")] string repository,

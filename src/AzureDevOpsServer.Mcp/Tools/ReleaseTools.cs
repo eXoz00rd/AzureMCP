@@ -21,7 +21,7 @@ public sealed class ReleaseTools
         _options = options;
     }
 
-    [McpServerTool(Name = "list_release_definitions")]
+    [McpServerTool(Name = "list_release_definitions", ReadOnly = true)]
     [Description("Lists the release definitions of a project. Requires a project name or ADOS_DEFAULT_PROJECT.")]
     public Task<IReadOnlyList<ReleaseDefinition>> ListReleaseDefinitionsAsync(
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project,
@@ -30,7 +30,7 @@ public sealed class ReleaseTools
         return _client.GetReleaseDefinitionsAsync(EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "list_releases")]
+    [McpServerTool(Name = "list_releases", ReadOnly = true)]
     [Description(
         "Lists recent releases of a project, optionally filtered by release definition. Requires a project name or ADOS_DEFAULT_PROJECT."
     )]
@@ -50,7 +50,7 @@ public sealed class ReleaseTools
         );
     }
 
-    [McpServerTool(Name = "get_release")]
+    [McpServerTool(Name = "get_release", ReadOnly = true)]
     [Description("Gets a release with the deployment status of each environment.")]
     public Task<Release> GetReleaseAsync(
         [Description("Release id.")] int releaseId,
@@ -61,7 +61,7 @@ public sealed class ReleaseTools
         return _client.GetReleaseAsync(EffectiveProject(project), releaseId, cancellationToken);
     }
 
-    [McpServerTool(Name = "create_release")]
+    [McpServerTool(Name = "create_release", Destructive = false)]
     [Description("Creates a new release from a release definition. Requires a project name or ADOS_DEFAULT_PROJECT.")]
     public Task<Release> CreateReleaseAsync(
         [Description("Release definition id.")] int definitionId,

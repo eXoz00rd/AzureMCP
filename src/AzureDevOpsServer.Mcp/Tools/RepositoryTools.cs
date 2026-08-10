@@ -21,7 +21,7 @@ public sealed class RepositoryTools
         _options = options;
     }
 
-    [McpServerTool(Name = "list_repositories")]
+    [McpServerTool(Name = "list_repositories", ReadOnly = true)]
     [Description("Lists Git repositories in the given project, the default project, or the whole collection.")]
     public Task<IReadOnlyList<GitRepository>> ListRepositoriesAsync(
         [Description(
@@ -33,7 +33,7 @@ public sealed class RepositoryTools
         return _client.GetRepositoriesAsync(EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "list_branches")]
+    [McpServerTool(Name = "list_branches", ReadOnly = true)]
     [Description("Lists the branches of a Git repository.")]
     public Task<IReadOnlyList<GitRef>> ListBranchesAsync(
         [Description("Repository name or id.")] string repository,
@@ -44,7 +44,7 @@ public sealed class RepositoryTools
         return _client.GetBranchesAsync(repository, EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "get_file_content")]
+    [McpServerTool(Name = "get_file_content", ReadOnly = true)]
     [Description(
         "Gets the content of a text file from a Git repository. Uses the default branch when no branch is given."
     )]
@@ -66,7 +66,7 @@ public sealed class RepositoryTools
         );
     }
 
-    [McpServerTool(Name = "list_commits")]
+    [McpServerTool(Name = "list_commits", ReadOnly = true)]
     [Description("Lists recent commits of a repository, optionally filtered by branch and file path.")]
     public Task<IReadOnlyList<GitCommit>> ListCommitsAsync(
         [Description("Repository name or id.")] string repository,
@@ -92,7 +92,7 @@ public sealed class RepositoryTools
         );
     }
 
-    [McpServerTool(Name = "get_commit")]
+    [McpServerTool(Name = "get_commit", ReadOnly = true)]
     [Description("Gets a commit with its message, author, and the list of changed files.")]
     public Task<GitCommitDetails> GetCommitAsync(
         [Description("Repository name or id.")] string repository,
@@ -105,7 +105,7 @@ public sealed class RepositoryTools
         return _client.GetCommitAsync(repository, commitId, EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "list_repository_items")]
+    [McpServerTool(Name = "list_repository_items", ReadOnly = true)]
     [Description("Lists the files and folders of a repository path, one level deep by default.")]
     public Task<IReadOnlyList<GitTreeItem>> ListRepositoryItemsAsync(
         [Description("Repository name or id.")] string repository,
@@ -129,7 +129,7 @@ public sealed class RepositoryTools
         );
     }
 
-    [McpServerTool(Name = "diff_branches")]
+    [McpServerTool(Name = "diff_branches", ReadOnly = true)]
     [Description("Compares two branches: ahead and behind commit counts plus the changed files.")]
     public Task<GitDiffs> DiffBranchesAsync(
         [Description("Repository name or id.")] string repository,

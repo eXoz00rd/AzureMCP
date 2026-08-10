@@ -15,7 +15,7 @@ public sealed class ProjectTools
         _client = client;
     }
 
-    [McpServerTool(Name = "list_projects")]
+    [McpServerTool(Name = "list_projects", ReadOnly = true)]
     [Description("Lists the projects in the configured Azure DevOps Server collection.")]
     public Task<IReadOnlyList<TeamProject>> ListProjectsAsync(CancellationToken cancellationToken)
     {

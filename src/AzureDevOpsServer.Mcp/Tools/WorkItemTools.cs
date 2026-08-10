@@ -19,7 +19,7 @@ public sealed class WorkItemTools
         _options = options;
     }
 
-    [McpServerTool(Name = "query_work_items")]
+    [McpServerTool(Name = "query_work_items", ReadOnly = true)]
     [Description(
         "Runs a WIQL query and returns matching work item references. Scopes the query to the given project, the default project, or the whole collection."
     )]
@@ -38,7 +38,7 @@ public sealed class WorkItemTools
         return _client.QueryWorkItemsAsync(wiql, effectiveProject, cancellationToken);
     }
 
-    [McpServerTool(Name = "get_work_item")]
+    [McpServerTool(Name = "get_work_item", ReadOnly = true)]
     [Description("Gets a single work item with all of its fields.")]
     public Task<WorkItem> GetWorkItemAsync(
         [Description("Work item id.")] int id,
@@ -47,7 +47,7 @@ public sealed class WorkItemTools
         return _client.GetWorkItemAsync(id, cancellationToken);
     }
 
-    [McpServerTool(Name = "get_work_items")]
+    [McpServerTool(Name = "get_work_items", ReadOnly = true)]
     [Description("Gets multiple work items by their ids in one call, including fields and relations.")]
     public Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
         [Description("Work item ids.")] int[] ids,
@@ -56,7 +56,7 @@ public sealed class WorkItemTools
         return _client.GetWorkItemsAsync(ids, cancellationToken);
     }
 
-    [McpServerTool(Name = "create_work_item")]
+    [McpServerTool(Name = "create_work_item", Destructive = false)]
     [Description("Creates a new work item of the given type. Requires a project name or ADOS_DEFAULT_PROJECT.")]
     public Task<WorkItem> CreateWorkItemAsync(
         [Description("Work item type, for example Bug, Task, or User Story.")] string type,
@@ -86,7 +86,7 @@ public sealed class WorkItemTools
         return _client.CreateWorkItemAsync(effectiveProject, type, allFields, cancellationToken);
     }
 
-    [McpServerTool(Name = "update_work_item")]
+    [McpServerTool(Name = "update_work_item", Destructive = true)]
     [Description("Updates fields of an existing work item.")]
     public Task<WorkItem> UpdateWorkItemAsync(
         [Description("Work item id.")] int id,
@@ -97,7 +97,7 @@ public sealed class WorkItemTools
         return _client.UpdateWorkItemAsync(id, fields, cancellationToken);
     }
 
-    [McpServerTool(Name = "add_work_item_comment")]
+    [McpServerTool(Name = "add_work_item_comment", Destructive = false)]
     [Description("Adds a comment to the discussion of a work item.")]
     public Task<WorkItem> AddWorkItemCommentAsync(
         [Description("Work item id.")] int id,

@@ -15,7 +15,7 @@ public sealed class ServerInfoTool
         _options = options;
     }
 
-    [McpServerTool(Name = "server_info")]
+    [McpServerTool(Name = "server_info", ReadOnly = true)]
     [Description("Returns the configured Azure DevOps Server connection details. The PAT is never exposed.")]
     public ServerInfo GetServerInfo()
     {

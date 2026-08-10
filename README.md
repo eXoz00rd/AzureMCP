@@ -10,26 +10,21 @@ Most existing MCP integrations for Azure DevOps target Azure DevOps Services (cl
 
 ## Tools
 
-| Area | Tool | Description |
-|---|---|---|
-| Server | `server_info` | Returns the configured connection details; never exposes the PAT |
-| Projects | `list_projects` | Lists all projects in the collection, paging through continuation tokens |
-| Work items | `query_work_items` | Runs a WIQL query scoped to a project or the whole collection |
-| Work items | `get_work_item` | Gets a single work item with all of its fields |
-| Work items | `create_work_item` | Creates a work item of a given type with title and optional fields |
-| Work items | `update_work_item` | Updates work item fields via JSON Patch |
-| Work items | `add_work_item_comment` | Adds a discussion comment (`System.History`) |
-| Repositories | `list_repositories` | Lists Git repositories in a project or the whole collection |
-| Repositories | `list_branches` | Lists the branches of a repository |
-| Repositories | `get_file_content` | Gets the content of a text file, optionally from a specific branch |
-| Pull requests | `list_pull_requests` | Lists pull requests filtered by status (active by default) |
-| Pull requests | `get_pull_request` | Gets the details of a pull request |
-| Pull requests | `create_pull_request` | Creates a pull request between two branches |
-| Builds | `list_build_definitions` | Lists the build definitions of a project |
-| Builds | `list_builds` | Lists recent builds, optionally filtered by definition |
-| Builds | `queue_build` | Queues a build for a definition, optionally from a specific branch |
+42 tools across 9 areas:
 
-Tools that operate inside a project fall back to `ADOS_DEFAULT_PROJECT` when no project is given.
+| Area | Tools |
+|---|---|
+| Server | `server_info` |
+| Projects | `list_projects` |
+| Work items | `query_work_items`, `get_work_item`, `get_work_items`, `create_work_item`, `update_work_item`, `add_work_item_comment` |
+| Queries & metadata | `list_queries`, `run_saved_query`, `list_work_item_types`, `list_work_item_states`, `list_iterations`, `list_areas` |
+| Repositories | `list_repositories`, `list_branches`, `get_file_content`, `list_commits`, `get_commit`, `list_repository_items`, `diff_branches` |
+| Pull requests | `list_pull_requests`, `get_pull_request`, `create_pull_request`, `get_pull_request_changes`, `list_pull_request_threads`, `add_pull_request_comment`, `vote_on_pull_request`, `update_pull_request_status` |
+| Builds | `list_build_definitions`, `list_builds`, `queue_build`, `get_build_timeline`, `get_build_log`, `list_build_artifacts` |
+| Releases | `list_release_definitions`, `list_releases`, `get_release`, `create_release` |
+| Wiki | `list_wikis`, `list_wiki_pages`, `get_wiki_page` |
+
+Tools that operate inside a project fall back to `ADOS_DEFAULT_PROJECT` when no project is given. Every tool carries MCP annotations (`readOnlyHint` / `destructiveHint`), so clients can require confirmation only where it matters, and all HTTP calls go through a standard resilience pipeline with retries and timeouts.
 
 ## Requirements
 
@@ -220,9 +215,9 @@ Releases are published to NuGet.org by the [release workflow](.github/workflows/
 
 ## Roadmap
 
-- Pull request threads, comments, and votes
-- Build logs and timeline details
-- Wiki page access
+- Wiki search through the Search extension
+- Work item attachments
+- Code search
 
 ## License
 

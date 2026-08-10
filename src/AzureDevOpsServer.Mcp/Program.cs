@@ -27,14 +27,16 @@ builder.Services
        .Configure(options => options.LoadFromEnvironment())
        .ValidateOnStart();
 
-builder.Services.AddHttpClient<AzureDevOpsClient>((serviceProvider, httpClient) =>
-    {
-        var options = serviceProvider.GetRequiredService<IOptions<AzureDevOpsServerOptions>>().Value;
-        httpClient.BaseAddress = new Uri(options.CollectionUrl.TrimEnd('/') + "/");
-        var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($":{options.PersonalAccessToken}"));
-        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
-    }
-);
+builder.Services
+       .AddHttpClient<AzureDevOpsClient>((serviceProvider, httpClient) =>
+           {
+               var options = serviceProvider.GetRequiredService<IOptions<AzureDevOpsServerOptions>>().Value;
+               httpClient.BaseAddress = new Uri(options.CollectionUrl.TrimEnd('/') + "/");
+               var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($":{options.PersonalAccessToken}"));
+               httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+           }
+       )
+       .AddStandardResilienceHandler();
 
 builder.Services
        .AddMcpServer()

@@ -19,17 +19,16 @@ public sealed class WikiTools
         _options = options;
     }
 
-    [McpServerTool(Name = "list_wikis")]
+    [McpServerTool(Name = "list_wikis", ReadOnly = true)]
     [Description("Lists the wikis of a project. Requires a project name or ADOS_DEFAULT_PROJECT.")]
     public Task<IReadOnlyList<Wiki>> ListWikisAsync(
-        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project,
         CancellationToken cancellationToken)
     {
         return _client.GetWikisAsync(EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "list_wiki_pages")]
+    [McpServerTool(Name = "list_wiki_pages", ReadOnly = true)]
     [Description("Lists the full page tree of a wiki as nested paths without content.")]
     public Task<WikiPage> ListWikiPagesAsync(
         [Description("Wiki name or id.")] string wiki,
@@ -40,11 +39,12 @@ public sealed class WikiTools
         return _client.GetWikiPageTreeAsync(wiki, EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "get_wiki_page")]
+    [McpServerTool(Name = "get_wiki_page", ReadOnly = true)]
     [Description("Gets the markdown content of a wiki page by its path.")]
     public Task<WikiPage> GetWikiPageAsync(
         [Description("Wiki name or id.")] string wiki,
-        [Description("Page path, for example /Onboarding/Setup.")] string path,
+        [Description("Page path, for example /Onboarding/Setup.")]
+        string path,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project,
         CancellationToken cancellationToken)
