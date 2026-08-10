@@ -396,6 +396,123 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException($"The update response for thread {threadId} could not be parsed.");
     }
 
+    public async Task<GitPullRequest> UpdatePullRequestAsync(
+        string repository,
+        int pullRequestId,
+        string? title,
+        string? description,
+        bool? autoComplete,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var payload = new Dictionary<string, object?>();
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            payload["title"] = title;
+        }
+
+        if (description is not null)
+        {
+            payload["description"] = description;
+        }
+
+        if (autoComplete is not null)
+        {
+            payload["autoCompleteSetBy"] = autoComplete.Value ?
+                new Dictionary<string, object?> { ["id"] = await GetAuthenticatedUserIdAsync(cancellationToken) } :
+                null;
+        }
+
+        if (payload.Count == 0)
+        {
+            throw new AzureDevOpsClientException("At least one of title, description, or autoComplete is required.");
+        }
+
+        using var response = await _httpClient.PatchAsJsonAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}?api-version={ApiVersion(ApiArea.Git)}",
+            payload,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var pullRequest = await response.Content.ReadFromJsonAsync<GitPullRequest>(cancellationToken);
+        return pullRequest ??
+            throw new AzureDevOpsClientException($"The update response for pull request {pullRequestId} could not be parsed.");
+    }
+
+    public async Task<PullRequestReviewer> AddPullRequestReviewerAsync(
+        string repository,
+        int pullRequestId,
+        string reviewer,
+        bool isRequired,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var reviewerId = await ResolveIdentityIdAsync(reviewer, project, cancellationToken);
+
+        using var response = await _httpClient.PutAsJsonAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/reviewers/{reviewerId}?api-version={ApiVersion(ApiArea.Git)}",
+            new { vote = 0, isRequired },
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var added = await response.Content.ReadFromJsonAsync<PullRequestReviewer>(cancellationToken);
+        return added ??
+            throw new AzureDevOpsClientException("The add reviewer response could not be parsed.");
+    }
+
+    public async Task RemovePullRequestReviewerAsync(
+        string repository,
+        int pullRequestId,
+        string reviewer,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var reviewerId = await ResolveIdentityIdAsync(reviewer, project, cancellationToken);
+
+        using var response = await _httpClient.DeleteAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/reviewers/{reviewerId}?api-version={ApiVersion(ApiArea.Git)}",
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    private async Task<string> ResolveIdentityIdAsync(
+        string reviewer,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        if (Guid.TryParse(reviewer, out var reviewerId))
+        {
+            return reviewerId.ToString();
+        }
+
+        if (string.Equals(reviewer, "me", StringComparison.OrdinalIgnoreCase))
+        {
+            return (await GetAuthenticatedUserIdAsync(cancellationToken)).ToString();
+        }
+
+        using var response = await _httpClient.GetAsync(
+            $"_apis/identities?searchFilter=General&filterValue={Uri.EscapeDataString(reviewer)}&queryMembership=None&api-version={ApiVersion(ApiArea.Core)}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var identities = await response.Content.ReadFromJsonAsync<ListResult<IdentityRecord>>(cancellationToken);
+        var match = identities?.Value?.FirstOrDefault();
+        return match is null ?
+            throw new AzureDevOpsClientException(
+                $"The reviewer '{reviewer}' could not be resolved to an identity. Pass the identity id, a unique account name, or 'me' for the signed-in user."
+            ) :
+            match.Id.ToString();
+    }
+
     private async Task<Guid> GetAuthenticatedUserIdAsync(CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(

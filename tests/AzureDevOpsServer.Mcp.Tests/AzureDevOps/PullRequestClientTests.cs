@@ -72,6 +72,153 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
     }
 
     [Fact]
+    public async Task UpdatePullRequestAsync_WithTitleAndDescription_SendsOnlyProvidedFields()
+    {
+        using var response = JsonResponse(
+            """{ "pullRequestId": 7, "title": "New title", "status": "active", "sourceRefName": "refs/heads/develop", "targetRefName": "refs/heads/main" }"""
+        );
+        var client = CreateClient(out var handler, response);
+
+        await client.UpdatePullRequestAsync(
+            "WebApp",
+            7,
+            "New title",
+            "New description",
+            null,
+            "Alpha",
+            TestContext.Current.CancellationToken);
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Patch, request.Method);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("title").ValueEquals("New title"));
+        Assert.True(body.RootElement.GetProperty("description").ValueEquals("New description"));
+        Assert.False(body.RootElement.TryGetProperty("autoCompleteSetBy", out _));
+    }
+
+    [Fact]
+    public async Task UpdatePullRequestAsync_WithAutoComplete_ResolvesIdentity()
+    {
+        using var connectionData = JsonResponse(
+            """{ "authenticatedUser": { "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb" } }"""
+        );
+        using var response = JsonResponse(
+            """{ "pullRequestId": 7, "title": "Add feature", "status": "active", "sourceRefName": "refs/heads/develop", "targetRefName": "refs/heads/main" }"""
+        );
+        var client = CreateClient(out var handler, connectionData, response);
+
+        await client.UpdatePullRequestAsync("WebApp", 7, null, null, true, "Alpha", TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, handler.Requests.Count);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(
+            body.RootElement.GetProperty("autoCompleteSetBy")
+                .GetProperty("id")
+                .ValueEquals("0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb")
+        );
+    }
+
+    [Fact]
+    public async Task UpdatePullRequestAsync_WithNothingToChange_Throws()
+    {
+        var client = CreateClient(out var handler);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.UpdatePullRequestAsync("WebApp", 7, null, null, null, "Alpha", TestContext.Current.CancellationToken));
+
+        Assert.Contains("At least one of title", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task AddPullRequestReviewerAsync_WithIdentityId_SkipsLookup()
+    {
+        using var response = JsonResponse(
+            """{ "displayName": "Sebastian", "uniqueName": "sebastian@example.local", "vote": 0, "isRequired": true }"""
+        );
+        var client = CreateClient(out var handler, response);
+
+        var reviewer = await client.AddPullRequestReviewerAsync(
+            "WebApp",
+            7,
+            "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb",
+            true,
+            "Alpha",
+            TestContext.Current.CancellationToken);
+
+        Assert.True(reviewer.IsRequired);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Put, request.Method);
+        Assert.EndsWith(
+            "pullRequests/7/reviewers/0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb?api-version=7.0",
+            request.RequestUri!.AbsoluteUri
+        );
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("isRequired").GetBoolean());
+    }
+
+    [Fact]
+    public async Task AddPullRequestReviewerAsync_WithAccountName_ResolvesIdentityFirst()
+    {
+        using var identities = JsonResponse(
+            """{ "count": 1, "value": [ { "id": "b3f11a5c-9d24-4c5e-8a4f-2f47c1d0e9aa", "providerDisplayName": "Sebastian" } ] }"""
+        );
+        using var response = JsonResponse("""{ "displayName": "Sebastian", "vote": 0 }""");
+        var client = CreateClient(out var handler, identities, response);
+
+        await client.AddPullRequestReviewerAsync(
+            "WebApp",
+            7,
+            "sebastian@example.local",
+            false,
+            "Alpha",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("_apis/identities", handler.Requests[0].RequestUri!.AbsoluteUri);
+        Assert.Contains("filterValue=sebastian%40example.local", handler.Requests[0].RequestUri!.AbsoluteUri);
+        Assert.EndsWith("reviewers/b3f11a5c-9d24-4c5e-8a4f-2f47c1d0e9aa?api-version=7.0", handler.Requests[1].RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task AddPullRequestReviewerAsync_WithUnknownName_Throws()
+    {
+        using var identities = JsonResponse("""{ "count": 0, "value": [] }""");
+        var client = CreateClient(out var handler, identities);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.AddPullRequestReviewerAsync(
+                "WebApp",
+                7,
+                "ghost@example.local",
+                false,
+                "Alpha",
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("could not be resolved to an identity", exception.Message);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task RemovePullRequestReviewerAsync_SendsDelete()
+    {
+        using var connectionData = JsonResponse(
+            """{ "authenticatedUser": { "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb" } }"""
+        );
+        using var response = new HttpResponseMessage(HttpStatusCode.NoContent);
+        var client = CreateClient(out var handler, connectionData, response);
+
+        await client.RemovePullRequestReviewerAsync("WebApp", 7, "me", "Alpha", TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Delete, handler.Requests[1].Method);
+        Assert.EndsWith(
+            "pullRequests/7/reviewers/0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb?api-version=7.0",
+            handler.Requests[1].RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
     public async Task GetPullRequestAsync_ReturnsReviewerVotesAndMergeState()
     {
         const string json =

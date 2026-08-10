@@ -260,6 +260,75 @@ public sealed class PullRequestTools
         );
     }
 
+    [McpServerTool(Name = "update_pull_request", Destructive = false)]
+    [Description("Updates the title or description of a pull request, or turns auto-complete on or off for the signed-in user.")]
+    public Task<GitPullRequest> UpdatePullRequestAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Pull request id.")] int pullRequestId,
+        [Description("Optional new title.")] string? title,
+        [Description("Optional new description. Pass an empty string to clear it.")]
+        string? description,
+        [Description("Optional auto-complete switch: true sets it for the signed-in user, false clears it.")]
+        bool? autoComplete,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.UpdatePullRequestAsync(
+            repository,
+            pullRequestId,
+            title,
+            description,
+            autoComplete,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "add_pull_request_reviewer", Destructive = false)]
+    [Description("Adds a reviewer to a pull request. Accepts an identity id, an account name, or 'me' for the signed-in user.")]
+    public Task<PullRequestReviewer> AddPullRequestReviewerAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Pull request id.")] int pullRequestId,
+        [Description("Identity id, account name such as domain\\user or user@example.local, or 'me'.")]
+        string reviewer,
+        [Description("Set to true to add the reviewer as required.")]
+        bool? isRequired,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.AddPullRequestReviewerAsync(
+            repository,
+            pullRequestId,
+            reviewer,
+            isRequired ?? false,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "remove_pull_request_reviewer", Destructive = true)]
+    [Description("Removes a reviewer from a pull request, discarding any vote they cast.")]
+    public async Task<string> RemovePullRequestReviewerAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Pull request id.")] int pullRequestId,
+        [Description("Identity id, account name, or 'me'.")] string reviewer,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        await _client.RemovePullRequestReviewerAsync(
+            repository,
+            pullRequestId,
+            reviewer,
+            EffectiveProject(project),
+            cancellationToken
+        );
+
+        return $"Reviewer '{reviewer}' was removed from pull request {pullRequestId}.";
+    }
+
     internal static int ParseVote(string vote)
     {
         return vote.ToLowerInvariant() switch
