@@ -52,6 +52,20 @@ public sealed class WikiTools
         return _client.GetWikiPageAsync(wiki, path, EffectiveProject(project), cancellationToken);
     }
 
+    [McpServerTool(Name = "create_or_update_wiki_page", Destructive = false)]
+    [Description("Creates a wiki page or replaces the content of an existing one. The whole page content is overwritten, so read the page first when you only want to append.")]
+    public Task<WikiPageUpdate> CreateOrUpdateWikiPageAsync(
+        [Description("Wiki name or id.")] string wiki,
+        [Description("Page path, for example /Onboarding/Setup. Parent paths are created automatically.")]
+        string path,
+        [Description("Full markdown content of the page.")] string content,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.CreateOrUpdateWikiPageAsync(wiki, path, content, EffectiveProject(project), cancellationToken);
+    }
+
     private string? EffectiveProject(string? project)
     {
         return string.IsNullOrWhiteSpace(project) ?

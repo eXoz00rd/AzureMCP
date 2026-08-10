@@ -60,4 +60,56 @@ public sealed partial class AzureDevOpsClient
         return root ??
             throw new AzureDevOpsClientException("The wiki page tree response could not be parsed.");
     }
+
+    public async Task<WikiPageUpdate> CreateOrUpdateWikiPageAsync(
+        string wiki,
+        string path,
+        string content,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var pageUri =
+            $"{Scope(RequireProject(project))}_apis/wiki/wikis/{Uri.EscapeDataString(wiki)}/pages?path={Uri.EscapeDataString(path)}&api-version={ApiVersion(ApiArea.Wiki)}";
+
+        var existingVersion = await GetWikiPageVersionAsync(pageUri, cancellationToken);
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, pageUri)
+        {
+            Content = JsonContent.Create(new { content })
+        };
+        if (existingVersion is not null)
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", existingVersion);
+        }
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var page = await response.Content.ReadFromJsonAsync<WikiPage>(cancellationToken);
+        return new WikiPageUpdate(
+            page?.Path ?? path,
+            existingVersion is null,
+            response.Headers.ETag?.Tag ?? string.Empty
+        );
+    }
+
+    private async Task<string?> GetWikiPageVersionAsync(string pageUri, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Head, pageUri);
+        using var response = await _httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        return response.Headers.ETag?.Tag;
+    }
 }
