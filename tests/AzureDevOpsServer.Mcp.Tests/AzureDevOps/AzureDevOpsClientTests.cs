@@ -236,6 +236,126 @@ public sealed class AzureDevOpsClientTests
         );
     }
 
+    [Fact]
+    public async Task GetRepositoriesAsync_WithoutProject_ListsCollectionRepositories()
+    {
+        const string json =
+            """
+            {
+              "count": 1,
+              "value": [
+                {
+                  "id": "3f9a1c2b-6d7e-4f80-9a1b-2c3d4e5f6a7b",
+                  "name": "WebApp",
+                  "defaultBranch": "refs/heads/main",
+                  "remoteUrl": "https://devops.example.local/DefaultCollection/Alpha/_git/WebApp"
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var repositories = await client.GetRepositoriesAsync(null, TestContext.Current.CancellationToken);
+
+        var repository = Assert.Single(repositories);
+        Assert.Equal("WebApp", repository.Name);
+        Assert.Equal("refs/heads/main", repository.DefaultBranch);
+        Assert.EndsWith(
+            "/DefaultCollection/_apis/git/repositories?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetRepositoriesAsync_WithProject_UsesProjectScope()
+    {
+        using var response = JsonResponse("""{ "count": 0, "value": [] }""");
+        var client = CreateClient(out var handler, response);
+
+        var repositories = await client.GetRepositoriesAsync("Alpha Project", TestContext.Current.CancellationToken);
+
+        Assert.Empty(repositories);
+        Assert.EndsWith(
+            "Alpha%20Project/_apis/git/repositories?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetBranchesAsync_ReturnsHeadRefs()
+    {
+        const string json =
+            """
+            {
+              "count": 2,
+              "value": [
+                { "name": "refs/heads/main", "objectId": "a1b2c3d4" },
+                { "name": "refs/heads/develop", "objectId": "e5f6a7b8" }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var branches = await client.GetBranchesAsync("WebApp", "Alpha", TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, branches.Count);
+        Assert.Equal("refs/heads/main", branches[0].Name);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/refs?filter=heads/&api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WithBranch_RequestsVersionDescriptor()
+    {
+        const string json =
+            """
+            {
+              "objectId": "a1b2c3d4",
+              "path": "/README.md",
+              "content": "# Hello"
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var item = await client.GetFileContentAsync(
+            "WebApp",
+            "/README.md",
+            "develop",
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("/README.md", item.Path);
+        Assert.Equal("# Hello", item.Content);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("path=%2FREADME.md", requestUri);
+        Assert.Contains("includeContent=true", requestUri);
+        Assert.Contains("$format=json", requestUri);
+        Assert.Contains("versionDescriptor.version=develop&versionDescriptor.versionType=branch", requestUri);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WithoutBranch_OmitsVersionDescriptor()
+    {
+        using var response = JsonResponse("""{ "objectId": "a1b2c3d4", "path": "/README.md", "content": "# Hello" }""");
+        var client = CreateClient(out var handler, response);
+
+        await client.GetFileContentAsync(
+            "WebApp",
+            "/README.md",
+            null,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.DoesNotContain("versionDescriptor", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _responses;
