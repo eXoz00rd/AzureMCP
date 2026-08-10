@@ -65,6 +65,54 @@ public sealed class BuildTools
         return _client.QueueBuildAsync(EffectiveProject(project), definitionId, sourceBranch, cancellationToken);
     }
 
+    [McpServerTool(Name = "get_build_timeline")]
+    [Description(
+        "Gets the timeline of a build: stages, jobs, and tasks with their results, error counts, and issue messages of failed records. Each record references its log id."
+    )]
+    public Task<IReadOnlyList<TimelineRecord>> GetBuildTimelineAsync(
+        [Description("Build id.")] int buildId,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetBuildTimelineAsync(EffectiveProject(project), buildId, cancellationToken);
+    }
+
+    [McpServerTool(Name = "get_build_log")]
+    [Description("Gets the text content of a build log. Use get_build_timeline to find the log id of a failed task.")]
+    public Task<string> GetBuildLogAsync(
+        [Description("Build id.")] int buildId,
+        [Description("Log id from the timeline record.")]
+        int logId,
+        [Description("Optional 1-based first line to return.")]
+        int? startLine,
+        [Description("Optional 1-based last line to return.")]
+        int? endLine,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetBuildLogAsync(
+            EffectiveProject(project),
+            buildId,
+            logId,
+            startLine,
+            endLine,
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "list_build_artifacts")]
+    [Description("Lists the published artifacts of a build with their download URLs.")]
+    public Task<IReadOnlyList<BuildArtifact>> ListBuildArtifactsAsync(
+        [Description("Build id.")] int buildId,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetBuildArtifactsAsync(EffectiveProject(project), buildId, cancellationToken);
+    }
+
     private string? EffectiveProject(string? project)
     {
         return string.IsNullOrWhiteSpace(project) ?

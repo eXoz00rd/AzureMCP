@@ -494,6 +494,71 @@ public sealed class AzureDevOpsClient
             throw new AzureDevOpsClientException("The wiki page tree response could not be parsed.");
     }
 
+    public async Task<IReadOnlyList<TimelineRecord>> GetBuildTimelineAsync(
+        string? project,
+        int buildId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/build/builds/{buildId}/timeline?api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var timeline = await response.Content.ReadFromJsonAsync<BuildTimeline>(cancellationToken);
+        return timeline?.Records ?? [];
+    }
+
+    public async Task<string> GetBuildLogAsync(
+        string? project,
+        int buildId,
+        int logId,
+        int? startLine,
+        int? endLine,
+        CancellationToken cancellationToken)
+    {
+        var requestUri =
+            $"{Scope(RequireProject(project))}_apis/build/builds/{buildId}/logs/{logId}?api-version={_options.Value.ApiVersion}";
+        if (startLine is not null)
+        {
+            requestUri += $"&startLine={startLine}";
+        }
+
+        if (endLine is not null)
+        {
+            requestUri += $"&endLine={endLine}";
+        }
+
+        using var response = await _httpClient.GetAsync(
+            requestUri,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<BuildArtifact>> GetBuildArtifactsAsync(
+        string? project,
+        int buildId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/build/builds/{buildId}/artifacts?api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<BuildArtifact>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
     public async Task<IReadOnlyList<ReleaseDefinition>> GetReleaseDefinitionsAsync(
         string? project,
         CancellationToken cancellationToken)

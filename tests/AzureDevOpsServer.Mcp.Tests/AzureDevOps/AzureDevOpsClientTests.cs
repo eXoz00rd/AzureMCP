@@ -1169,6 +1169,124 @@ public sealed class AzureDevOpsClientTests
         Assert.True(body.RootElement.GetProperty("description").ValueEquals("Hotfix deployment"));
     }
 
+    [Fact]
+    public async Task GetBuildTimelineAsync_ReturnsRecordsWithIssues()
+    {
+        const string json =
+            """
+            {
+              "records": [
+                {
+                  "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb",
+                  "type": "Stage",
+                  "name": "Build",
+                  "state": "completed",
+                  "result": "failed",
+                  "errorCount": 1,
+                  "warningCount": 0,
+                  "log": { "id": 7 },
+                  "issues": [ { "type": "error", "message": "CS1002: ; expected" } ]
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var records = await client.GetBuildTimelineAsync("Alpha", 500, TestContext.Current.CancellationToken);
+
+        var record = Assert.Single(records);
+        Assert.Equal("failed", record.Result);
+        Assert.Equal(7, record.Log!.Id);
+        Assert.Equal("CS1002: ; expected", Assert.Single(record.Issues!).Message);
+        Assert.EndsWith(
+            "Alpha/_apis/build/builds/500/timeline?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetBuildLogAsync_WithLineRange_AppendsQueryParameters()
+    {
+        using var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("##[error]CS1002: ; expected\nBuild failed.")
+        };
+        var client = CreateClient(out var handler, response);
+
+        var log = await client.GetBuildLogAsync(
+            "Alpha",
+            500,
+            7,
+            10,
+            50,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Contains("CS1002", log);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("builds/500/logs/7", requestUri);
+        Assert.Contains("startLine=10", requestUri);
+        Assert.Contains("endLine=50", requestUri);
+    }
+
+    [Fact]
+    public async Task GetBuildLogAsync_WithoutLineRange_OmitsQueryParameters()
+    {
+        using var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("full log")
+        };
+        var client = CreateClient(out var handler, response);
+
+        var log = await client.GetBuildLogAsync(
+            "Alpha",
+            500,
+            7,
+            null,
+            null,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("full log", log);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.DoesNotContain("startLine", requestUri);
+        Assert.DoesNotContain("endLine", requestUri);
+    }
+
+    [Fact]
+    public async Task GetBuildArtifactsAsync_ReturnsArtifacts()
+    {
+        const string json =
+            """
+            {
+              "count": 1,
+              "value": [
+                {
+                  "id": 1,
+                  "name": "drop",
+                  "resource": {
+                    "type": "Container",
+                    "downloadUrl": "https://devops.example.local/DefaultCollection/_apis/resources/Containers/10?itemPath=drop&%24format=zip"
+                  }
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var artifacts = await client.GetBuildArtifactsAsync("Alpha", 500, TestContext.Current.CancellationToken);
+
+        var artifact = Assert.Single(artifacts);
+        Assert.Equal("drop", artifact.Name);
+        Assert.Contains("format=zip", artifact.Resource!.DownloadUrl);
+        Assert.EndsWith(
+            "Alpha/_apis/build/builds/500/artifacts?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _responses;
