@@ -185,6 +185,7 @@ Try these prompts in Copilot agent mode and watch which tool gets called:
 | `ADOS_PAT` | yes | Personal Access Token used for all REST calls |
 | `ADOS_DEFAULT_PROJECT` | no | Default project used when a tool call does not specify one |
 | `ADOS_API_VERSION` | no | Override the REST API version (defaults to `7.0`) |
+| `ADOS_LOG_LEVEL` | no | Minimum level of logs written to stderr (defaults to `Warning`; use `Information` or `Debug` for diagnostics) |
 
 ## Security
 

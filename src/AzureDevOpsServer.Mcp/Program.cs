@@ -11,6 +11,13 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
+builder.Logging.SetMinimumLevel(
+    Enum.TryParse<LogLevel>(
+        Environment.GetEnvironmentVariable(AzureDevOpsServerOptions.LogLevelVariable),
+        true,
+        out var minimumLevel) ?
+        minimumLevel :
+        LogLevel.Warning);
 
 builder.Services.AddSingleton<IValidateOptions<AzureDevOpsServerOptions>, AzureDevOpsServerOptionsValidator>();
 builder.Services

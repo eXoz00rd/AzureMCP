@@ -6,6 +6,7 @@ public sealed class AzureDevOpsServerOptions
     public const string PersonalAccessTokenVariable = "ADOS_PAT";
     public const string DefaultProjectVariable = "ADOS_DEFAULT_PROJECT";
     public const string ApiVersionVariable = "ADOS_API_VERSION";
+    public const string LogLevelVariable = "ADOS_LOG_LEVEL";
     public const string DefaultApiVersion = "7.0";
 
     public string CollectionUrl { get; set; } = string.Empty;
