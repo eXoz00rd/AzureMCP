@@ -56,9 +56,9 @@ Tools that operate inside a project fall back to `ADOS_DEFAULT_PROJECT` when no 
 
 ### 3. Get the server
 
-**Option A — from NuGet (once published):** nothing to download manually; the MCP client fetches and runs the package via `dnx AzureDevOpsServer.Mcp --yes` on first start.
+**Option A — from NuGet (recommended):** nothing to download manually; the MCP client fetches and runs the [published package](https://www.nuget.org/packages/AzureDevOpsServer.Mcp) via `dnx AzureDevOpsServer.Mcp --yes` on first start.
 
-**Option B — from source (works today):**
+**Option B — from source (for development):**
 
 ```bash
 git clone https://github.com/eXoz00rd/AzureMCP.git
@@ -83,7 +83,7 @@ Ask the agent to call `server_info` or to "list projects on our DevOps server". 
 
 ## Usage
 
-Once published to NuGet, the server will run directly from the package via `dnx`. Example MCP client configuration (Claude Code, VS Code, etc.):
+The server runs directly from the published NuGet package via `dnx`. Example MCP client configuration (Claude Code, VS Code, etc.):
 
 ```json
 {
@@ -146,7 +146,7 @@ Once published to NuGet, the server will run directly from the package via `dnx`
    }
    ```
 
-   Until the package is published to NuGet.org, run it from source instead:
+   To run from source instead (e.g. for development), replace the command:
 
    ```json
    "command": "dotnet",
@@ -159,6 +159,23 @@ Once published to NuGet, the server will run directly from the package via `dnx`
 ### GitHub Copilot in Visual Studio
 
 Visual Studio 2022 (17.14+) uses the same configuration format. Put the JSON above in a file named `.mcp.json` next to your solution (or `%USERPROFILE%\.mcp.json` to make it global), restart Visual Studio, and enable the server's tools in the Copilot Chat tool picker while in Agent mode.
+
+### Testing the integration
+
+Try these prompts in Copilot agent mode and watch which tool gets called:
+
+- "Show the Azure DevOps server info" → `server_info`, returns the collection URL and defaults without the PAT
+- "List projects on our DevOps server" → `list_projects`
+- "Find active bugs in project X" → `query_work_items` with a WIQL query
+- "Show file /README.md from repository Y" → `get_file_content`
+- "Queue a build for definition 12" → `queue_build` (Copilot asks for confirmation before write operations)
+
+### Troubleshooting
+
+- **Server does not start** — open the MCP log (VS Code: **Output** panel → the `azure-devops-server` channel). A missing `ADOS_COLLECTION_URL` or `ADOS_PAT` is reported explicitly at startup
+- **"Authentication against Azure DevOps Server failed"** — the PAT is invalid, expired, or missing scopes; TFS sign-in page responses (HTTP 203) are detected and reported as this error as well
+- **Older servers** — for Azure DevOps Server 2019 / 2020 set `ADOS_API_VERSION` to `5.0` / `6.0`
+- **`dnx` not found** — the .NET 10 SDK is required; verify with `dotnet --list-sdks`
 
 ### Configuration
 
@@ -208,4 +225,4 @@ Releases are published to NuGet.org by the [release workflow](.github/workflows/
 
 ## License
 
-TBD
+[MIT](LICENSE)
