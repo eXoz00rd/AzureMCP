@@ -1287,6 +1287,176 @@ public sealed class AzureDevOpsClientTests
         );
     }
 
+    [Fact]
+    public async Task GetCommitsAsync_WithBranchAndPath_AppendsSearchCriteria()
+    {
+        const string json =
+            """
+            {
+              "count": 1,
+              "value": [
+                {
+                  "commitId": "abc123def456",
+                  "comment": "Fix login bug",
+                  "author": { "name": "Sebastian", "email": "sebastian@example.local", "date": "2026-08-11T09:00:00Z" }
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var commits = await client.GetCommitsAsync(
+            "WebApp",
+            "refs/heads/develop",
+            "/src",
+            20,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        var commit = Assert.Single(commits);
+        Assert.Equal("Fix login bug", commit.Comment);
+        Assert.Equal("Sebastian", commit.Author!.Name);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("searchCriteria.$top=20", requestUri);
+        Assert.Contains("searchCriteria.itemVersion.version=develop", requestUri);
+        Assert.Contains("searchCriteria.itemPath=%2Fsrc", requestUri);
+    }
+
+    [Fact]
+    public async Task GetCommitAsync_ReturnsMetadataAndChanges()
+    {
+        const string commitJson =
+            """
+            {
+              "commitId": "abc123def456",
+              "comment": "Fix login bug",
+              "author": { "name": "Sebastian", "email": "sebastian@example.local", "date": "2026-08-11T09:00:00Z" }
+            }
+            """;
+        const string changesJson =
+            """
+            {
+              "changes": [
+                { "changeType": "edit", "item": { "path": "/src/Login.cs" } },
+                { "changeType": "add", "item": { "path": "/tests/LoginTests.cs" } }
+              ]
+            }
+            """;
+        using var commit = JsonResponse(commitJson);
+        using var changes = JsonResponse(changesJson);
+        var client = CreateClient(out var handler, commit, changes);
+
+        var details = await client.GetCommitAsync(
+            "WebApp",
+            "abc123def456",
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("Fix login bug", details.Commit.Comment);
+        Assert.Equal(2, details.Changes.Count);
+        Assert.Equal("/src/Login.cs", details.Changes[0].Item.Path);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.EndsWith(
+            "commits/abc123def456?api-version=7.0",
+            handler.Requests[0].RequestUri!.AbsoluteUri
+        );
+        Assert.EndsWith(
+            "commits/abc123def456/changes?api-version=7.0",
+            handler.Requests[1].RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetRepositoryItemsAsync_DefaultsToOneLevel()
+    {
+        const string json =
+            """
+            {
+              "count": 2,
+              "value": [
+                { "path": "/src", "isFolder": true, "gitObjectType": "tree" },
+                { "path": "/README.md", "gitObjectType": "blob" }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var items = await client.GetRepositoryItemsAsync(
+            "WebApp",
+            null,
+            "develop",
+            false,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(2, items.Count);
+        Assert.True(items[0].IsFolder);
+        Assert.Null(items[1].IsFolder);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("scopePath=%2F", requestUri);
+        Assert.Contains("recursionLevel=oneLevel", requestUri);
+        Assert.Contains("versionDescriptor.version=develop", requestUri);
+    }
+
+    [Fact]
+    public async Task GetRepositoryItemsAsync_Recursive_UsesFullRecursion()
+    {
+        using var response = JsonResponse("""{ "count": 0, "value": [] }""");
+        var client = CreateClient(out var handler, response);
+
+        await client.GetRepositoryItemsAsync(
+            "WebApp",
+            "/src",
+            null,
+            true,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("scopePath=%2Fsrc", requestUri);
+        Assert.Contains("recursionLevel=full", requestUri);
+        Assert.DoesNotContain("versionDescriptor", requestUri);
+    }
+
+    [Fact]
+    public async Task GetBranchDiffAsync_ReturnsAheadBehindAndChanges()
+    {
+        const string json =
+            """
+            {
+              "aheadCount": 3,
+              "behindCount": 1,
+              "changes": [
+                { "changeType": "edit", "item": { "path": "/src/Program.cs" } }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var diffs = await client.GetBranchDiffAsync(
+            "WebApp",
+            "main",
+            "refs/heads/develop",
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(3, diffs.AheadCount);
+        Assert.Equal(1, diffs.BehindCount);
+        Assert.Equal("/src/Program.cs", Assert.Single(diffs.Changes!).Item.Path);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("diffs/commits", requestUri);
+        Assert.Contains("baseVersion=main", requestUri);
+        Assert.Contains("targetVersion=develop", requestUri);
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _responses;

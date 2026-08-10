@@ -10,6 +10,8 @@ namespace AzureDevOpsServer.Mcp.Tools;
 [McpServerToolType]
 public sealed class RepositoryTools
 {
+    private const int DefaultCommitCount = 20;
+
     private readonly AzureDevOpsClient _client;
     private readonly IOptions<AzureDevOpsServerOptions> _options;
 
@@ -59,6 +61,88 @@ public sealed class RepositoryTools
             repository,
             path,
             branch,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "list_commits")]
+    [Description("Lists recent commits of a repository, optionally filtered by branch and file path.")]
+    public Task<IReadOnlyList<GitCommit>> ListCommitsAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description(
+            "Optional branch name, with or without the refs/heads/ prefix. Uses the default branch when omitted."
+        )]
+        string? branch,
+        [Description("Optional file or folder path to filter the history by.")]
+        string? itemPath,
+        [Description("Maximum number of commits to return. Defaults to 20.")]
+        int? top,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetCommitsAsync(
+            repository,
+            branch,
+            itemPath,
+            top ?? DefaultCommitCount,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "get_commit")]
+    [Description("Gets a commit with its message, author, and the list of changed files.")]
+    public Task<GitCommitDetails> GetCommitAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Full or abbreviated commit SHA.")]
+        string commitId,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetCommitAsync(repository, commitId, EffectiveProject(project), cancellationToken);
+    }
+
+    [McpServerTool(Name = "list_repository_items")]
+    [Description("Lists the files and folders of a repository path, one level deep by default.")]
+    public Task<IReadOnlyList<GitTreeItem>> ListRepositoryItemsAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Optional folder path, defaults to the repository root.")]
+        string? path,
+        [Description("Optional branch name. Uses the default branch when omitted.")]
+        string? branch,
+        [Description("Set to true to list the whole subtree recursively.")]
+        bool? recursive,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetRepositoryItemsAsync(
+            repository,
+            path,
+            branch,
+            recursive ?? false,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "diff_branches")]
+    [Description("Compares two branches: ahead and behind commit counts plus the changed files.")]
+    public Task<GitDiffs> DiffBranchesAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Base branch name.")] string baseBranch,
+        [Description("Target branch name.")] string targetBranch,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetBranchDiffAsync(
+            repository,
+            baseBranch,
+            targetBranch,
             EffectiveProject(project),
             cancellationToken
         );
