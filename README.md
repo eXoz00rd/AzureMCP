@@ -37,6 +37,50 @@ Tools that operate inside a project fall back to `ADOS_DEFAULT_PROJECT` when no 
 - A reachable Azure DevOps Server (on-premises) collection URL
 - A PAT created in that collection, with the minimal scopes required for the tools you use
 
+## Setting up from scratch on a new machine
+
+### 1. Install prerequisites
+
+- **.NET 10 SDK** — `winget install Microsoft.DotNet.SDK.10` on Windows, or download from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/10.0); verify with `dotnet --list-sdks`
+- **Git** — only needed while running from source
+
+### 2. Create a PAT on your Azure DevOps Server
+
+1. Open your collection in a browser and sign in
+2. Click your avatar → **Security** → **Personal access tokens** → **New Token**
+3. Pick a short expiration and only the scopes you need:
+   - **Work Items — Read & write** (queries, details, create/update/comment)
+   - **Code — Read & write** (repositories, file content, pull requests; Read is enough without `create_pull_request`)
+   - **Build — Read & execute** (definitions, builds; Read is enough without `queue_build`)
+4. Copy the token immediately — it is shown only once
+
+### 3. Get the server
+
+**Option A — from NuGet (once published):** nothing to download manually; the MCP client fetches and runs the package via `dnx AzureDevOpsServer.Mcp --yes` on first start.
+
+**Option B — from source (works today):**
+
+```bash
+git clone https://github.com/eXoz00rd/AzureMCP.git
+cd AzureMCP
+dotnet build AzureDevOpsServer.Mcp.slnx
+dotnet run --project tests/AzureDevOpsServer.Mcp.Tests
+```
+
+The repository is currently private — authenticate first (e.g. `gh auth login`).
+
+### 4. Configure your MCP client
+
+Use one of the configurations from [Usage](#usage) below — VS Code Copilot (`.vscode/mcp.json`), Visual Studio (`.mcp.json`), or any other MCP-capable client. For Claude Code:
+
+```bash
+claude mcp add azure-devops-server -e ADOS_COLLECTION_URL=https://devops.example.local/DefaultCollection -e ADOS_PAT=YOUR_PAT -- dnx AzureDevOpsServer.Mcp --yes
+```
+
+### 5. Verify
+
+Ask the agent to call `server_info` or to "list projects on our DevOps server". The server refuses to start when `ADOS_COLLECTION_URL` or `ADOS_PAT` is missing and logs the exact reason to stderr, so a misconfigured client fails fast with a clear message.
+
 ## Usage
 
 Once published to NuGet, the server will run directly from the package via `dnx`. Example MCP client configuration (Claude Code, VS Code, etc.):
@@ -141,6 +185,20 @@ cd AzureMCP
 dotnet build AzureDevOpsServer.Mcp.slnx
 dotnet run --project tests/AzureDevOpsServer.Mcp.Tests
 ```
+
+## Publishing a release
+
+Releases are published to NuGet.org by the [release workflow](.github/workflows/release.yml):
+
+1. Create an API key on [nuget.org](https://www.nuget.org/account/apikeys) and save it as the `NUGET_API_KEY` repository secret (**Settings → Secrets and variables → Actions**)
+2. Tag the commit and push the tag:
+
+   ```bash
+   git tag v0.1.0-preview.2
+   git push origin v0.1.0-preview.2
+   ```
+
+3. The workflow builds, tests, packs with the version taken from the tag (also synced into `.mcp/server.json`), and pushes the package to NuGet.org
 
 ## Roadmap
 
