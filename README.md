@@ -2,7 +2,7 @@
 
 MCP (Model Context Protocol) server for **Azure DevOps Server (on-premises)**, built with **.NET 10 / C#** on top of the official [ModelContextProtocol C# SDK](https://www.nuget.org/packages/ModelContextProtocol) and distributed as a NuGet package.
 
-> **Status:** preview — the core tool set is implemented; the package is not yet published to NuGet.org.
+> **Status:** preview — available on NuGet.org as [AzureDevOpsServer.Mcp](https://www.nuget.org/packages/AzureDevOpsServer.Mcp).
 
 ## Why
 
@@ -205,7 +205,6 @@ Releases are published to NuGet.org by the [release workflow](.github/workflows/
 - Pull request threads, comments, and votes
 - Build logs and timeline details
 - Wiki page access
-- Publishing to NuGet.org
 
 ## License
 
