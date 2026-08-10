@@ -58,6 +58,21 @@ public sealed partial class AzureDevOpsClient
         return projects;
     }
 
+    public async Task<ProjectDetails> GetProjectAsync(string? project, CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"_apis/projects/{Uri.EscapeDataString(RequireProject(project))}?includeCapabilities=true&api-version={ApiVersion(ApiArea.Core)}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var details = await response.Content.ReadFromJsonAsync<ProjectDetails>(cancellationToken);
+        return details ??
+            throw new AzureDevOpsClientException("The project response could not be parsed.");
+    }
+
     private string ApiVersion(ApiArea area)
     {
         return _options.Value.ApiVersionFor(area);

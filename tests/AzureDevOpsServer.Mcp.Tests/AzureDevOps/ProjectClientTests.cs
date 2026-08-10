@@ -10,6 +10,49 @@ namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;
 public sealed class ProjectClientTests : AzureDevOpsClientTestsBase
 {
     [Fact]
+    public async Task GetProjectAsync_ReturnsProcessAndVersionControl()
+    {
+        const string json =
+            """
+            {
+              "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb",
+              "name": "Alpha",
+              "description": "Main product",
+              "state": "wellFormed",
+              "visibility": "private",
+              "capabilities": {
+                "processTemplate": { "templateName": "Agile", "templateTypeId": "adcc42ab-9882-485e-a3ed-7678f01f66bc" },
+                "versionControl": { "sourceControlType": "Git" }
+              }
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var project = await client.GetProjectAsync("Alpha", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Alpha", project.Name);
+        Assert.Equal("Agile", project.Capabilities!.ProcessTemplate!.TemplateName);
+        Assert.Equal("Git", project.Capabilities.VersionControl!.SourceControlType);
+        Assert.EndsWith(
+            "_apis/projects/Alpha?includeCapabilities=true&api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetProjectAsync_WithoutProject_Throws()
+    {
+        var client = CreateClient(out var handler);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetProjectAsync(null, TestContext.Current.CancellationToken));
+
+        Assert.Contains("ADOS_DEFAULT_PROJECT", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task GetProjectsAsync_WithSinglePage_ReturnsProjects()
     {
         const string json =

@@ -74,6 +74,64 @@ public sealed class ReleaseTools
         return _client.CreateReleaseAsync(EffectiveProject(project), definitionId, description, cancellationToken);
     }
 
+    [McpServerTool(Name = "list_release_approvals", ReadOnly = true)]
+    [Description("Lists pending deployment approvals of a project, optionally for a single release. Shows which gate is blocking a deployment.")]
+    public Task<IReadOnlyList<ReleaseApproval>> ListReleaseApprovalsAsync(
+        [Description("Optional release id to filter by.")] int? releaseId,
+        [Description("Maximum number of approvals to return. Defaults to 100.")]
+        int? top,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetReleaseApprovalsAsync(
+            EffectiveProject(project),
+            releaseId,
+            top ?? ResponseLimits.DefaultListTop,
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "update_release_approval", Destructive = false)]
+    [Description("Approves or rejects a pending deployment approval. Use list_release_approvals to find the approval id.")]
+    public Task<ReleaseApproval> UpdateReleaseApprovalAsync(
+        [Description("Approval id.")] int approvalId,
+        [Description("Decision: approved or rejected.")] string status,
+        [Description("Optional comment stored with the decision.")]
+        string? comment,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.UpdateReleaseApprovalAsync(
+            EffectiveProject(project),
+            approvalId,
+            status,
+            comment,
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "deploy_release_environment", Destructive = false)]
+    [Description("Starts the deployment of a single environment of a release, for example to promote a release to production.")]
+    public Task<ReleaseEnvironment> DeployReleaseEnvironmentAsync(
+        [Description("Release id.")] int releaseId,
+        [Description("Environment id from get_release.")] int environmentId,
+        [Description("Optional comment stored with the deployment.")]
+        string? comment,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.DeployReleaseEnvironmentAsync(
+            EffectiveProject(project),
+            releaseId,
+            environmentId,
+            comment,
+            cancellationToken
+        );
+    }
+
     private string? EffectiveProject(string? project)
     {
         return string.IsNullOrWhiteSpace(project) ?

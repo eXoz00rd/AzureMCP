@@ -10,6 +10,93 @@ namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;
 public sealed class ReleaseClientTests : AzureDevOpsClientTestsBase
 {
     [Fact]
+    public async Task GetReleaseApprovalsAsync_FiltersPendingAndRelease()
+    {
+        const string json =
+            """
+            {
+              "count": 1,
+              "value": [
+                {
+                  "id": 91,
+                  "status": "pending",
+                  "approvalType": "preDeploy",
+                  "approver": { "displayName": "Sebastian", "uniqueName": "sebastian@example.local" },
+                  "release": { "id": 42, "name": "Release-15" },
+                  "releaseEnvironment": { "id": 2, "name": "Production" }
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var approvals = await client.GetReleaseApprovalsAsync("Alpha", 42, 100, TestContext.Current.CancellationToken);
+
+        var approval = Assert.Single(approvals);
+        Assert.Equal("pending", approval.Status);
+        Assert.Equal("Production", approval.ReleaseEnvironment!.Name);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("Alpha/_apis/release/approvals", requestUri);
+        Assert.Contains("statusFilter=pending", requestUri);
+        Assert.Contains("releaseIdsFilter=42", requestUri);
+    }
+
+    [Theory]
+    [InlineData("approve", "approved")]
+    [InlineData("REJECTED", "rejected")]
+    public async Task UpdateReleaseApprovalAsync_NormalizesStatus(string input, string expected)
+    {
+        using var response = JsonResponse("""{ "id": 91, "status": "approved" }""");
+        var client = CreateClient(out var handler, response);
+
+        await client.UpdateReleaseApprovalAsync("Alpha", 91, input, "ship it", TestContext.Current.CancellationToken);
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Patch, request.Method);
+        Assert.EndsWith("Alpha/_apis/release/approvals/91?api-version=7.0", request.RequestUri!.AbsoluteUri);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("status").ValueEquals(expected));
+        Assert.True(body.RootElement.GetProperty("comments").ValueEquals("ship it"));
+    }
+
+    [Fact]
+    public async Task UpdateReleaseApprovalAsync_WithUnknownStatus_Throws()
+    {
+        var client = CreateClient(out var handler);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.UpdateReleaseApprovalAsync("Alpha", 91, "maybe", null, TestContext.Current.CancellationToken));
+
+        Assert.Contains("approved or rejected", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task DeployReleaseEnvironmentAsync_StartsDeployment()
+    {
+        using var response = JsonResponse("""{ "id": 2, "name": "Production", "status": "inProgress" }""");
+        var client = CreateClient(out var handler, response);
+
+        var environment = await client.DeployReleaseEnvironmentAsync(
+            "Alpha",
+            42,
+            2,
+            "promote",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("inProgress", environment.Status);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Patch, request.Method);
+        Assert.EndsWith(
+            "Alpha/_apis/release/releases/42/environments/2?api-version=7.0",
+            request.RequestUri!.AbsoluteUri
+        );
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("status").ValueEquals("inProgress"));
+    }
+
+    [Fact]
     public async Task GetReleaseDefinitionsAsync_ReturnsDefinitions()
     {
         const string json =
