@@ -73,6 +73,49 @@ Once published to NuGet, the server will run directly from the package via `dnx`
 }
 ```
 
+### GitHub Copilot in VS Code
+
+1. Create `.vscode/mcp.json` in your workspace (or run the `MCP: Add Server` command):
+
+   ```json
+   {
+     "inputs": [
+       {
+         "id": "ados-pat",
+         "type": "promptString",
+         "description": "Azure DevOps Server Personal Access Token",
+         "password": true
+       }
+     ],
+     "servers": {
+       "azure-devops-server": {
+         "type": "stdio",
+         "command": "dnx",
+         "args": ["AzureDevOpsServer.Mcp", "--yes"],
+         "env": {
+           "ADOS_COLLECTION_URL": "https://devops.example.local/DefaultCollection",
+           "ADOS_PAT": "${input:ados-pat}",
+           "ADOS_DEFAULT_PROJECT": "MyProject"
+         }
+       }
+     }
+   }
+   ```
+
+   Until the package is published to NuGet.org, run it from source instead:
+
+   ```json
+   "command": "dotnet",
+   "args": ["run", "--project", "D:/Projects/AzureMCP/src/AzureDevOpsServer.Mcp"]
+   ```
+
+2. Open Copilot Chat, switch to **Agent** mode, and start the server when prompted. VS Code asks for the PAT on first start and stores it securely — the token never lands in the config file.
+3. Click the tools icon in the chat input to confirm the `azure-devops-server` tools are enabled, then ask Copilot for example to "list projects on our DevOps server".
+
+### GitHub Copilot in Visual Studio
+
+Visual Studio 2022 (17.14+) uses the same configuration format. Put the JSON above in a file named `.mcp.json` next to your solution (or `%USERPROFILE%\.mcp.json` to make it global), restart Visual Studio, and enable the server's tools in the Copilot Chat tool picker while in Agent mode.
+
 ### Configuration
 
 | Variable | Required | Description |
