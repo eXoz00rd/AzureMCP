@@ -98,16 +98,9 @@ public sealed class AzureDevOpsClient
         IReadOnlyDictionary<string, string> fields,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(project))
-        {
-            throw new AzureDevOpsClientException(
-                "A project is required to create a work item. Pass a project name or set ADOS_DEFAULT_PROJECT."
-            );
-        }
-
         using var content = CreateJsonPatchContent(fields);
         using var response = await _httpClient.PostAsync(
-            $"{Scope(project)}_apis/wit/workitems/${Uri.EscapeDataString(type)}?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/wit/workitems/${Uri.EscapeDataString(type)}?api-version={_options.Value.ApiVersion}",
             content,
             cancellationToken
         );
@@ -269,6 +262,81 @@ public sealed class AzureDevOpsClient
         var pullRequest = await response.Content.ReadFromJsonAsync<GitPullRequest>(cancellationToken);
         return pullRequest ??
             throw new AzureDevOpsClientException("The create pull request response could not be parsed.");
+    }
+
+    public async Task<IReadOnlyList<BuildDefinition>> GetBuildDefinitionsAsync(
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/build/definitions?api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<BuildDefinition>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<IReadOnlyList<Build>> GetBuildsAsync(
+        string? project,
+        int? definitionId,
+        int top,
+        CancellationToken cancellationToken)
+    {
+        var requestUri =
+            $"{Scope(RequireProject(project))}_apis/build/builds?api-version={_options.Value.ApiVersion}&$top={top}";
+        if (definitionId is not null)
+        {
+            requestUri += $"&definitions={definitionId}";
+        }
+
+        using var response = await _httpClient.GetAsync(
+            requestUri,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<Build>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<Build> QueueBuildAsync(
+        string? project,
+        int definitionId,
+        string? sourceBranch,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"{Scope(RequireProject(project))}_apis/build/builds?api-version={_options.Value.ApiVersion}",
+            new
+            {
+                definition = new { id = definitionId },
+                sourceBranch = string.IsNullOrWhiteSpace(sourceBranch) ?
+                    null :
+                    ToRefName(sourceBranch)
+            },
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var build = await response.Content.ReadFromJsonAsync<Build>(cancellationToken);
+        return build ??
+            throw new AzureDevOpsClientException("The queue build response could not be parsed.");
+    }
+
+    private static string RequireProject(string? project)
+    {
+        return string.IsNullOrWhiteSpace(project) ?
+            throw new AzureDevOpsClientException(
+                "A project is required for this operation. Pass a project name or set ADOS_DEFAULT_PROJECT."
+            ) :
+            project;
     }
 
     private static string ToRefName(string branch)

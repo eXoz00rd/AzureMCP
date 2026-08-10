@@ -576,6 +576,112 @@ public sealed class AzureDevOpsClientTests
         Assert.True(body.RootElement.GetProperty("title").ValueEquals("New PR"));
     }
 
+    [Fact]
+    public async Task GetBuildDefinitionsAsync_ReturnsDefinitions()
+    {
+        const string json =
+            """
+            {
+              "count": 2,
+              "value": [
+                { "id": 12, "name": "CI", "path": "\\Pipelines" },
+                { "id": 13, "name": "Nightly", "path": "\\" }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var definitions = await client.GetBuildDefinitionsAsync("Alpha", TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, definitions.Count);
+        Assert.Equal("CI", definitions[0].Name);
+        Assert.EndsWith(
+            "Alpha/_apis/build/definitions?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetBuildDefinitionsAsync_WithoutProject_Throws()
+    {
+        var client = CreateClient(out var handler);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+            => client.GetBuildDefinitionsAsync(null, TestContext.Current.CancellationToken)
+        );
+
+        Assert.Contains("ADOS_DEFAULT_PROJECT", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetBuildsAsync_WithDefinitionFilter_AppendsQueryParameters()
+    {
+        const string json =
+            """
+            {
+              "count": 1,
+              "value": [
+                {
+                  "id": 500,
+                  "buildNumber": "20260810.1",
+                  "status": "completed",
+                  "result": "succeeded",
+                  "sourceBranch": "refs/heads/main",
+                  "definition": { "id": 12, "name": "CI" },
+                  "queueTime": "2026-08-10T10:00:00Z",
+                  "finishTime": "2026-08-10T10:05:00Z"
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var builds = await client.GetBuildsAsync("Alpha", 12, 20, TestContext.Current.CancellationToken);
+
+        var build = Assert.Single(builds);
+        Assert.Equal("20260810.1", build.BuildNumber);
+        Assert.Equal("succeeded", build.Result);
+        Assert.Equal(12, build.Definition!.Id);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("$top=20", requestUri);
+        Assert.Contains("definitions=12", requestUri);
+        Assert.Contains("Alpha/_apis/build/builds", requestUri);
+    }
+
+    [Fact]
+    public async Task QueueBuildAsync_PostsDefinitionAndNormalizedBranch()
+    {
+        const string json =
+            """
+            {
+              "id": 501,
+              "buildNumber": "20260810.2",
+              "status": "notStarted",
+              "sourceBranch": "refs/heads/develop",
+              "definition": { "id": 12, "name": "CI" }
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var build = await client.QueueBuildAsync("Alpha", 12, "develop", TestContext.Current.CancellationToken);
+
+        Assert.Equal(501, build.Id);
+        Assert.Null(build.Result);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.EndsWith(
+            "Alpha/_apis/build/builds?api-version=7.0",
+            request.RequestUri!.AbsoluteUri
+        );
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.Equal(12, body.RootElement.GetProperty("definition").GetProperty("id").GetInt32());
+        Assert.True(body.RootElement.GetProperty("sourceBranch").ValueEquals("refs/heads/develop"));
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _responses;
