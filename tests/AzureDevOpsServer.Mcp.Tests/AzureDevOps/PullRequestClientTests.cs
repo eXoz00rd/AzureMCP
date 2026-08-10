@@ -72,6 +72,256 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
     }
 
     [Fact]
+    public async Task GetPullRequestAsync_ReturnsReviewerVotesAndMergeState()
+    {
+        const string json =
+            """
+            {
+              "pullRequestId": 7,
+              "title": "Add feature",
+              "status": "active",
+              "sourceRefName": "refs/heads/develop",
+              "targetRefName": "refs/heads/main",
+              "mergeStatus": "conflicts",
+              "isDraft": true,
+              "creationDate": "2026-08-11T08:00:00Z",
+              "reviewers": [
+                { "displayName": "Sebastian", "uniqueName": "sebastian@example.local", "vote": 10, "isRequired": true },
+                { "displayName": "Reviewers Team", "uniqueName": "team", "vote": 0, "isContainer": true }
+              ],
+              "repository": {
+                "id": "3f9a1c2b-6d7e-4f80-9a1b-2c3d4e5f6a7b",
+                "name": "WebApp",
+                "project": { "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", "name": "Alpha" }
+              }
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var pullRequest = await client.GetPullRequestAsync("WebApp", 7, "Alpha", TestContext.Current.CancellationToken);
+
+        Assert.Equal("conflicts", pullRequest.MergeStatus);
+        Assert.True(pullRequest.IsDraft);
+        Assert.NotNull(pullRequest.CreationDate);
+        Assert.Equal(2, pullRequest.Reviewers!.Count);
+        Assert.Equal(10, pullRequest.Reviewers[0].Vote);
+        Assert.True(pullRequest.Reviewers[0].IsRequired);
+        Assert.True(pullRequest.Reviewers[1].IsContainer);
+        Assert.Equal("Alpha", pullRequest.Repository!.Project!.Name);
+    }
+
+    [Fact]
+    public async Task GetProjectPullRequestsAsync_WithoutFilters_QueriesProjectScope()
+    {
+        using var response = JsonResponse("""{ "count": 0, "value": [] }""");
+        var client = CreateClient(out var handler, response);
+
+        await client.GetProjectPullRequestsAsync("Alpha", null, false, false, 100, TestContext.Current.CancellationToken);
+
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("Alpha/_apis/git/pullrequests", requestUri);
+        Assert.Contains("searchCriteria.status=active", requestUri);
+        Assert.Contains("$top=100", requestUri);
+        Assert.DoesNotContain("creatorId", requestUri);
+        Assert.DoesNotContain("reviewerId", requestUri);
+    }
+
+    [Fact]
+    public async Task GetProjectPullRequestsAsync_WithUserFilters_ResolvesIdentityOnce()
+    {
+        using var connectionData = JsonResponse(
+            """{ "authenticatedUser": { "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb" } }"""
+        );
+        using var pullRequests = JsonResponse("""{ "count": 0, "value": [] }""");
+        var client = CreateClient(out var handler, connectionData, pullRequests);
+
+        await client.GetProjectPullRequestsAsync("Alpha", "all", true, true, 50, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.EndsWith("/_apis/connectionData", handler.Requests[0].RequestUri!.AbsoluteUri);
+        var requestUri = handler.Requests[1].RequestUri!.AbsoluteUri;
+        Assert.Contains("searchCriteria.status=all", requestUri);
+        Assert.Contains("searchCriteria.creatorId=0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", requestUri);
+        Assert.Contains("searchCriteria.reviewerId=0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", requestUri);
+    }
+
+    [Fact]
+    public async Task GetPullRequestPolicyEvaluationsAsync_UsesCodeReviewArtifactId()
+    {
+        const string pullRequestJson =
+            """
+            {
+              "pullRequestId": 7,
+              "title": "Add feature",
+              "status": "active",
+              "sourceRefName": "refs/heads/develop",
+              "targetRefName": "refs/heads/main",
+              "repository": {
+                "id": "3f9a1c2b-6d7e-4f80-9a1b-2c3d4e5f6a7b",
+                "name": "WebApp",
+                "project": { "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", "name": "Alpha" }
+              }
+            }
+            """;
+        const string policiesJson =
+            """
+            {
+              "count": 2,
+              "value": [
+                {
+                  "status": "approved",
+                  "configuration": { "isBlocking": true, "isEnabled": true, "type": { "displayName": "Build" } }
+                },
+                {
+                  "status": "rejected",
+                  "configuration": { "isBlocking": true, "isEnabled": true, "type": { "displayName": "Minimum number of reviewers" } }
+                }
+              ]
+            }
+            """;
+        using var pullRequest = JsonResponse(pullRequestJson);
+        using var policies = JsonResponse(policiesJson);
+        var client = CreateClient(out var handler, pullRequest, policies);
+
+        var evaluations = await client.GetPullRequestPolicyEvaluationsAsync(
+            "WebApp",
+            7,
+            "Alpha",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, evaluations.Count);
+        Assert.Equal("approved", evaluations[0].Status);
+        Assert.Equal("Build", evaluations[0].Configuration!.Type!.DisplayName);
+        Assert.True(evaluations[1].Configuration!.IsBlocking);
+        var requestUri = handler.Requests[1].RequestUri!.AbsoluteUri;
+        Assert.Contains("Alpha/_apis/policy/evaluations", requestUri);
+        Assert.Contains(
+            "artifactId=vstfs%3A%2F%2F%2FCodeReview%2FCodeReviewId%2F0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb%2F7",
+            requestUri
+        );
+    }
+
+    [Fact]
+    public async Task GetPullRequestPolicyEvaluationsAsync_WithoutProjectOnPullRequest_Throws()
+    {
+        const string pullRequestJson =
+            """
+            {
+              "pullRequestId": 7,
+              "title": "Add feature",
+              "status": "active",
+              "sourceRefName": "refs/heads/develop",
+              "targetRefName": "refs/heads/main"
+            }
+            """;
+        using var pullRequest = JsonResponse(pullRequestJson);
+        var client = CreateClient(out var handler, pullRequest);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetPullRequestPolicyEvaluationsAsync("WebApp", 7, "Alpha", TestContext.Current.CancellationToken));
+
+        Assert.Contains("could not be resolved", exception.Message);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetPullRequestWorkItemsAsync_ReturnsLinkedIds()
+    {
+        const string json =
+            """
+            {
+              "count": 2,
+              "value": [
+                { "id": "42", "url": "https://devops.example.local/DefaultCollection/_apis/wit/workItems/42" },
+                { "id": "43", "url": "https://devops.example.local/DefaultCollection/_apis/wit/workItems/43" }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var workItems = await client.GetPullRequestWorkItemsAsync(
+            "WebApp",
+            7,
+            "Alpha",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, workItems.Count);
+        Assert.Equal("42", workItems[0].Id);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/pullRequests/7/workitems?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task ReplyToPullRequestThreadAsync_PostsCommentToThread()
+    {
+        using var response = JsonResponse("""{ "id": 3, "content": "Fixed in the latest push" }""");
+        var client = CreateClient(out var handler, response);
+
+        var comment = await client.ReplyToPullRequestThreadAsync(
+            "WebApp",
+            7,
+            10,
+            "Fixed in the latest push",
+            "Alpha",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, comment.Id);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/pullRequests/7/threads/10/comments?api-version=7.0",
+            request.RequestUri!.AbsoluteUri
+        );
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("content").ValueEquals("Fixed in the latest push"));
+    }
+
+    [Theory]
+    [InlineData("fixed", "fixed")]
+    [InlineData("wontfix", "wontFix")]
+    [InlineData("ByDesign", "byDesign")]
+    public async Task SetPullRequestThreadStatusAsync_NormalizesStatus(string input, string expected)
+    {
+        using var response = JsonResponse("""{ "id": 10, "status": "closed" }""");
+        var client = CreateClient(out var handler, response);
+
+        await client.SetPullRequestThreadStatusAsync(
+            "WebApp",
+            7,
+            10,
+            input,
+            "Alpha",
+            TestContext.Current.CancellationToken);
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Patch, request.Method);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("status").ValueEquals(expected));
+    }
+
+    [Fact]
+    public async Task SetPullRequestThreadStatusAsync_WithUnknownStatus_Throws()
+    {
+        var client = CreateClient(out var handler);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.SetPullRequestThreadStatusAsync(
+                "WebApp",
+                7,
+                10,
+                "resolved",
+                "Alpha",
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("wontFix", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task GetPullRequestAsync_ReturnsPullRequest()
     {
         const string json =

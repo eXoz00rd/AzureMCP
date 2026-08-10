@@ -15,7 +15,7 @@ Most existing MCP integrations for Azure DevOps target Azure DevOps Services (cl
 
 ## Tools
 
-42 tools across 9 areas:
+47 tools across 9 areas:
 
 | Area | Tools |
 |---|---|
@@ -24,10 +24,12 @@ Most existing MCP integrations for Azure DevOps target Azure DevOps Services (cl
 | Work items | `query_work_items`, `get_work_item`, `get_work_items`, `create_work_item`, `update_work_item`, `add_work_item_comment` |
 | Queries & metadata | `list_queries`, `run_saved_query`, `list_work_item_types`, `list_work_item_states`, `list_iterations`, `list_areas` |
 | Repositories | `list_repositories`, `list_branches`, `get_file_content`, `list_commits`, `get_commit`, `list_repository_items`, `diff_branches` |
-| Pull requests | `list_pull_requests`, `get_pull_request`, `create_pull_request`, `get_pull_request_changes`, `list_pull_request_threads`, `add_pull_request_comment`, `vote_on_pull_request`, `update_pull_request_status` |
+| Pull requests | `list_pull_requests`, `list_my_pull_requests`, `get_pull_request`, `create_pull_request`, `get_pull_request_changes`, `get_pull_request_policies`, `list_pull_request_work_items`, `list_pull_request_threads`, `add_pull_request_comment`, `reply_to_pull_request_thread`, `set_pull_request_thread_status`, `vote_on_pull_request`, `update_pull_request_status` |
 | Builds | `list_build_definitions`, `list_builds`, `queue_build`, `get_build_timeline`, `get_build_log`, `list_build_artifacts` |
 | Releases | `list_release_definitions`, `list_releases`, `get_release`, `create_release` |
 | Wiki | `list_wikis`, `list_wiki_pages`, `get_wiki_page` |
+
+`get_pull_request` and both listing tools return reviewer votes, merge status, and draft state, so questions like "who approved this and can it merge?" are answered without extra calls.
 
 Tools that operate inside a project fall back to `ADOS_DEFAULT_PROJECT` when no project is given. Every tool carries MCP annotations (`readOnlyHint` / `destructiveHint`), so clients can require confirmation only where it matters, and all HTTP calls go through a standard resilience pipeline with retries and timeouts.
 

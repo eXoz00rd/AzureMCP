@@ -8,4 +8,10 @@ public sealed record GitPullRequest(
     string SourceRefName,
     string TargetRefName,
     IdentityRef? CreatedBy,
-    GitCommitRef? LastMergeSourceCommit);
+    GitCommitRef? LastMergeSourceCommit,
+    string? MergeStatus,
+    bool? IsDraft,
+    DateTimeOffset? CreationDate,
+    DateTimeOffset? ClosedDate,
+    IReadOnlyList<PullRequestReviewer>? Reviewers,
+    GitRepositoryRef? Repository);

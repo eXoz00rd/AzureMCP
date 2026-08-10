@@ -258,6 +258,144 @@ public sealed partial class AzureDevOpsClient
             );
     }
 
+    public async Task<IReadOnlyList<GitPullRequest>> GetProjectPullRequestsAsync(
+        string? project,
+        string? status,
+        bool createdByMe,
+        bool assignedToMe,
+        int top,
+        CancellationToken cancellationToken)
+    {
+        var effectiveStatus = string.IsNullOrWhiteSpace(status) ?
+            "active" :
+            status;
+        var requestUri =
+            $"{Scope(RequireProject(project))}_apis/git/pullrequests?searchCriteria.status={Uri.EscapeDataString(effectiveStatus)}&$top={top}&api-version={ApiVersion(ApiArea.Git)}";
+
+        if (createdByMe || assignedToMe)
+        {
+            var userId = await GetAuthenticatedUserIdAsync(cancellationToken);
+            if (createdByMe)
+            {
+                requestUri += $"&searchCriteria.creatorId={userId}";
+            }
+
+            if (assignedToMe)
+            {
+                requestUri += $"&searchCriteria.reviewerId={userId}";
+            }
+        }
+
+        using var response = await _httpClient.GetAsync(
+            requestUri,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<GitPullRequest>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<IReadOnlyList<PolicyEvaluation>> GetPullRequestPolicyEvaluationsAsync(
+        string repository,
+        int pullRequestId,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var pullRequest = await GetPullRequestAsync(repository, pullRequestId, project, cancellationToken);
+        var projectId = pullRequest.Repository?.Project?.Id ??
+            throw new AzureDevOpsClientException(
+                $"The project of pull request {pullRequestId} could not be resolved, so its policies cannot be evaluated."
+            );
+
+        var artifactId = $"vstfs:///CodeReview/CodeReviewId/{projectId}/{pullRequestId}";
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/policy/evaluations?artifactId={Uri.EscapeDataString(artifactId)}&api-version={ApiVersion(ApiArea.Git)}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<PolicyEvaluation>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<IReadOnlyList<ResourceRef>> GetPullRequestWorkItemsAsync(
+        string repository,
+        int pullRequestId,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/workitems?api-version={ApiVersion(ApiArea.Git)}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<ResourceRef>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<PullRequestComment> ReplyToPullRequestThreadAsync(
+        string repository,
+        int pullRequestId,
+        int threadId,
+        string comment,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/threads/{threadId}/comments?api-version={ApiVersion(ApiArea.Git)}",
+            new { content = comment, commentType = 1 },
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var created = await response.Content.ReadFromJsonAsync<PullRequestComment>(cancellationToken);
+        return created ??
+            throw new AzureDevOpsClientException("The reply response could not be parsed.");
+    }
+
+    public async Task<PullRequestThread> SetPullRequestThreadStatusAsync(
+        string repository,
+        int pullRequestId,
+        int threadId,
+        string status,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var normalizedStatus = status.ToLowerInvariant() switch
+        {
+            "active" => "active",
+            "fixed" => "fixed",
+            "wontfix" => "wontFix",
+            "closed" => "closed",
+            "bydesign" => "byDesign",
+            "pending" => "pending",
+            _ => throw new AzureDevOpsClientException(
+                "Thread status must be one of: active, fixed, wontFix, closed, byDesign, pending."
+            )
+        };
+
+        using var response = await _httpClient.PatchAsJsonAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/threads/{threadId}?api-version={ApiVersion(ApiArea.Git)}",
+            new { status = normalizedStatus },
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var thread = await response.Content.ReadFromJsonAsync<PullRequestThread>(cancellationToken);
+        return thread ??
+            throw new AzureDevOpsClientException($"The update response for thread {threadId} could not be parsed.");
+    }
+
     private async Task<Guid> GetAuthenticatedUserIdAsync(CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(

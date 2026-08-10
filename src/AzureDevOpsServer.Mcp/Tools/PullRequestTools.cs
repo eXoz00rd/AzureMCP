@@ -158,6 +158,108 @@ public sealed class PullRequestTools
         );
     }
 
+    [McpServerTool(Name = "list_my_pull_requests", ReadOnly = true)]
+    [Description("Lists pull requests across all repositories of a project, optionally only those the signed-in user created or reviews. Answers questions like which pull requests are waiting for me.")]
+    public Task<IReadOnlyList<GitPullRequest>> ListMyPullRequestsAsync(
+        [Description("Optional status filter: active, completed, abandoned, or all. Defaults to active.")]
+        string? status,
+        [Description("Set to true to only return pull requests created by the signed-in user.")]
+        bool? createdByMe,
+        [Description("Set to true to only return pull requests where the signed-in user is a reviewer.")]
+        bool? assignedToMe,
+        [Description("Maximum number of pull requests to return. Defaults to 100.")]
+        int? top,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetProjectPullRequestsAsync(
+            EffectiveProject(project),
+            status,
+            createdByMe ?? false,
+            assignedToMe ?? false,
+            top ?? ResponseLimits.DefaultListTop,
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "get_pull_request_policies", ReadOnly = true)]
+    [Description("Gets the policy evaluations of a pull request: required builds, reviewer rules, and linked work item checks with their status. Explains why a pull request cannot be completed.")]
+    public Task<IReadOnlyList<PolicyEvaluation>> GetPullRequestPoliciesAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Pull request id.")] int pullRequestId,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetPullRequestPolicyEvaluationsAsync(
+            repository,
+            pullRequestId,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "list_pull_request_work_items", ReadOnly = true)]
+    [Description("Lists the work items linked to a pull request. Use get_work_items with the returned ids for details.")]
+    public Task<IReadOnlyList<ResourceRef>> ListPullRequestWorkItemsAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Pull request id.")] int pullRequestId,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetPullRequestWorkItemsAsync(
+            repository,
+            pullRequestId,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "reply_to_pull_request_thread", Destructive = false)]
+    [Description("Replies to an existing comment thread of a pull request. Use list_pull_request_threads to find the thread id.")]
+    public Task<PullRequestComment> ReplyToPullRequestThreadAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Pull request id.")] int pullRequestId,
+        [Description("Thread id from list_pull_request_threads.")] int threadId,
+        [Description("Reply text.")] string comment,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.ReplyToPullRequestThreadAsync(
+            repository,
+            pullRequestId,
+            threadId,
+            comment,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "set_pull_request_thread_status", Destructive = false)]
+    [Description("Sets the status of a pull request comment thread, for example to resolve it as fixed or won't fix.")]
+    public Task<PullRequestThread> SetPullRequestThreadStatusAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Pull request id.")] int pullRequestId,
+        [Description("Thread id from list_pull_request_threads.")] int threadId,
+        [Description("Target status: active, fixed, wontFix, closed, byDesign, or pending.")]
+        string status,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.SetPullRequestThreadStatusAsync(
+            repository,
+            pullRequestId,
+            threadId,
+            status,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
     internal static int ParseVote(string vote)
     {
         return vote.ToLowerInvariant() switch
