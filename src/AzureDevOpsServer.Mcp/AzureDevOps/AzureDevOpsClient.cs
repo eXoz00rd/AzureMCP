@@ -375,6 +375,89 @@ public sealed class AzureDevOpsClient
             throw new AzureDevOpsClientException("The create thread response could not be parsed.");
     }
 
+    public async Task<PullRequestReviewer> SetPullRequestVoteAsync(
+        string repository,
+        int pullRequestId,
+        int vote,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var userId = await GetAuthenticatedUserIdAsync(cancellationToken);
+
+        using var response = await _httpClient.PutAsJsonAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/reviewers/{userId}?api-version={_options.Value.ApiVersion}",
+            new { vote },
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var reviewer = await response.Content.ReadFromJsonAsync<PullRequestReviewer>(cancellationToken);
+        return reviewer ??
+            throw new AzureDevOpsClientException("The vote response could not be parsed.");
+    }
+
+    public async Task<GitPullRequest> UpdatePullRequestStatusAsync(
+        string repository,
+        int pullRequestId,
+        string status,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var normalizedStatus = status.ToLowerInvariant();
+        if (normalizedStatus is not ("active" or "abandoned" or "completed"))
+        {
+            throw new AzureDevOpsClientException("Status must be one of: active, abandoned, completed.");
+        }
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["status"] = normalizedStatus
+        };
+
+        if (normalizedStatus == "completed")
+        {
+            var pullRequest = await GetPullRequestAsync(repository, pullRequestId, project, cancellationToken);
+            var commitId = pullRequest.LastMergeSourceCommit?.CommitId ??
+                throw new AzureDevOpsClientException(
+                    "The pull request has no merge source commit, so it cannot be completed."
+                );
+            payload["lastMergeSourceCommit"] = new Dictionary<string, object?>
+            {
+                ["commitId"] = commitId
+            };
+        }
+
+        using var response = await _httpClient.PatchAsJsonAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}?api-version={_options.Value.ApiVersion}",
+            payload,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var updated = await response.Content.ReadFromJsonAsync<GitPullRequest>(cancellationToken);
+        return updated ??
+            throw new AzureDevOpsClientException(
+                $"The status update response for pull request {pullRequestId} could not be parsed."
+            );
+    }
+
+    private async Task<Guid> GetAuthenticatedUserIdAsync(CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            "_apis/connectionData",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var connectionData = await response.Content.ReadFromJsonAsync<ConnectionData>(cancellationToken);
+        return connectionData?.AuthenticatedUser?.Id ??
+            throw new AzureDevOpsClientException("The authenticated user could not be resolved from connection data.");
+    }
+
     public async Task<IReadOnlyList<BuildDefinition>> GetBuildDefinitionsAsync(
         string? project,
         CancellationToken cancellationToken)

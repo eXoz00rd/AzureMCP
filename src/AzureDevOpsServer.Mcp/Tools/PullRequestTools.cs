@@ -130,6 +130,58 @@ public sealed class PullRequestTools
         );
     }
 
+    [McpServerTool(Name = "vote_on_pull_request")]
+    [Description("Casts the authenticated user's vote on a pull request.")]
+    public Task<PullRequestReviewer> VoteOnPullRequestAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Pull request id.")] int pullRequestId,
+        [Description("Vote: approve, approve_with_suggestions, wait_for_author, reject, or reset.")]
+        string vote,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var voteValue = vote.ToLowerInvariant() switch
+        {
+            "approve" => 10,
+            "approve_with_suggestions" => 5,
+            "reset" => 0,
+            "wait_for_author" => -5,
+            "reject" => -10,
+            _ => throw new AzureDevOpsClientException(
+                "Vote must be one of: approve, approve_with_suggestions, wait_for_author, reject, reset."
+            )
+        };
+
+        return _client.SetPullRequestVoteAsync(
+            repository,
+            pullRequestId,
+            voteValue,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "update_pull_request_status")]
+    [Description("Completes, abandons, or reactivates a pull request.")]
+    public Task<GitPullRequest> UpdatePullRequestStatusAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Pull request id.")] int pullRequestId,
+        [Description("Target status: completed, abandoned, or active.")]
+        string status,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.UpdatePullRequestStatusAsync(
+            repository,
+            pullRequestId,
+            status,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
     private string? EffectiveProject(string? project)
     {
         return string.IsNullOrWhiteSpace(project) ?

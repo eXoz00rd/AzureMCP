@@ -15,9 +15,11 @@ builder.Logging.SetMinimumLevel(
     Enum.TryParse<LogLevel>(
         Environment.GetEnvironmentVariable(AzureDevOpsServerOptions.LogLevelVariable),
         true,
-        out var minimumLevel) ?
+        out var minimumLevel
+    ) ?
         minimumLevel :
-        LogLevel.Warning);
+        LogLevel.Warning
+);
 
 builder.Services.AddSingleton<IValidateOptions<AzureDevOpsServerOptions>, AzureDevOpsServerOptionsValidator>();
 builder.Services

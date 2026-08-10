@@ -838,6 +838,134 @@ public sealed class AzureDevOpsClientTests
         Assert.Equal(5, threadContext.GetProperty("rightFileEnd").GetProperty("line").GetInt32());
     }
 
+    [Fact]
+    public async Task SetPullRequestVoteAsync_ResolvesUserAndPutsVote()
+    {
+        const string connectionDataJson =
+            """{ "authenticatedUser": { "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", "providerDisplayName": "Sebastian" } }""";
+        const string reviewerJson =
+            """{ "displayName": "Sebastian", "uniqueName": "sebastian@example.local", "vote": 10 }""";
+        using var connectionData = JsonResponse(connectionDataJson);
+        using var reviewer = JsonResponse(reviewerJson);
+        var client = CreateClient(out var handler, connectionData, reviewer);
+
+        var result = await client.SetPullRequestVoteAsync(
+            "WebApp",
+            7,
+            10,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(10, result.Vote);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.EndsWith("/DefaultCollection/_apis/connectionData", handler.Requests[0].RequestUri!.AbsoluteUri);
+        Assert.Equal(HttpMethod.Put, handler.Requests[1].Method);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/pullRequests/7/reviewers/0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb?api-version=7.0",
+            handler.Requests[1].RequestUri!.AbsoluteUri
+        );
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.Equal(10, body.RootElement.GetProperty("vote").GetInt32());
+    }
+
+    [Fact]
+    public async Task UpdatePullRequestStatusAsync_Abandon_SendsSinglePatch()
+    {
+        const string json =
+            """
+            {
+              "pullRequestId": 7,
+              "title": "Add feature",
+              "status": "abandoned",
+              "sourceRefName": "refs/heads/develop",
+              "targetRefName": "refs/heads/main"
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var result = await client.UpdatePullRequestStatusAsync(
+            "WebApp",
+            7,
+            "abandoned",
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("abandoned", result.Status);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Patch, request.Method);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("status").ValueEquals("abandoned"));
+        Assert.False(body.RootElement.TryGetProperty("lastMergeSourceCommit", out _));
+    }
+
+    [Fact]
+    public async Task UpdatePullRequestStatusAsync_Complete_IncludesMergeSourceCommit()
+    {
+        const string pullRequestJson =
+            """
+            {
+              "pullRequestId": 7,
+              "title": "Add feature",
+              "status": "active",
+              "sourceRefName": "refs/heads/develop",
+              "targetRefName": "refs/heads/main",
+              "lastMergeSourceCommit": { "commitId": "abc123def456" }
+            }
+            """;
+        const string completedJson =
+            """
+            {
+              "pullRequestId": 7,
+              "title": "Add feature",
+              "status": "completed",
+              "sourceRefName": "refs/heads/develop",
+              "targetRefName": "refs/heads/main"
+            }
+            """;
+        using var pullRequest = JsonResponse(pullRequestJson);
+        using var completed = JsonResponse(completedJson);
+        var client = CreateClient(out var handler, pullRequest, completed);
+
+        var result = await client.UpdatePullRequestStatusAsync(
+            "WebApp",
+            7,
+            "completed",
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("completed", result.Status);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Get, handler.Requests[0].Method);
+        Assert.Equal(HttpMethod.Patch, handler.Requests[1].Method);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(
+            body.RootElement.GetProperty("lastMergeSourceCommit").GetProperty("commitId").ValueEquals("abc123def456")
+        );
+    }
+
+    [Fact]
+    public async Task UpdatePullRequestStatusAsync_WithInvalidStatus_Throws()
+    {
+        var client = CreateClient(out var handler);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+            => client.UpdatePullRequestStatusAsync(
+                "WebApp",
+                7,
+                "merged",
+                "Alpha",
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Contains("active, abandoned, completed", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _responses;

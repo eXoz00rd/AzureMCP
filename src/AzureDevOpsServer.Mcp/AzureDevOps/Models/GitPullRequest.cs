@@ -7,4 +7,5 @@ public sealed record GitPullRequest(
     string Status,
     string SourceRefName,
     string TargetRefName,
-    IdentityRef? CreatedBy);
+    IdentityRef? CreatedBy,
+    GitCommitRef? LastMergeSourceCommit);
