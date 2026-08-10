@@ -10,6 +10,115 @@ namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;
 public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
 {
     [Fact]
+    public async Task GetWorkItemCommentsAsync_UsesPreviewApiVersion()
+    {
+        const string json =
+            """
+            {
+              "totalCount": 1,
+              "comments": [
+                {
+                  "id": 5,
+                  "text": "Looks good",
+                  "createdBy": { "displayName": "Sebastian", "uniqueName": "sebastian@example.local" },
+                  "createdDate": "2026-08-11T10:00:00Z"
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var comments = await client.GetWorkItemCommentsAsync(42, "Alpha", 100, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, comments.TotalCount);
+        var comment = Assert.Single(comments.Comments!);
+        Assert.Equal("Looks good", comment.Text);
+        Assert.Equal("Sebastian", comment.CreatedBy!.DisplayName);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("Alpha/_apis/wit/workItems/42/comments", requestUri);
+        Assert.Contains("api-version=7.0-preview.3", requestUri);
+    }
+
+    [Fact]
+    public async Task GetWorkItemRevisionsAsync_ReturnsRevisions()
+    {
+        const string json =
+            """
+            {
+              "count": 2,
+              "value": [
+                { "id": 42, "rev": 1, "fields": { "System.State": "New" }, "url": "https://devops.example.local/_apis/wit/workItems/42" },
+                { "id": 42, "rev": 2, "fields": { "System.State": "Active" }, "url": "https://devops.example.local/_apis/wit/workItems/42" }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var revisions = await client.GetWorkItemRevisionsAsync(42, 100, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, revisions.Count);
+        Assert.True(revisions[1].Fields["System.State"].ValueEquals("Active"));
+        Assert.Contains("_apis/wit/workItems/42/revisions", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task AddWorkItemRelationAsync_SendsRelationPatch()
+    {
+        const string json =
+            """{ "id": 42, "rev": 5, "fields": {}, "url": "https://devops.example.local/_apis/wit/workItems/42" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        await client.AddWorkItemRelationAsync(
+            42,
+            "System.LinkTypes.Hierarchy-Reverse",
+            "https://devops.example.local/DefaultCollection/_apis/wit/workItems/40",
+            "parent of the fix",
+            TestContext.Current.CancellationToken);
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Patch, request.Method);
+        Assert.Equal("application/json-patch+json", request.Content!.Headers.ContentType!.MediaType);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        var operation = Assert.Single(body.RootElement.EnumerateArray());
+        Assert.True(operation.GetProperty("path").ValueEquals("/relations/-"));
+        var value = operation.GetProperty("value");
+        Assert.True(value.GetProperty("rel").ValueEquals("System.LinkTypes.Hierarchy-Reverse"));
+        Assert.True(value.GetProperty("attributes").GetProperty("comment").ValueEquals("parent of the fix"));
+    }
+
+    [Fact]
+    public async Task AddWorkItemAttachmentAsync_UploadsThenLinks()
+    {
+        using var upload = JsonResponse(
+            """{ "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", "url": "https://devops.example.local/DefaultCollection/_apis/wit/attachments/0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb" }"""
+        );
+        using var link = JsonResponse(
+            """{ "id": 42, "rev": 6, "fields": {}, "url": "https://devops.example.local/_apis/wit/workItems/42" }"""
+        );
+        var client = CreateClient(out var handler, upload, link);
+
+        await client.AddWorkItemAttachmentAsync(
+            42,
+            "build-log.txt",
+            "##[error]CS1002",
+            null,
+            "Alpha",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Post, handler.Requests[0].Method);
+        Assert.Contains("fileName=build-log.txt", handler.Requests[0].RequestUri!.AbsoluteUri);
+        Assert.Equal(HttpMethod.Patch, handler.Requests[1].Method);
+        using var body = JsonDocument.Parse(handler.RequestBodies[1]);
+        var value = Assert.Single(body.RootElement.EnumerateArray()).GetProperty("value");
+        Assert.True(value.GetProperty("rel").ValueEquals("AttachedFile"));
+        Assert.True(value.GetProperty("attributes").GetProperty("comment").ValueEquals("build-log.txt"));
+    }
+
+    [Fact]
     public async Task QueryWorkItemsAsync_WithProject_PostsToProjectScope()
     {
         const string json =

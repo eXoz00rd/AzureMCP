@@ -69,6 +69,118 @@ public sealed partial class AzureDevOpsClient
         return result?.Value ?? [];
     }
 
+    public async Task<WorkItemCommentList> GetWorkItemCommentsAsync(
+        int id,
+        string? project,
+        int top,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/wit/workItems/{id}/comments?$top={top}&api-version={_options.Value.WorkItemCommentsApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var comments = await response.Content.ReadFromJsonAsync<WorkItemCommentList>(cancellationToken);
+        return comments ??
+            throw new AzureDevOpsClientException($"The comments response for work item {id} could not be parsed.");
+    }
+
+    public async Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(
+        int id,
+        int top,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"_apis/wit/workItems/{id}/revisions?$top={top}&api-version={ApiVersion(ApiArea.WorkItems)}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<WorkItem>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<WorkItem> AddWorkItemRelationAsync(
+        int id,
+        string relation,
+        string targetUrl,
+        string? comment,
+        CancellationToken cancellationToken)
+    {
+        var attributes = string.IsNullOrWhiteSpace(comment) ?
+            null :
+            new Dictionary<string, object?> { ["comment"] = comment };
+        var operations = new[]
+        {
+            new Dictionary<string, object?>
+            {
+                ["op"] = "add",
+                ["path"] = "/relations/-",
+                ["value"] = new Dictionary<string, object?>
+                {
+                    ["rel"] = relation,
+                    ["url"] = targetUrl,
+                    ["attributes"] = attributes
+                }
+            }
+        };
+
+        using var content = new StringContent(
+            JsonSerializer.Serialize(operations),
+            Encoding.UTF8,
+            "application/json-patch+json"
+        );
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"_apis/wit/workitems/{id}?api-version={ApiVersion(ApiArea.WorkItems)}"
+        )
+        {
+            Content = content
+        };
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var workItem = await response.Content.ReadFromJsonAsync<WorkItem>(cancellationToken);
+        return workItem ??
+            throw new AzureDevOpsClientException($"The relation response for work item {id} could not be parsed.");
+    }
+
+    public async Task<WorkItem> AddWorkItemAttachmentAsync(
+        int id,
+        string fileName,
+        string content,
+        string? comment,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        using var uploadContent = new StringContent(content, Encoding.UTF8, "application/octet-stream");
+        using var uploadResponse = await _httpClient.PostAsync(
+            $"{Scope(RequireProject(project))}_apis/wit/attachments?fileName={Uri.EscapeDataString(fileName)}&api-version={ApiVersion(ApiArea.WorkItems)}",
+            uploadContent,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(uploadResponse, cancellationToken);
+
+        var attachment = await uploadResponse.Content.ReadFromJsonAsync<WorkItemAttachmentReference>(cancellationToken) ??
+            throw new AzureDevOpsClientException("The attachment upload response could not be parsed.");
+
+        return await AddWorkItemRelationAsync(
+            id,
+            "AttachedFile",
+            attachment.Url,
+            comment ?? fileName,
+            cancellationToken
+        );
+    }
+
     public async Task<IReadOnlyList<QueryHierarchyItem>> GetQueriesAsync(
         string? project,
         int depth,

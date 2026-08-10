@@ -11,8 +11,10 @@ public sealed class AzureDevOpsServerOptions
     public const string BuildApiVersionVariable = "ADOS_API_VERSION_BUILD";
     public const string ReleaseApiVersionVariable = "ADOS_API_VERSION_RELEASE";
     public const string WikiApiVersionVariable = "ADOS_API_VERSION_WIKI";
+    public const string WorkItemCommentsApiVersionVariable = "ADOS_API_VERSION_WIT_COMMENTS";
     public const string LogLevelVariable = "ADOS_LOG_LEVEL";
     public const string DefaultApiVersion = "7.0";
+    public const string DefaultWorkItemCommentsApiVersion = "7.0-preview.3";
 
     public string CollectionUrl { get; set; } = string.Empty;
 
@@ -32,6 +34,8 @@ public sealed class AzureDevOpsServerOptions
 
     public string? WikiApiVersion { get; set; }
 
+    public string WorkItemCommentsApiVersion { get; set; } = DefaultWorkItemCommentsApiVersion;
+
     public void LoadFromEnvironment()
     {
         CollectionUrl = Environment.GetEnvironmentVariable(CollectionUrlVariable) ?? string.Empty;
@@ -43,6 +47,8 @@ public sealed class AzureDevOpsServerOptions
         BuildApiVersion = Environment.GetEnvironmentVariable(BuildApiVersionVariable);
         ReleaseApiVersion = Environment.GetEnvironmentVariable(ReleaseApiVersionVariable);
         WikiApiVersion = Environment.GetEnvironmentVariable(WikiApiVersionVariable);
+        WorkItemCommentsApiVersion = Environment.GetEnvironmentVariable(WorkItemCommentsApiVersionVariable) ??
+            DefaultWorkItemCommentsApiVersion;
     }
 
     public string ApiVersionFor(ApiArea area)

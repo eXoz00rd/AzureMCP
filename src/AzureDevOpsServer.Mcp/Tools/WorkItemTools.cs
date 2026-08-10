@@ -23,6 +23,13 @@ public sealed class WorkItemTools
     [Description(
         "Runs a WIQL query and returns matching work item references. Scopes the query to the given project, the default project, or the whole collection."
     )]
+    private string? EffectiveProject(string? project)
+    {
+        return string.IsNullOrWhiteSpace(project) ?
+            _options.Value.DefaultProject :
+            project;
+    }
+
     public Task<WiqlQueryResult> QueryWorkItemsAsync(
         [Description(
             "WIQL query text, for example: SELECT [System.Id] FROM WorkItems WHERE [System.State] = 'Active'."
@@ -62,6 +69,108 @@ public sealed class WorkItemTools
         CancellationToken cancellationToken)
     {
         return _client.GetWorkItemsAsync(ids, fields, cancellationToken);
+    }
+
+    [McpServerTool(Name = "list_work_item_comments", ReadOnly = true)]
+    [Description("Lists the discussion comments of a work item with their authors and dates.")]
+    public Task<WorkItemCommentList> ListWorkItemCommentsAsync(
+        [Description("Work item id.")] int id,
+        [Description("Maximum number of comments to return. Defaults to 100.")]
+        int? top,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetWorkItemCommentsAsync(
+            id,
+            EffectiveProject(project),
+            top ?? ResponseLimits.DefaultListTop,
+            cancellationToken
+        );
+    }
+
+    [McpServerTool(Name = "get_work_item_revisions", ReadOnly = true)]
+    [Description("Gets the revision history of a work item so field changes over time can be compared.")]
+    public Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(
+        [Description("Work item id.")] int id,
+        [Description("Maximum number of revisions to return. Defaults to 100.")]
+        int? top,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetWorkItemRevisionsAsync(id, top ?? ResponseLimits.DefaultListTop, cancellationToken);
+    }
+
+    [McpServerTool(Name = "link_work_item", Destructive = false)]
+    [Description("Links a work item to another work item, or to a commit or pull request by its artifact URL.")]
+    public Task<WorkItem> LinkWorkItemAsync(
+        [Description("Work item id that receives the link.")] int id,
+        [Description("Link kind: parent, child, related, duplicate, predecessor, successor, or a raw relation name such as ArtifactLink.")]
+        string linkType,
+        [Description("Target work item id. Provide this or targetUrl.")]
+        int? targetWorkItemId,
+        [Description("Target URL for artifact links, for example a commit or pull request vstfs URL. Provide this or targetWorkItemId.")]
+        string? targetUrl,
+        [Description("Optional comment describing the link.")]
+        string? comment,
+        CancellationToken cancellationToken)
+    {
+        var relation = ParseLinkType(linkType);
+        var url = targetUrl;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            if (targetWorkItemId is null)
+            {
+                throw new ArgumentException(
+                    "Either targetWorkItemId or targetUrl must be provided.",
+                    nameof(targetWorkItemId)
+                );
+            }
+
+            url = $"{_options.Value.CollectionUrl.TrimEnd('/')}/_apis/wit/workItems/{targetWorkItemId}";
+        }
+
+        return _client.AddWorkItemRelationAsync(id, relation, url, comment, cancellationToken);
+    }
+
+    [McpServerTool(Name = "add_work_item_attachment", Destructive = false)]
+    [Description("Uploads text content as a file and attaches it to a work item, for example a log excerpt or a note.")]
+    public Task<WorkItem> AddWorkItemAttachmentAsync(
+        [Description("Work item id.")] int id,
+        [Description("File name including extension, for example build-log.txt.")]
+        string fileName,
+        [Description("Text content of the attachment.")] string content,
+        [Description("Optional comment stored with the attachment.")]
+        string? comment,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        return _client.AddWorkItemAttachmentAsync(
+            id,
+            fileName,
+            content,
+            comment,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    internal static string ParseLinkType(string linkType)
+    {
+        return linkType.ToLowerInvariant() switch
+        {
+            "parent" => "System.LinkTypes.Hierarchy-Reverse",
+            "child" => "System.LinkTypes.Hierarchy-Forward",
+            "related" => "System.LinkTypes.Related",
+            "duplicate" => "System.LinkTypes.Duplicate-Forward",
+            "predecessor" => "System.LinkTypes.Dependency-Reverse",
+            "successor" => "System.LinkTypes.Dependency-Forward",
+            _ when linkType.Contains('.') || linkType == "ArtifactLink" => linkType,
+            _ => throw new ArgumentException(
+                "Link type must be parent, child, related, duplicate, predecessor, successor, or a raw relation name.",
+                nameof(linkType)
+            )
+        };
     }
 
     [McpServerTool(Name = "create_work_item", Destructive = false)]
