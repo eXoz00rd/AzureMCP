@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using AzureDevOpsServer.Mcp.AzureDevOps.Models;
 using AzureDevOpsServer.Mcp.Configuration;
 using Microsoft.Extensions.Options;
@@ -90,6 +92,55 @@ public sealed class AzureDevOpsClient
             throw new AzureDevOpsClientException($"The response for work item {id} could not be parsed.");
     }
 
+    public async Task<WorkItem> CreateWorkItemAsync(
+        string? project,
+        string type,
+        IReadOnlyDictionary<string, string> fields,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(project))
+        {
+            throw new AzureDevOpsClientException(
+                "A project is required to create a work item. Pass a project name or set ADOS_DEFAULT_PROJECT."
+            );
+        }
+
+        using var content = CreateJsonPatchContent(fields);
+        using var response = await _httpClient.PostAsync(
+            $"{Scope(project)}_apis/wit/workitems/${Uri.EscapeDataString(type)}?api-version={_options.Value.ApiVersion}",
+            content,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var workItem = await response.Content.ReadFromJsonAsync<WorkItem>(cancellationToken);
+        return workItem ??
+            throw new AzureDevOpsClientException("The create work item response could not be parsed.");
+    }
+
+    public async Task<WorkItem> UpdateWorkItemAsync(
+        int id,
+        IReadOnlyDictionary<string, string> fields,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"_apis/wit/workitems/{id}?api-version={_options.Value.ApiVersion}"
+        )
+        {
+            Content = CreateJsonPatchContent(fields)
+        };
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var workItem = await response.Content.ReadFromJsonAsync<WorkItem>(cancellationToken);
+        return workItem ??
+            throw new AzureDevOpsClientException($"The update response for work item {id} could not be parsed.");
+    }
+
     public async Task<IReadOnlyList<GitRepository>> GetRepositoriesAsync(
         string? project,
         CancellationToken cancellationToken)
@@ -150,6 +201,23 @@ public sealed class AzureDevOpsClient
         var item = await response.Content.ReadFromJsonAsync<GitItem>(cancellationToken);
         return item ??
             throw new AzureDevOpsClientException($"The response for item '{path}' could not be parsed.");
+    }
+
+    private static HttpContent CreateJsonPatchContent(IReadOnlyDictionary<string, string> fields)
+    {
+        if (fields.Count == 0)
+        {
+            throw new AzureDevOpsClientException("At least one field is required.");
+        }
+
+        var operations = fields
+                         .Select(field => new { op = "add", path = $"/fields/{field.Key}", value = field.Value })
+                         .ToList();
+        return new StringContent(
+            JsonSerializer.Serialize(operations),
+            Encoding.UTF8,
+            "application/json-patch+json"
+        );
     }
 
     private static string Scope(string? project)

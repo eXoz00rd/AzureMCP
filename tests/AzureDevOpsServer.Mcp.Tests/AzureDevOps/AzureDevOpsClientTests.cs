@@ -356,6 +356,101 @@ public sealed class AzureDevOpsClientTests
         Assert.DoesNotContain("versionDescriptor", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
     }
 
+    [Fact]
+    public async Task CreateWorkItemAsync_PostsJsonPatchToTypedUrl()
+    {
+        const string json =
+            """
+            {
+              "id": 100,
+              "rev": 1,
+              "fields": { "System.Title": "New bug" },
+              "url": "https://devops.example.local/DefaultCollection/_apis/wit/workItems/100"
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+        var fields = new Dictionary<string, string>
+        {
+            ["System.Title"] = "New bug"
+        };
+
+        var workItem = await client.CreateWorkItemAsync("Alpha", "Bug", fields, TestContext.Current.CancellationToken);
+
+        Assert.Equal(100, workItem.Id);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.EndsWith("Alpha/_apis/wit/workitems/$Bug?api-version=7.0", request.RequestUri!.AbsoluteUri);
+        Assert.Equal("application/json-patch+json", request.Content!.Headers.ContentType!.MediaType);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        var operation = Assert.Single(body.RootElement.EnumerateArray());
+        Assert.True(operation.GetProperty("op").ValueEquals("add"));
+        Assert.True(operation.GetProperty("path").ValueEquals("/fields/System.Title"));
+        Assert.True(operation.GetProperty("value").ValueEquals("New bug"));
+    }
+
+    [Fact]
+    public async Task CreateWorkItemAsync_WithoutProject_Throws()
+    {
+        var client = CreateClient(out var handler);
+        var fields = new Dictionary<string, string>
+        {
+            ["System.Title"] = "New bug"
+        };
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+            => client.CreateWorkItemAsync(null, "Bug", fields, TestContext.Current.CancellationToken)
+        );
+
+        Assert.Contains("ADOS_DEFAULT_PROJECT", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task UpdateWorkItemAsync_SendsPatchOperations()
+    {
+        const string json =
+            """
+            {
+              "id": 42,
+              "rev": 4,
+              "fields": { "System.State": "Resolved" },
+              "url": "https://devops.example.local/DefaultCollection/_apis/wit/workItems/42"
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+        var fields = new Dictionary<string, string>
+        {
+            ["System.State"] = "Resolved"
+        };
+
+        var workItem = await client.UpdateWorkItemAsync(42, fields, TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, workItem.Rev);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Patch, request.Method);
+        Assert.EndsWith("_apis/wit/workitems/42?api-version=7.0", request.RequestUri!.AbsoluteUri);
+        Assert.Equal("application/json-patch+json", request.Content!.Headers.ContentType!.MediaType);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        var operation = Assert.Single(body.RootElement.EnumerateArray());
+        Assert.True(operation.GetProperty("path").ValueEquals("/fields/System.State"));
+        Assert.True(operation.GetProperty("value").ValueEquals("Resolved"));
+    }
+
+    [Fact]
+    public async Task UpdateWorkItemAsync_WithEmptyFields_Throws()
+    {
+        var client = CreateClient(out var handler);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+            => client.UpdateWorkItemAsync(42, new Dictionary<string, string>(), TestContext.Current.CancellationToken)
+        );
+
+        Assert.Contains("At least one field", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _responses;
