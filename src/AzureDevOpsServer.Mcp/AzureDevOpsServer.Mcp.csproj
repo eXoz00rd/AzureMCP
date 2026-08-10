@@ -13,6 +13,7 @@
     <PackageTags>mcp;mcp-server;azure-devops;azure-devops-server;on-premises;pat</PackageTags>
     <RepositoryUrl>https://github.com/eXoz00rd/AzureMCP</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
