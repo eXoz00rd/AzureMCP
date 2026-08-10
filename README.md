@@ -169,6 +169,7 @@ Try these prompts in Copilot agent mode and watch which tool gets called:
 
 - **Server does not start** — open the MCP log (VS Code: **Output** panel → the `azure-devops-server` channel). A missing `ADOS_COLLECTION_URL` or `ADOS_PAT` is reported explicitly at startup
 - **"Authentication against Azure DevOps Server failed"** — the PAT is invalid, expired, or missing scopes; TFS sign-in page responses (HTTP 203) are detected and reported as this error as well
+- **TLS / certificate errors** — on-premises servers usually present a certificate from an internal certificate authority. The server reports this explicitly instead of failing with an opaque SSL error; fix it by importing the authority certificate into the machine trust store (Windows: `Manage computer certificates` → **Trusted Root Certification Authorities** → Import). Certificate validation is never disabled, because the PAT travels on that connection
 - **Older servers** — for Azure DevOps Server 2019 / 2020 set `ADOS_API_VERSION` to `5.0` / `6.0`
 - **`dnx` not found** — the .NET 10 SDK is required; verify with `dotnet --list-sdks`
 
@@ -218,6 +219,10 @@ Releases are published to NuGet.org by the [release workflow](.github/workflows/
 - Wiki search through the Search extension
 - Work item attachments
 - Code search
+
+## Support the project
+
+If this server saves you time, you can support its development here: [Buy me a coffee](https://buymeacoffee.com/exoz0rd/e/565041). Entirely optional — the package stays free and MIT licensed either way.
 
 ## License
 
