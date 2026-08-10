@@ -16,7 +16,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/build/builds/{buildId}/timeline?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/build/builds/{buildId}/timeline?api-version={ApiVersion(ApiArea.Build)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -37,7 +37,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         var requestUri =
-            $"{Scope(RequireProject(project))}_apis/build/builds/{buildId}/logs/{logId}?api-version={_options.Value.ApiVersion}";
+            $"{Scope(RequireProject(project))}_apis/build/builds/{buildId}/logs/{logId}?api-version={ApiVersion(ApiArea.Build)}";
         if (startLine is not null)
         {
             requestUri += $"&startLine={startLine}";
@@ -67,7 +67,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/build/builds/{buildId}/artifacts?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/build/builds/{buildId}/artifacts?api-version={ApiVersion(ApiArea.Build)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -83,7 +83,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/build/definitions?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/build/definitions?api-version={ApiVersion(ApiArea.Build)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -101,7 +101,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         var requestUri =
-            $"{Scope(RequireProject(project))}_apis/build/builds?api-version={_options.Value.ApiVersion}&$top={top}";
+            $"{Scope(RequireProject(project))}_apis/build/builds?api-version={ApiVersion(ApiArea.Build)}&$top={top}";
         if (definitionId is not null)
         {
             requestUri += $"&definitions={definitionId}";
@@ -126,7 +126,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.PostAsJsonAsync(
-            $"{Scope(RequireProject(project))}_apis/build/builds?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/build/builds?api-version={ApiVersion(ApiArea.Build)}",
             new
             {
                 definition = new { id = definitionId },

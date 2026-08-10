@@ -15,7 +15,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(project)}_apis/git/repositories?api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories?api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -33,7 +33,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/refs?filter=heads/&$top={top}&api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/refs?filter=heads/&$top={top}&api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -54,7 +54,7 @@ public sealed partial class AzureDevOpsClient
     {
         var requestUri =
             $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/items" +
-            $"?path={Uri.EscapeDataString(path)}&includeContent=true&$format=json&api-version={_options.Value.ApiVersion}";
+            $"?path={Uri.EscapeDataString(path)}&includeContent=true&$format=json&api-version={ApiVersion(ApiArea.Git)}";
         if (!string.IsNullOrWhiteSpace(branch))
         {
             requestUri +=
@@ -103,7 +103,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         var requestUri =
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/commits?searchCriteria.$top={top}&api-version={_options.Value.ApiVersion}";
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/commits?searchCriteria.$top={top}&api-version={ApiVersion(ApiArea.Git)}";
         if (!string.IsNullOrWhiteSpace(branch))
         {
             requestUri += $"&searchCriteria.itemVersion.version={Uri.EscapeDataString(ShortBranchName(branch))}";
@@ -136,7 +136,7 @@ public sealed partial class AzureDevOpsClient
             $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/commits/{Uri.EscapeDataString(commitId)}";
 
         using var commitResponse = await _httpClient.GetAsync(
-            $"{commitPath}?api-version={_options.Value.ApiVersion}",
+            $"{commitPath}?api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -147,7 +147,7 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException($"The response for commit {commitId} could not be parsed.");
 
         using var changesResponse = await _httpClient.GetAsync(
-            $"{commitPath}/changes?api-version={_options.Value.ApiVersion}",
+            $"{commitPath}/changes?api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -175,7 +175,7 @@ public sealed partial class AzureDevOpsClient
             "oneLevel";
         var requestUri =
             $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/items" +
-            $"?scopePath={Uri.EscapeDataString(scopePath)}&recursionLevel={recursionLevel}&api-version={_options.Value.ApiVersion}";
+            $"?scopePath={Uri.EscapeDataString(scopePath)}&recursionLevel={recursionLevel}&api-version={ApiVersion(ApiArea.Git)}";
         if (!string.IsNullOrWhiteSpace(branch))
         {
             requestUri +=
@@ -206,7 +206,7 @@ public sealed partial class AzureDevOpsClient
     {
         using var response = await _httpClient.GetAsync(
             $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/diffs/commits" +
-            $"?baseVersion={Uri.EscapeDataString(ShortBranchName(baseBranch))}&targetVersion={Uri.EscapeDataString(ShortBranchName(targetBranch))}&api-version={_options.Value.ApiVersion}",
+            $"?baseVersion={Uri.EscapeDataString(ShortBranchName(baseBranch))}&targetVersion={Uri.EscapeDataString(ShortBranchName(targetBranch))}&api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );

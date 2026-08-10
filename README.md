@@ -180,7 +180,12 @@ Try these prompts in Copilot agent mode and watch which tool gets called:
 | `ADOS_COLLECTION_URL` | yes | Full collection URL, e.g. `https://devops.example.local/DefaultCollection` |
 | `ADOS_PAT` | yes | Personal Access Token used for all REST calls |
 | `ADOS_DEFAULT_PROJECT` | no | Default project used when a tool call does not specify one |
-| `ADOS_API_VERSION` | no | Override the REST API version (defaults to `7.0`) |
+| `ADOS_API_VERSION` | no | Override the REST API version for every area (defaults to `7.0`) |
+| `ADOS_API_VERSION_WIT` | no | REST API version for work item and query calls |
+| `ADOS_API_VERSION_GIT` | no | REST API version for repository and pull request calls |
+| `ADOS_API_VERSION_BUILD` | no | REST API version for build calls |
+| `ADOS_API_VERSION_RELEASE` | no | REST API version for release calls |
+| `ADOS_API_VERSION_WIKI` | no | REST API version for wiki calls |
 | `ADOS_LOG_LEVEL` | no | Minimum level of logs written to stderr (defaults to `Warning`; use `Information` or `Debug` for diagnostics) |
 
 ## Security

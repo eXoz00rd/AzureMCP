@@ -13,7 +13,7 @@ public sealed partial class AzureDevOpsClient
     public async Task<IReadOnlyList<Wiki>> GetWikisAsync(string? project, CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/wiki/wikis?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/wiki/wikis?api-version={ApiVersion(ApiArea.Wiki)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -31,7 +31,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/wiki/wikis/{Uri.EscapeDataString(wiki)}/pages?path={Uri.EscapeDataString(path)}&includeContent=true&api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/wiki/wikis/{Uri.EscapeDataString(wiki)}/pages?path={Uri.EscapeDataString(path)}&includeContent=true&api-version={ApiVersion(ApiArea.Wiki)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -49,7 +49,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/wiki/wikis/{Uri.EscapeDataString(wiki)}/pages?path=%2F&recursionLevel=full&api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/wiki/wikis/{Uri.EscapeDataString(wiki)}/pages?path=%2F&recursionLevel=full&api-version={ApiVersion(ApiArea.Wiki)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );

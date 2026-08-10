@@ -15,7 +15,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/release/definitions?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/release/definitions?api-version={ApiVersion(ApiArea.Release)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -33,7 +33,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         var requestUri =
-            $"{Scope(RequireProject(project))}_apis/release/releases?api-version={_options.Value.ApiVersion}&$top={top}";
+            $"{Scope(RequireProject(project))}_apis/release/releases?api-version={ApiVersion(ApiArea.Release)}&$top={top}";
         if (definitionId is not null)
         {
             requestUri += $"&definitionId={definitionId}";
@@ -57,7 +57,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/release/releases/{releaseId}?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/release/releases/{releaseId}?api-version={ApiVersion(ApiArea.Release)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -76,7 +76,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.PostAsJsonAsync(
-            $"{Scope(RequireProject(project))}_apis/release/releases?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/release/releases?api-version={ApiVersion(ApiArea.Release)}",
             new { definitionId, description },
             cancellationToken
         );

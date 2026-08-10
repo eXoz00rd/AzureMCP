@@ -21,7 +21,7 @@ public sealed partial class AzureDevOpsClient
             "active" :
             status;
         using var response = await _httpClient.GetAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests?searchCriteria.status={Uri.EscapeDataString(effectiveStatus)}&$top={top}&api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests?searchCriteria.status={Uri.EscapeDataString(effectiveStatus)}&$top={top}&api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -39,7 +39,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests/{pullRequestId}?api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests/{pullRequestId}?api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -61,7 +61,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.PostAsJsonAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests?api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests?api-version={ApiVersion(ApiArea.Git)}",
             new
             {
                 sourceRefName = ToRefName(sourceBranch),
@@ -89,7 +89,7 @@ public sealed partial class AzureDevOpsClient
             $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}";
 
         using var iterationsResponse = await _httpClient.GetAsync(
-            $"{pullRequestPath}/iterations?api-version={_options.Value.ApiVersion}",
+            $"{pullRequestPath}/iterations?api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -105,7 +105,7 @@ public sealed partial class AzureDevOpsClient
         }
 
         using var changesResponse = await _httpClient.GetAsync(
-            $"{pullRequestPath}/iterations/{latestIteration.Id}/changes?api-version={_options.Value.ApiVersion}",
+            $"{pullRequestPath}/iterations/{latestIteration.Id}/changes?api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -123,7 +123,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/threads?api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/threads?api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -178,7 +178,7 @@ public sealed partial class AzureDevOpsClient
         }
 
         using var response = await _httpClient.PostAsJsonAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/threads?api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/threads?api-version={ApiVersion(ApiArea.Git)}",
             payload,
             cancellationToken
         );
@@ -200,7 +200,7 @@ public sealed partial class AzureDevOpsClient
         var userId = await GetAuthenticatedUserIdAsync(cancellationToken);
 
         using var response = await _httpClient.PutAsJsonAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/reviewers/{userId}?api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/reviewers/{userId}?api-version={ApiVersion(ApiArea.Git)}",
             new { vote },
             cancellationToken
         );
@@ -244,7 +244,7 @@ public sealed partial class AzureDevOpsClient
         }
 
         using var response = await _httpClient.PatchAsJsonAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}?api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}?api-version={ApiVersion(ApiArea.Git)}",
             payload,
             cancellationToken
         );

@@ -30,7 +30,7 @@ public sealed partial class AzureDevOpsClient
 
         do
         {
-            var requestUri = $"_apis/projects?api-version={_options.Value.ApiVersion}&$top={ProjectPageSize}";
+            var requestUri = $"_apis/projects?api-version={ApiVersion(ApiArea.Core)}&$top={ProjectPageSize}";
             if (!string.IsNullOrEmpty(continuationToken))
             {
                 requestUri += $"&continuationToken={Uri.EscapeDataString(continuationToken)}";
@@ -56,6 +56,11 @@ public sealed partial class AzureDevOpsClient
         } while (!string.IsNullOrEmpty(continuationToken));
 
         return projects;
+    }
+
+    private string ApiVersion(ApiArea area)
+    {
+        return _options.Value.ApiVersionFor(area);
     }
 
     private static string RequireProject(string? project)

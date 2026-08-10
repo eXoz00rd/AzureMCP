@@ -16,7 +16,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.PostAsJsonAsync(
-            $"{Scope(project)}_apis/wit/wiql?api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/wit/wiql?api-version={ApiVersion(ApiArea.WorkItems)}",
             new { query = wiql },
             cancellationToken
         );
@@ -35,7 +35,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"_apis/wit/workitems/{id}?{FieldsOrRelations(fields)}&api-version={_options.Value.ApiVersion}",
+            $"_apis/wit/workitems/{id}?{FieldsOrRelations(fields)}&api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -58,7 +58,7 @@ public sealed partial class AzureDevOpsClient
         }
 
         using var response = await _httpClient.GetAsync(
-            $"_apis/wit/workitems?ids={string.Join(',', ids)}&{FieldsOrRelations(fields)}&api-version={_options.Value.ApiVersion}",
+            $"_apis/wit/workitems?ids={string.Join(',', ids)}&{FieldsOrRelations(fields)}&api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -75,7 +75,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/wit/queries?$depth={depth}&api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/wit/queries?$depth={depth}&api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -92,7 +92,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/wit/wiql/{Uri.EscapeDataString(queryId)}?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/wit/wiql/{Uri.EscapeDataString(queryId)}?api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -110,7 +110,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/wit/workitemtypes?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/wit/workitemtypes?api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -127,7 +127,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/wit/workitemtypes/{Uri.EscapeDataString(type)}/states?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/wit/workitemtypes/{Uri.EscapeDataString(type)}/states?api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -145,7 +145,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(RequireProject(project))}_apis/wit/classificationnodes/{group}?$depth={depth}&api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/wit/classificationnodes/{group}?$depth={depth}&api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -165,7 +165,7 @@ public sealed partial class AzureDevOpsClient
     {
         using var content = CreateJsonPatchContent(fields);
         using var response = await _httpClient.PostAsync(
-            $"{Scope(RequireProject(project))}_apis/wit/workitems/${Uri.EscapeDataString(type)}?api-version={_options.Value.ApiVersion}",
+            $"{Scope(RequireProject(project))}_apis/wit/workitems/${Uri.EscapeDataString(type)}?api-version={ApiVersion(ApiArea.WorkItems)}",
             content,
             cancellationToken
         );
@@ -184,7 +184,7 @@ public sealed partial class AzureDevOpsClient
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Patch,
-            $"_apis/wit/workitems/{id}?api-version={_options.Value.ApiVersion}"
+            $"_apis/wit/workitems/{id}?api-version={ApiVersion(ApiArea.WorkItems)}"
         )
         {
             Content = CreateJsonPatchContent(fields)
