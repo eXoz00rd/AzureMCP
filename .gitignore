@@ -1,0 +1,39 @@
+## .NET build results
+bin/
+obj/
+out/
+artifacts/
+*.nupkg
+*.snupkg
+
+## User-specific and IDE files
+.vs/
+.idea/
+.junie/
+*.user
+*.suo
+*.DotSettings.user
+
+## Test and coverage results
+TestResults/
+coverage/
+*.trx
+*.coverage
+*.coveragexml
+
+## Local settings and secrets
+appsettings.*.local.json
+*.local.json
+.env
+.env.*
+secrets.json
+
+## Docs (not committed per project policy)
+Docs/
+
+## OS files
+Thumbs.db
+.DS_Store
+
+## Leftover local scaffold
+Solution1/
