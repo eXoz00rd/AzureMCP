@@ -682,6 +682,162 @@ public sealed class AzureDevOpsClientTests
         Assert.True(body.RootElement.GetProperty("sourceBranch").ValueEquals("refs/heads/develop"));
     }
 
+    [Fact]
+    public async Task GetPullRequestChangesAsync_UsesLatestIteration()
+    {
+        const string iterationsJson = """{ "count": 2, "value": [ { "id": 1 }, { "id": 2 } ] }""";
+        const string changesJson =
+            """
+            {
+              "changeEntries": [
+                { "changeTrackingId": 1, "changeType": "edit", "item": { "path": "/src/Program.cs" } },
+                { "changeTrackingId": 2, "changeType": "add", "item": { "path": "/src/NewFile.cs" } }
+              ]
+            }
+            """;
+        using var iterations = JsonResponse(iterationsJson);
+        using var changes = JsonResponse(changesJson);
+        var client = CreateClient(out var handler, iterations, changes);
+
+        var result = await client.GetPullRequestChangesAsync(
+            "WebApp",
+            7,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("edit", result[0].ChangeType);
+        Assert.Equal("/src/Program.cs", result[0].Item.Path);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/pullRequests/7/iterations?api-version=7.0",
+            handler.Requests[0].RequestUri!.AbsoluteUri
+        );
+        Assert.Contains("/iterations/2/changes", handler.Requests[1].RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task GetPullRequestChangesAsync_WithNoIterations_ReturnsEmpty()
+    {
+        using var iterations = JsonResponse("""{ "count": 0, "value": [] }""");
+        var client = CreateClient(out var handler, iterations);
+
+        var result = await client.GetPullRequestChangesAsync(
+            "WebApp",
+            7,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Empty(result);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetPullRequestThreadsAsync_ReturnsThreadsWithComments()
+    {
+        const string json =
+            """
+            {
+              "count": 1,
+              "value": [
+                {
+                  "id": 10,
+                  "status": "active",
+                  "threadContext": { "filePath": "/src/Program.cs" },
+                  "comments": [
+                    {
+                      "id": 1,
+                      "parentCommentId": 0,
+                      "content": "Consider a guard clause here",
+                      "author": { "displayName": "Sebastian", "uniqueName": "sebastian@example.local" },
+                      "publishedDate": "2026-08-10T12:00:00Z"
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var threads = await client.GetPullRequestThreadsAsync(
+            "WebApp",
+            7,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        var thread = Assert.Single(threads);
+        Assert.Equal("active", thread.Status);
+        Assert.Equal("/src/Program.cs", thread.ThreadContext!.FilePath);
+        var comment = Assert.Single(thread.Comments!);
+        Assert.Equal("Consider a guard clause here", comment.Content);
+        Assert.Equal("Sebastian", comment.Author!.DisplayName);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/pullRequests/7/threads?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task CreatePullRequestThreadAsync_WithoutFile_PostsCommentOnly()
+    {
+        const string json =
+            """
+            {
+              "id": 11,
+              "status": "active",
+              "comments": [ { "id": 1, "parentCommentId": 0, "content": "General remark" } ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var thread = await client.CreatePullRequestThreadAsync(
+            "WebApp",
+            7,
+            "General remark",
+            null,
+            null,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(11, thread.Id);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        var commentElement = Assert.Single(body.RootElement.GetProperty("comments").EnumerateArray());
+        Assert.True(commentElement.GetProperty("content").ValueEquals("General remark"));
+        Assert.Equal(1, body.RootElement.GetProperty("status").GetInt32());
+        Assert.False(body.RootElement.TryGetProperty("threadContext", out _));
+    }
+
+    [Fact]
+    public async Task CreatePullRequestThreadAsync_WithFileAndLine_AnchorsThreadContext()
+    {
+        using var response = JsonResponse("""{ "id": 12, "status": "active", "comments": [] }""");
+        var client = CreateClient(out var handler, response);
+
+        await client.CreatePullRequestThreadAsync(
+            "WebApp",
+            7,
+            "Rename this variable",
+            "/src/Program.cs",
+            5,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        var threadContext = body.RootElement.GetProperty("threadContext");
+        Assert.True(threadContext.GetProperty("filePath").ValueEquals("/src/Program.cs"));
+        Assert.Equal(5, threadContext.GetProperty("rightFileStart").GetProperty("line").GetInt32());
+        Assert.Equal(5, threadContext.GetProperty("rightFileEnd").GetProperty("line").GetInt32());
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _responses;

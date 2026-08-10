@@ -264,6 +264,117 @@ public sealed class AzureDevOpsClient
             throw new AzureDevOpsClientException("The create pull request response could not be parsed.");
     }
 
+    public async Task<IReadOnlyList<PullRequestChange>> GetPullRequestChangesAsync(
+        string repository,
+        int pullRequestId,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var pullRequestPath =
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}";
+
+        using var iterationsResponse = await _httpClient.GetAsync(
+            $"{pullRequestPath}/iterations?api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(iterationsResponse, cancellationToken);
+
+        var iterations =
+            await iterationsResponse.Content.ReadFromJsonAsync<ListResult<PullRequestIteration>>(cancellationToken);
+        var latestIteration = iterations?.Value?.MaxBy(iteration => iteration.Id);
+        if (latestIteration is null)
+        {
+            return [];
+        }
+
+        using var changesResponse = await _httpClient.GetAsync(
+            $"{pullRequestPath}/iterations/{latestIteration.Id}/changes?api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(changesResponse, cancellationToken);
+
+        var changes = await changesResponse.Content.ReadFromJsonAsync<PullRequestIterationChanges>(cancellationToken);
+        return changes?.ChangeEntries ?? [];
+    }
+
+    public async Task<IReadOnlyList<PullRequestThread>> GetPullRequestThreadsAsync(
+        string repository,
+        int pullRequestId,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/threads?api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<PullRequestThread>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<PullRequestThread> CreatePullRequestThreadAsync(
+        string repository,
+        int pullRequestId,
+        string comment,
+        string? filePath,
+        int? line,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["comments"] = new[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["parentCommentId"] = 0,
+                    ["content"] = comment,
+                    ["commentType"] = 1
+                }
+            },
+            ["status"] = 1
+        };
+
+        if (!string.IsNullOrWhiteSpace(filePath))
+        {
+            var threadContext = new Dictionary<string, object?>
+            {
+                ["filePath"] = filePath
+            };
+            if (line is not null)
+            {
+                var position = new Dictionary<string, object?>
+                {
+                    ["line"] = line,
+                    ["offset"] = 1
+                };
+                threadContext["rightFileStart"] = position;
+                threadContext["rightFileEnd"] = position;
+            }
+
+            payload["threadContext"] = threadContext;
+        }
+
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/threads?api-version={_options.Value.ApiVersion}",
+            payload,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var thread = await response.Content.ReadFromJsonAsync<PullRequestThread>(cancellationToken);
+        return thread ??
+            throw new AzureDevOpsClientException("The create thread response could not be parsed.");
+    }
+
     public async Task<IReadOnlyList<BuildDefinition>> GetBuildDefinitionsAsync(
         string? project,
         CancellationToken cancellationToken)
