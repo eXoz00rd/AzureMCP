@@ -77,10 +77,13 @@ public sealed class AzureDevOpsClient
             result;
     }
 
-    public async Task<WorkItem> GetWorkItemAsync(int id, CancellationToken cancellationToken)
+    public async Task<WorkItem> GetWorkItemAsync(
+        int id,
+        IReadOnlyList<string>? fields,
+        CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"_apis/wit/workitems/{id}?$expand=relations&api-version={_options.Value.ApiVersion}",
+            $"_apis/wit/workitems/{id}?{FieldsOrRelations(fields)}&api-version={_options.Value.ApiVersion}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -94,6 +97,7 @@ public sealed class AzureDevOpsClient
 
     public async Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
         IReadOnlyList<int> ids,
+        IReadOnlyList<string>? fields,
         CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
@@ -102,7 +106,7 @@ public sealed class AzureDevOpsClient
         }
 
         using var response = await _httpClient.GetAsync(
-            $"_apis/wit/workitems?ids={string.Join(',', ids)}&$expand=relations&api-version={_options.Value.ApiVersion}",
+            $"_apis/wit/workitems?ids={string.Join(',', ids)}&{FieldsOrRelations(fields)}&api-version={_options.Value.ApiVersion}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -262,10 +266,11 @@ public sealed class AzureDevOpsClient
     public async Task<IReadOnlyList<GitRef>> GetBranchesAsync(
         string repository,
         string? project,
+        int top,
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/refs?filter=heads/&api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/refs?filter=heads/&$top={top}&api-version={_options.Value.ApiVersion}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -276,11 +281,12 @@ public sealed class AzureDevOpsClient
         return result?.Value ?? [];
     }
 
-    public async Task<GitItem> GetFileContentAsync(
+    public async Task<GitFileContent> GetFileContentAsync(
         string repository,
         string path,
         string? branch,
         string? project,
+        int maxChars,
         CancellationToken cancellationToken)
     {
         var requestUri =
@@ -300,9 +306,29 @@ public sealed class AzureDevOpsClient
 
         await EnsureSuccessAsync(response, cancellationToken);
 
-        var item = await response.Content.ReadFromJsonAsync<GitItem>(cancellationToken);
-        return item ??
+        var item = await response.Content.ReadFromJsonAsync<GitItem>(cancellationToken) ??
             throw new AzureDevOpsClientException($"The response for item '{path}' could not be parsed.");
+
+        var content = item.Content ?? string.Empty;
+        if (IsBinaryContent(content))
+        {
+            return new GitFileContent(
+                item.Path,
+                null,
+                content.Length,
+                false,
+                true
+            );
+        }
+
+        var (text, truncated) = Limit(content, maxChars);
+        return new GitFileContent(
+            item.Path,
+            text,
+            content.Length,
+            truncated,
+            false
+        );
     }
 
     public async Task<IReadOnlyList<GitCommit>> GetCommitsAsync(
@@ -369,12 +395,13 @@ public sealed class AzureDevOpsClient
         return new GitCommitDetails(commit, changes?.Changes ?? []);
     }
 
-    public async Task<IReadOnlyList<GitTreeItem>> GetRepositoryItemsAsync(
+    public async Task<LimitedList<GitTreeItem>> GetRepositoryItemsAsync(
         string repository,
         string? path,
         string? branch,
         bool recursive,
         string? project,
+        int maxItems,
         CancellationToken cancellationToken)
     {
         var scopePath = string.IsNullOrWhiteSpace(path) ?
@@ -401,7 +428,10 @@ public sealed class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<GitTreeItem>>(cancellationToken);
-        return result?.Value ?? [];
+        var items = result?.Value ?? [];
+        return items.Count <= maxItems ?
+            new LimitedList<GitTreeItem>(items, false) :
+            new LimitedList<GitTreeItem>(items.Take(maxItems).ToList(), true);
     }
 
     public async Task<GitDiffs> GetBranchDiffAsync(
@@ -436,13 +466,14 @@ public sealed class AzureDevOpsClient
         string repository,
         string? project,
         string? status,
+        int top,
         CancellationToken cancellationToken)
     {
         var effectiveStatus = string.IsNullOrWhiteSpace(status) ?
             "active" :
             status;
         using var response = await _httpClient.GetAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests?searchCriteria.status={Uri.EscapeDataString(effectiveStatus)}&api-version={_options.Value.ApiVersion}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests?searchCriteria.status={Uri.EscapeDataString(effectiveStatus)}&$top={top}&api-version={_options.Value.ApiVersion}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -747,12 +778,13 @@ public sealed class AzureDevOpsClient
         return timeline?.Records ?? [];
     }
 
-    public async Task<string> GetBuildLogAsync(
+    public async Task<TextContent> GetBuildLogAsync(
         string? project,
         int buildId,
         int logId,
         int? startLine,
         int? endLine,
+        int maxChars,
         CancellationToken cancellationToken)
     {
         var requestUri =
@@ -775,7 +807,9 @@ public sealed class AzureDevOpsClient
 
         await EnsureSuccessAsync(response, cancellationToken);
 
-        return await response.Content.ReadAsStringAsync(cancellationToken);
+        var log = await response.Content.ReadAsStringAsync(cancellationToken);
+        var (text, truncated) = Limit(log, maxChars);
+        return new TextContent(text, log.Length, truncated);
     }
 
     public async Task<IReadOnlyList<BuildArtifact>> GetBuildArtifactsAsync(
@@ -1019,5 +1053,40 @@ public sealed class AzureDevOpsClient
         return value.Length <= MaxErrorBodyLength ?
             value :
             value[..MaxErrorBodyLength];
+    }
+
+    private static string FieldsOrRelations(IReadOnlyList<string>? fields)
+    {
+        return fields is null || fields.Count == 0 ?
+            "$expand=relations" :
+            $"fields={Uri.EscapeDataString(string.Join(',', fields))}";
+    }
+
+    private static (string Text, bool Truncated) Limit(string value, int maxChars)
+    {
+        return value.Length <= maxChars ?
+            (value, false) :
+            (value[..maxChars], true);
+    }
+
+    private static bool IsBinaryContent(string content)
+    {
+        var sampleLength = Math.Min(content.Length, 8000);
+        var replacementCount = 0;
+        for (var i = 0; i < sampleLength; i++)
+        {
+            var character = content[i];
+            if (character == '\0')
+            {
+                return true;
+            }
+
+            if (character == '�')
+            {
+                replacementCount++;
+            }
+        }
+
+        return sampleLength > 0 && replacementCount * 100 / sampleLength >= 10;
     }
 }

@@ -79,8 +79,10 @@ public sealed class BuildTools
     }
 
     [McpServerTool(Name = "get_build_log", ReadOnly = true)]
-    [Description("Gets the text content of a build log. Use get_build_timeline to find the log id of a failed task.")]
-    public Task<string> GetBuildLogAsync(
+    [Description(
+        "Gets the text content of a build log. Use get_build_timeline to find the log id of a failed task, and a line range to read just the failing part."
+    )]
+    public Task<TextContent> GetBuildLogAsync(
         [Description("Build id.")] int buildId,
         [Description("Log id from the timeline record.")]
         int logId,
@@ -88,6 +90,10 @@ public sealed class BuildTools
         int? startLine,
         [Description("Optional 1-based last line to return.")]
         int? endLine,
+        [Description(
+            "Maximum number of characters to return. Defaults to 30000; the result reports the total length and whether it was truncated."
+        )]
+        int? maxChars,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project,
         CancellationToken cancellationToken)
@@ -98,6 +104,7 @@ public sealed class BuildTools
             logId,
             startLine,
             endLine,
+            maxChars ?? ResponseLimits.DefaultMaxChars,
             cancellationToken
         );
     }

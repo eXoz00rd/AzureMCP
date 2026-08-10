@@ -39,21 +39,29 @@ public sealed class WorkItemTools
     }
 
     [McpServerTool(Name = "get_work_item", ReadOnly = true)]
-    [Description("Gets a single work item with all of its fields.")]
+    [Description(
+        "Gets a single work item. Returns all fields and relations unless a field list is given; prefer a field list to avoid pulling large HTML descriptions."
+    )]
     public Task<WorkItem> GetWorkItemAsync(
         [Description("Work item id.")] int id,
+        [Description(
+            "Optional field reference names to return, for example System.Title and System.State. Relations are only returned when this is omitted."
+        )]
+        string[]? fields,
         CancellationToken cancellationToken)
     {
-        return _client.GetWorkItemAsync(id, cancellationToken);
+        return _client.GetWorkItemAsync(id, fields, cancellationToken);
     }
 
     [McpServerTool(Name = "get_work_items", ReadOnly = true)]
-    [Description("Gets multiple work items by their ids in one call, including fields and relations.")]
+    [Description("Gets multiple work items by their ids in one call. Prefer a field list when fetching many items.")]
     public Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
         [Description("Work item ids.")] int[] ids,
+        [Description("Optional field reference names to return. Relations are only returned when this is omitted.")]
+        string[]? fields,
         CancellationToken cancellationToken)
     {
-        return _client.GetWorkItemsAsync(ids, cancellationToken);
+        return _client.GetWorkItemsAsync(ids, fields, cancellationToken);
     }
 
     [McpServerTool(Name = "create_work_item", Destructive = false)]

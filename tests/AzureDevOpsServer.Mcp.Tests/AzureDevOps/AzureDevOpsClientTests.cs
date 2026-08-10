@@ -231,7 +231,7 @@ public sealed class AzureDevOpsClientTests
         using var response = JsonResponse(json);
         var client = CreateClient(out var handler, response);
 
-        var workItem = await client.GetWorkItemAsync(42, TestContext.Current.CancellationToken);
+        var workItem = await client.GetWorkItemAsync(42, null, TestContext.Current.CancellationToken);
 
         Assert.Equal(42, workItem.Id);
         Assert.Equal(3, workItem.Rev);
@@ -306,12 +306,12 @@ public sealed class AzureDevOpsClientTests
         using var response = JsonResponse(json);
         var client = CreateClient(out var handler, response);
 
-        var branches = await client.GetBranchesAsync("WebApp", "Alpha", TestContext.Current.CancellationToken);
+        var branches = await client.GetBranchesAsync("WebApp", "Alpha", 100, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, branches.Count);
         Assert.Equal("refs/heads/main", branches[0].Name);
         Assert.EndsWith(
-            "Alpha/_apis/git/repositories/WebApp/refs?filter=heads/&api-version=7.0",
+            "Alpha/_apis/git/repositories/WebApp/refs?filter=heads/&$top=100&api-version=7.0",
             Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
         );
     }
@@ -335,11 +335,13 @@ public sealed class AzureDevOpsClientTests
             "/README.md",
             "develop",
             "Alpha",
+            ResponseLimits.DefaultMaxChars,
             TestContext.Current.CancellationToken
         );
 
         Assert.Equal("/README.md", item.Path);
         Assert.Equal("# Hello", item.Content);
+        Assert.False(item.Truncated);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("path=%2FREADME.md", requestUri);
         Assert.Contains("includeContent=true", requestUri);
@@ -358,6 +360,7 @@ public sealed class AzureDevOpsClientTests
             "/README.md",
             null,
             "Alpha",
+            ResponseLimits.DefaultMaxChars,
             TestContext.Current.CancellationToken
         );
 
@@ -486,6 +489,7 @@ public sealed class AzureDevOpsClientTests
             "WebApp",
             "Alpha",
             null,
+            ResponseLimits.DefaultListTop,
             TestContext.Current.CancellationToken
         );
 
@@ -494,7 +498,7 @@ public sealed class AzureDevOpsClientTests
         Assert.Equal("refs/heads/develop", pullRequest.SourceRefName);
         Assert.Equal("Sebastian", pullRequest.CreatedBy!.DisplayName);
         Assert.EndsWith(
-            "Alpha/_apis/git/repositories/WebApp/pullrequests?searchCriteria.status=active&api-version=7.0",
+            "Alpha/_apis/git/repositories/WebApp/pullrequests?searchCriteria.status=active&$top=100&api-version=7.0",
             Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
         );
     }
@@ -509,6 +513,7 @@ public sealed class AzureDevOpsClientTests
             "WebApp",
             "Alpha",
             "completed",
+            ResponseLimits.DefaultListTop,
             TestContext.Current.CancellationToken
         );
 
@@ -1228,10 +1233,11 @@ public sealed class AzureDevOpsClientTests
             7,
             10,
             50,
+            ResponseLimits.DefaultMaxChars,
             TestContext.Current.CancellationToken
         );
 
-        Assert.Contains("CS1002", log);
+        Assert.Contains("CS1002", log.Content);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("builds/500/logs/7", requestUri);
         Assert.Contains("startLine=10", requestUri);
@@ -1253,10 +1259,11 @@ public sealed class AzureDevOpsClientTests
             7,
             null,
             null,
+            ResponseLimits.DefaultMaxChars,
             TestContext.Current.CancellationToken
         );
 
-        Assert.Equal("full log", log);
+        Assert.Equal("full log", log.Content);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.DoesNotContain("startLine", requestUri);
         Assert.DoesNotContain("endLine", requestUri);
@@ -1393,18 +1400,20 @@ public sealed class AzureDevOpsClientTests
         using var response = JsonResponse(json);
         var client = CreateClient(out var handler, response);
 
-        var items = await client.GetRepositoryItemsAsync(
+        var result = await client.GetRepositoryItemsAsync(
             "WebApp",
             null,
             "develop",
             false,
             "Alpha",
+            ResponseLimits.DefaultMaxItems,
             TestContext.Current.CancellationToken
         );
 
-        Assert.Equal(2, items.Count);
-        Assert.True(items[0].IsFolder);
-        Assert.Null(items[1].IsFolder);
+        Assert.Equal(2, result.Items.Count);
+        Assert.False(result.Truncated);
+        Assert.True(result.Items[0].IsFolder);
+        Assert.Null(result.Items[1].IsFolder);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("scopePath=%2F", requestUri);
         Assert.Contains("recursionLevel=oneLevel", requestUri);
@@ -1423,6 +1432,7 @@ public sealed class AzureDevOpsClientTests
             null,
             true,
             "Alpha",
+            ResponseLimits.DefaultMaxItems,
             TestContext.Current.CancellationToken
         );
 
@@ -1481,7 +1491,7 @@ public sealed class AzureDevOpsClientTests
         using var response = JsonResponse(json);
         var client = CreateClient(out var handler, response);
 
-        var workItems = await client.GetWorkItemsAsync([1, 2], TestContext.Current.CancellationToken);
+        var workItems = await client.GetWorkItemsAsync([1, 2], null, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, workItems.Count);
         Assert.True(workItems[1].Fields["System.Title"].ValueEquals("Second"));
@@ -1496,7 +1506,7 @@ public sealed class AzureDevOpsClientTests
         var client = CreateClient(out var handler);
 
         var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
-            => client.GetWorkItemsAsync([], TestContext.Current.CancellationToken)
+            => client.GetWorkItemsAsync([], null, TestContext.Current.CancellationToken)
         );
 
         Assert.Contains("At least one work item id", exception.Message);
@@ -1652,6 +1662,136 @@ public sealed class AzureDevOpsClientTests
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("Alpha/_apis/wit/classificationnodes/Iterations", requestUri);
         Assert.Contains("$depth=3", requestUri);
+    }
+
+    [Fact]
+    public async Task GetBuildLogAsync_WhenLongerThanLimit_TruncatesAndReportsTotal()
+    {
+        using var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(new string('x', 5000))
+        };
+        var client = CreateClient(out _, response);
+
+        var log = await client.GetBuildLogAsync(
+            "Alpha",
+            500,
+            7,
+            null,
+            null,
+            100,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(100, log.Content.Length);
+        Assert.Equal(5000, log.TotalChars);
+        Assert.True(log.Truncated);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WhenLongerThanLimit_TruncatesContent()
+    {
+        var json = $"{{ \"path\": \"/big.txt\", \"content\": \"{new string('a', 2000)}\" }}";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/big.txt",
+            null,
+            "Alpha",
+            50,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(50, file.Content!.Length);
+        Assert.Equal(2000, file.TotalChars);
+        Assert.True(file.Truncated);
+        Assert.False(file.IsBinary);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WithBinaryContent_ReportsBinaryWithoutContent()
+    {
+        const string json = """{ "path": "/logo.png", "content": "PNG\u0000\u0000binary" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/logo.png",
+            null,
+            "Alpha",
+            ResponseLimits.DefaultMaxChars,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.True(file.IsBinary);
+        Assert.Null(file.Content);
+    }
+
+    [Fact]
+    public async Task GetRepositoryItemsAsync_WhenMoreThanMaxItems_TruncatesList()
+    {
+        var entries = string.Join(',', Enumerable.Range(1, 10).Select(i => $"{{ \"path\": \"/file{i}.cs\" }}"));
+        using var response = JsonResponse($"{{ \"count\": 10, \"value\": [{entries}] }}");
+        var client = CreateClient(out _, response);
+
+        var result = await client.GetRepositoryItemsAsync(
+            "WebApp",
+            "/src",
+            null,
+            true,
+            "Alpha",
+            4,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(4, result.Items.Count);
+        Assert.True(result.Truncated);
+    }
+
+    [Fact]
+    public async Task GetWorkItemAsync_WithFields_RequestsFieldsInsteadOfRelations()
+    {
+        const string json =
+            """{ "id": 42, "rev": 3, "fields": { "System.Title": "Fix login bug" }, "url": "https://devops.example.local/_apis/wit/workItems/42" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        await client.GetWorkItemAsync(42, ["System.Title", "System.State"], TestContext.Current.CancellationToken);
+
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("fields=System.Title%2CSystem.State", requestUri);
+        Assert.DoesNotContain("$expand", requestUri);
+    }
+
+    [Fact]
+    public async Task GetBranchesAsync_AppendsTop()
+    {
+        using var response = JsonResponse("""{ "count": 0, "value": [] }""");
+        var client = CreateClient(out var handler, response);
+
+        await client.GetBranchesAsync("WebApp", "Alpha", 250, TestContext.Current.CancellationToken);
+
+        Assert.Contains("$top=250", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task GetPullRequestsAsync_AppendsTop()
+    {
+        using var response = JsonResponse("""{ "count": 0, "value": [] }""");
+        var client = CreateClient(out var handler, response);
+
+        await client.GetPullRequestsAsync(
+            "WebApp",
+            "Alpha",
+            null,
+            25,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Contains("$top=25", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler

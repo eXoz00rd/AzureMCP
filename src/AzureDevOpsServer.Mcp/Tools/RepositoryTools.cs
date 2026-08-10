@@ -34,25 +34,38 @@ public sealed class RepositoryTools
     }
 
     [McpServerTool(Name = "list_branches", ReadOnly = true)]
-    [Description("Lists the branches of a Git repository.")]
+    [Description(
+        "Lists the branches of a Git repository. Returns at most the requested number of branches, so raise it when a branch seems missing."
+    )]
     public Task<IReadOnlyList<GitRef>> ListBranchesAsync(
         [Description("Repository name or id.")] string repository,
+        [Description("Maximum number of branches to return. Defaults to 100.")]
+        int? top,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project,
         CancellationToken cancellationToken)
     {
-        return _client.GetBranchesAsync(repository, EffectiveProject(project), cancellationToken);
+        return _client.GetBranchesAsync(
+            repository,
+            EffectiveProject(project),
+            top ?? ResponseLimits.DefaultListTop,
+            cancellationToken
+        );
     }
 
     [McpServerTool(Name = "get_file_content", ReadOnly = true)]
     [Description(
         "Gets the content of a text file from a Git repository. Uses the default branch when no branch is given."
     )]
-    public Task<GitItem> GetFileContentAsync(
+    public Task<GitFileContent> GetFileContentAsync(
         [Description("Repository name or id.")] string repository,
         [Description("File path inside the repository, for example /src/Program.cs.")]
         string path,
         [Description("Optional branch name.")] string? branch,
+        [Description(
+            "Maximum number of characters to return. Defaults to 30000; the result reports whether it was truncated."
+        )]
+        int? maxChars,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project,
         CancellationToken cancellationToken)
@@ -62,6 +75,7 @@ public sealed class RepositoryTools
             path,
             branch,
             EffectiveProject(project),
+            maxChars ?? ResponseLimits.DefaultMaxChars,
             cancellationToken
         );
     }
@@ -107,7 +121,7 @@ public sealed class RepositoryTools
 
     [McpServerTool(Name = "list_repository_items", ReadOnly = true)]
     [Description("Lists the files and folders of a repository path, one level deep by default.")]
-    public Task<IReadOnlyList<GitTreeItem>> ListRepositoryItemsAsync(
+    public Task<LimitedList<GitTreeItem>> ListRepositoryItemsAsync(
         [Description("Repository name or id.")] string repository,
         [Description("Optional folder path, defaults to the repository root.")]
         string? path,
@@ -115,6 +129,10 @@ public sealed class RepositoryTools
         string? branch,
         [Description("Set to true to list the whole subtree recursively.")]
         bool? recursive,
+        [Description(
+            "Maximum number of entries to return. Defaults to 500; the result reports whether it was truncated."
+        )]
+        int? maxItems,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project,
         CancellationToken cancellationToken)
@@ -125,6 +143,7 @@ public sealed class RepositoryTools
             branch,
             recursive ?? false,
             EffectiveProject(project),
+            maxItems ?? ResponseLimits.DefaultMaxItems,
             cancellationToken
         );
     }

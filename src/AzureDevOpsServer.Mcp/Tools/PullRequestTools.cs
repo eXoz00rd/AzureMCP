@@ -25,11 +25,19 @@ public sealed class PullRequestTools
         [Description("Repository name or id.")] string repository,
         [Description("Optional status filter: active, completed, abandoned, or all. Defaults to active.")]
         string? status,
+        [Description("Maximum number of pull requests to return. Defaults to 100.")]
+        int? top,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project,
         CancellationToken cancellationToken)
     {
-        return _client.GetPullRequestsAsync(repository, EffectiveProject(project), status, cancellationToken);
+        return _client.GetPullRequestsAsync(
+            repository,
+            EffectiveProject(project),
+            status,
+            top ?? ResponseLimits.DefaultListTop,
+            cancellationToken
+        );
     }
 
     [McpServerTool(Name = "get_pull_request", ReadOnly = true)]
