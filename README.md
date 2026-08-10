@@ -1,5 +1,10 @@
 # AzureMCP
 
+[![CI](https://github.com/eXoz00rd/AzureMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/eXoz00rd/AzureMCP/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/v/AzureDevOpsServer.Mcp?logo=nuget)](https://www.nuget.org/packages/AzureDevOpsServer.Mcp)
+[![Downloads](https://img.shields.io/nuget/dt/AzureDevOpsServer.Mcp)](https://www.nuget.org/packages/AzureDevOpsServer.Mcp)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 MCP (Model Context Protocol) server for **Azure DevOps Server (on-premises)**, built with **.NET 10 / C#** on top of the official [ModelContextProtocol C# SDK](https://www.nuget.org/packages/ModelContextProtocol) and distributed as a NuGet package.
 
 > **Status:** preview — available on NuGet.org as [AzureDevOpsServer.Mcp](https://www.nuget.org/packages/AzureDevOpsServer.Mcp).
