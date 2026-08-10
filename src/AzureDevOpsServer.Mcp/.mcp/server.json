@@ -1,0 +1,46 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.exoz00rd/azuremcp",
+  "description": "MCP server for Azure DevOps Server (on-premises) with PAT authentication.",
+  "version": "0.1.0-preview.1",
+  "repository": {
+    "url": "https://github.com/eXoz00rd/AzureMCP",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "nuget",
+      "identifier": "AzureDevOpsServer.Mcp",
+      "version": "0.1.0-preview.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ADOS_COLLECTION_URL",
+          "description": "Full Azure DevOps Server collection URL, e.g. https://devops.example.local/DefaultCollection",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "ADOS_PAT",
+          "description": "Personal Access Token used for all REST calls",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "ADOS_DEFAULT_PROJECT",
+          "description": "Default project used when a tool call does not specify one",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "ADOS_API_VERSION",
+          "description": "Override of the REST API version, defaults to 7.0",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}
