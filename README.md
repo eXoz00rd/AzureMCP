@@ -190,7 +190,7 @@ dotnet run --project tests/AzureDevOpsServer.Mcp.Tests
 
 Releases are published to NuGet.org by the [release workflow](.github/workflows/release.yml):
 
-1. Create an API key on [nuget.org](https://www.nuget.org/account/apikeys) and save it as the `NUGET_API_KEY` repository secret (**Settings → Secrets and variables → Actions**)
+1. Publishing uses [NuGet Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing) — a policy on nuget.org tied to this repository and `release.yml`; no API key secret is stored. The workflow exchanges the GitHub OIDC token for a short-lived key via `NuGet/login`
 2. Tag the commit and push the tag:
 
    ```bash

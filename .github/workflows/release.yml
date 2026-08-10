@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7
       - name: Setup .NET
@@ -28,5 +29,10 @@ jobs:
         run: dotnet run --project tests/AzureDevOpsServer.Mcp.Tests --configuration Release --no-build
       - name: Pack
         run: dotnet pack src/AzureDevOpsServer.Mcp --configuration Release --no-build --output artifacts -p:Version=${{ env.VERSION }}
+      - name: NuGet login
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: eXoz0rd
       - name: Push to NuGet.org
-        run: dotnet nuget push artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push artifacts/*.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
