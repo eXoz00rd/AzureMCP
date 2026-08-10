@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using AzureDevOpsServer.Mcp.AzureDevOps;
+using AzureDevOpsServer.Mcp.Tests.Infrastructure;
 using Xunit;
 
 namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;

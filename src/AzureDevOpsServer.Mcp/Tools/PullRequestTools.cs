@@ -149,25 +149,29 @@ public sealed class PullRequestTools
         string? project,
         CancellationToken cancellationToken)
     {
-        var voteValue = vote.ToLowerInvariant() switch
+        return _client.SetPullRequestVoteAsync(
+            repository,
+            pullRequestId,
+            ParseVote(vote),
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
+    internal static int ParseVote(string vote)
+    {
+        return vote.ToLowerInvariant() switch
         {
             "approve" => 10,
             "approve_with_suggestions" => 5,
             "reset" => 0,
             "wait_for_author" => -5,
             "reject" => -10,
-            _ => throw new AzureDevOpsClientException(
-                "Vote must be one of: approve, approve_with_suggestions, wait_for_author, reject, reset."
+            _ => throw new ArgumentException(
+                "Vote must be one of: approve, approve_with_suggestions, wait_for_author, reject, reset.",
+                nameof(vote)
             )
         };
-
-        return _client.SetPullRequestVoteAsync(
-            repository,
-            pullRequestId,
-            voteValue,
-            EffectiveProject(project),
-            cancellationToken
-        );
     }
 
     [McpServerTool(Name = "update_pull_request_status", Destructive = true)]

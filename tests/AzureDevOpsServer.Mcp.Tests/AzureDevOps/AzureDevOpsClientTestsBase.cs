@@ -2,28 +2,45 @@ using System.Net;
 using System.Text;
 using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.Configuration;
+using AzureDevOpsServer.Mcp.Tests.Infrastructure;
 using Microsoft.Extensions.Options;
 
 namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;
+
 public abstract class AzureDevOpsClientTestsBase
 {
+    protected const string CollectionUrl = "https://devops.example.local/DefaultCollection";
+
     protected static AzureDevOpsClient CreateClient(
+        out StubHttpMessageHandler handler,
+        params HttpResponseMessage[] responses)
+    {
+        return CreateClient(CreateOptions(null), out handler, responses);
+    }
+
+    protected static AzureDevOpsClient CreateClient(
+        IOptions<AzureDevOpsServerOptions> options,
         out StubHttpMessageHandler handler,
         params HttpResponseMessage[] responses)
     {
         handler = new StubHttpMessageHandler(responses);
         var httpClient = new HttpClient(handler)
         {
-            BaseAddress = new Uri("https://devops.example.local/DefaultCollection/")
+            BaseAddress = new Uri($"{CollectionUrl}/")
         };
-        var options = Options.Create(
+        return new AzureDevOpsClient(httpClient, options);
+    }
+
+    protected static IOptions<AzureDevOpsServerOptions> CreateOptions(string? defaultProject)
+    {
+        return Options.Create(
             new AzureDevOpsServerOptions
             {
-                CollectionUrl = "https://devops.example.local/DefaultCollection",
-                PersonalAccessToken = "pat-value"
+                CollectionUrl = CollectionUrl,
+                PersonalAccessToken = "pat-value",
+                DefaultProject = defaultProject
             }
         );
-        return new AzureDevOpsClient(httpClient, options);
     }
 
     protected static HttpResponseMessage JsonResponse(string json, HttpStatusCode statusCode = HttpStatusCode.OK)
@@ -32,32 +49,5 @@ public abstract class AzureDevOpsClientTestsBase
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
-    }
-
-    protected sealed class StubHttpMessageHandler : HttpMessageHandler
-    {
-        private readonly Queue<HttpResponseMessage> _responses;
-
-        public StubHttpMessageHandler(IEnumerable<HttpResponseMessage> responses)
-        {
-            _responses = new Queue<HttpResponseMessage>(responses);
-        }
-
-        public List<HttpRequestMessage> Requests { get; } = [];
-
-        public List<string> RequestBodies { get; } = [];
-
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            Requests.Add(request);
-            if (request.Content is not null)
-            {
-                RequestBodies.Add(await request.Content.ReadAsStringAsync(cancellationToken));
-            }
-
-            return _responses.Dequeue();
-        }
     }
 }
