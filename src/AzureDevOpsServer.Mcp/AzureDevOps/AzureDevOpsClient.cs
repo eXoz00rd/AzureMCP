@@ -80,7 +80,7 @@ public sealed class AzureDevOpsClient
     public async Task<WorkItem> GetWorkItemAsync(int id, CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"_apis/wit/workitems/{id}?api-version={_options.Value.ApiVersion}",
+            $"_apis/wit/workitems/{id}?$expand=relations&api-version={_options.Value.ApiVersion}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -90,6 +90,115 @@ public sealed class AzureDevOpsClient
         var workItem = await response.Content.ReadFromJsonAsync<WorkItem>(cancellationToken);
         return workItem ??
             throw new AzureDevOpsClientException($"The response for work item {id} could not be parsed.");
+    }
+
+    public async Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
+        IReadOnlyList<int> ids,
+        CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            throw new AzureDevOpsClientException("At least one work item id is required.");
+        }
+
+        using var response = await _httpClient.GetAsync(
+            $"_apis/wit/workitems?ids={string.Join(',', ids)}&$expand=relations&api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<WorkItem>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<IReadOnlyList<QueryHierarchyItem>> GetQueriesAsync(
+        string? project,
+        int depth,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/wit/queries?$depth={depth}&api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<QueryHierarchyItem>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<WiqlQueryResult> RunSavedQueryAsync(
+        string? project,
+        string queryId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/wit/wiql/{Uri.EscapeDataString(queryId)}?api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<WiqlQueryResult>(cancellationToken);
+        return result?.WorkItems is null ?
+            new WiqlQueryResult([]) :
+            result;
+    }
+
+    public async Task<IReadOnlyList<WorkItemType>> GetWorkItemTypesAsync(
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/wit/workitemtypes?api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<WorkItemType>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<IReadOnlyList<WorkItemState>> GetWorkItemStatesAsync(
+        string? project,
+        string type,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/wit/workitemtypes/{Uri.EscapeDataString(type)}/states?api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ListResult<WorkItemState>>(cancellationToken);
+        return result?.Value ?? [];
+    }
+
+    public async Task<ClassificationNode> GetClassificationNodesAsync(
+        string? project,
+        string group,
+        int depth,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/wit/classificationnodes/{group}?$depth={depth}&api-version={_options.Value.ApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var node = await response.Content.ReadFromJsonAsync<ClassificationNode>(cancellationToken);
+        return node ??
+            throw new AzureDevOpsClientException($"The {group} classification response could not be parsed.");
     }
 
     public async Task<WorkItem> CreateWorkItemAsync(

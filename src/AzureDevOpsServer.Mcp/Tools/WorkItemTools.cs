@@ -47,6 +47,15 @@ public sealed class WorkItemTools
         return _client.GetWorkItemAsync(id, cancellationToken);
     }
 
+    [McpServerTool(Name = "get_work_items")]
+    [Description("Gets multiple work items by their ids in one call, including fields and relations.")]
+    public Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
+        [Description("Work item ids.")] int[] ids,
+        CancellationToken cancellationToken)
+    {
+        return _client.GetWorkItemsAsync(ids, cancellationToken);
+    }
+
     [McpServerTool(Name = "create_work_item")]
     [Description("Creates a new work item of the given type. Requires a project name or ADOS_DEFAULT_PROJECT.")]
     public Task<WorkItem> CreateWorkItemAsync(

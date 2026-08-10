@@ -218,7 +218,14 @@ public sealed class AzureDevOpsClientTests
                 "System.State": "Active",
                 "Microsoft.VSTS.Scheduling.StoryPoints": 5
               },
-              "url": "https://devops.example.local/DefaultCollection/_apis/wit/workItems/42"
+              "url": "https://devops.example.local/DefaultCollection/_apis/wit/workItems/42",
+              "relations": [
+                {
+                  "rel": "System.LinkTypes.Hierarchy-Reverse",
+                  "url": "https://devops.example.local/DefaultCollection/_apis/wit/workItems/40",
+                  "attributes": { "name": "Parent" }
+                }
+              ]
             }
             """;
         using var response = JsonResponse(json);
@@ -230,8 +237,9 @@ public sealed class AzureDevOpsClientTests
         Assert.Equal(3, workItem.Rev);
         Assert.True(workItem.Fields["System.Title"].ValueEquals("Fix login bug"));
         Assert.Equal(5, workItem.Fields["Microsoft.VSTS.Scheduling.StoryPoints"].GetInt32());
+        Assert.Equal("Parent", Assert.Single(workItem.Relations!).Attributes!.Name);
         Assert.EndsWith(
-            "_apis/wit/workitems/42?api-version=7.0",
+            "_apis/wit/workitems/42?$expand=relations&api-version=7.0",
             Assert.Single(handler.Requests).RequestUri!.ToString()
         );
     }
@@ -1455,6 +1463,195 @@ public sealed class AzureDevOpsClientTests
         Assert.Contains("diffs/commits", requestUri);
         Assert.Contains("baseVersion=main", requestUri);
         Assert.Contains("targetVersion=develop", requestUri);
+    }
+
+    [Fact]
+    public async Task GetWorkItemsAsync_WithIds_RequestsBatch()
+    {
+        const string json =
+            """
+            {
+              "count": 2,
+              "value": [
+                { "id": 1, "rev": 1, "fields": { "System.Title": "First" }, "url": "https://devops.example.local/_apis/wit/workItems/1" },
+                { "id": 2, "rev": 4, "fields": { "System.Title": "Second" }, "url": "https://devops.example.local/_apis/wit/workItems/2" }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var workItems = await client.GetWorkItemsAsync([1, 2], TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, workItems.Count);
+        Assert.True(workItems[1].Fields["System.Title"].ValueEquals("Second"));
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("ids=1,2", requestUri);
+        Assert.Contains("$expand=relations", requestUri);
+    }
+
+    [Fact]
+    public async Task GetWorkItemsAsync_WithEmptyIds_Throws()
+    {
+        var client = CreateClient(out var handler);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+            => client.GetWorkItemsAsync([], TestContext.Current.CancellationToken)
+        );
+
+        Assert.Contains("At least one work item id", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetQueriesAsync_ReturnsQueryTree()
+    {
+        const string json =
+            """
+            {
+              "count": 1,
+              "value": [
+                {
+                  "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb",
+                  "name": "Shared Queries",
+                  "path": "Shared Queries",
+                  "isFolder": true,
+                  "children": [
+                    {
+                      "id": "b3f11a5c-9d24-4c5e-8a4f-2f47c1d0e9aa",
+                      "name": "Active Bugs",
+                      "path": "Shared Queries/Active Bugs"
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var queries = await client.GetQueriesAsync("Alpha", 2, TestContext.Current.CancellationToken);
+
+        var root = Assert.Single(queries);
+        Assert.True(root.IsFolder);
+        Assert.Equal("Active Bugs", Assert.Single(root.Children!).Name);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("Alpha/_apis/wit/queries", requestUri);
+        Assert.Contains("$depth=2", requestUri);
+    }
+
+    [Fact]
+    public async Task RunSavedQueryAsync_RequestsWiqlById()
+    {
+        const string json =
+            """
+            {
+              "queryType": "flat",
+              "workItems": [ { "id": 42, "url": "https://devops.example.local/_apis/wit/workItems/42" } ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var result = await client.RunSavedQueryAsync(
+            "Alpha",
+            "b3f11a5c-9d24-4c5e-8a4f-2f47c1d0e9aa",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(42, Assert.Single(result.WorkItems).Id);
+        Assert.EndsWith(
+            "Alpha/_apis/wit/wiql/b3f11a5c-9d24-4c5e-8a4f-2f47c1d0e9aa?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetWorkItemTypesAsync_ReturnsTypes()
+    {
+        const string json =
+            """
+            {
+              "count": 2,
+              "value": [
+                { "name": "Bug", "description": "A defect" },
+                { "name": "User Story", "description": "A story" }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var types = await client.GetWorkItemTypesAsync("Alpha", TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, types.Count);
+        Assert.Equal("Bug", types[0].Name);
+        Assert.EndsWith(
+            "Alpha/_apis/wit/workitemtypes?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetWorkItemStatesAsync_ReturnsStatesForType()
+    {
+        const string json =
+            """
+            {
+              "count": 3,
+              "value": [
+                { "name": "New", "category": "Proposed" },
+                { "name": "Active", "category": "InProgress" },
+                { "name": "Closed", "category": "Completed" }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var states = await client.GetWorkItemStatesAsync("Alpha", "User Story", TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, states.Count);
+        Assert.Equal("InProgress", states[1].Category);
+        Assert.EndsWith(
+            "Alpha/_apis/wit/workitemtypes/User%20Story/states?api-version=7.0",
+            Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
+        );
+    }
+
+    [Fact]
+    public async Task GetClassificationNodesAsync_ReturnsIterationTreeWithDates()
+    {
+        const string json =
+            """
+            {
+              "name": "Alpha",
+              "path": "\\Alpha\\Iteration",
+              "children": [
+                {
+                  "name": "Sprint 1",
+                  "path": "\\Alpha\\Iteration\\Sprint 1",
+                  "attributes": { "startDate": "2026-08-03T00:00:00Z", "finishDate": "2026-08-14T00:00:00Z" }
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var root = await client.GetClassificationNodesAsync(
+            "Alpha",
+            "Iterations",
+            3,
+            TestContext.Current.CancellationToken
+        );
+
+        var sprint = Assert.Single(root.Children!);
+        Assert.Equal("Sprint 1", sprint.Name);
+        Assert.NotNull(sprint.Attributes!.StartDate);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("Alpha/_apis/wit/classificationnodes/Iterations", requestUri);
+        Assert.Contains("$depth=3", requestUri);
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler
