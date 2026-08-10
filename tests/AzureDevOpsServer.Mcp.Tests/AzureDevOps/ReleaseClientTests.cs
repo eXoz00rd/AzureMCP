@@ -6,6 +6,7 @@ using AzureDevOpsServer.Mcp.Tests.Infrastructure;
 using Xunit;
 
 namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;
+
 public sealed class ReleaseClientTests : AzureDevOpsClientTestsBase
 {
     [Fact]

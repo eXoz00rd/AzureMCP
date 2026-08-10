@@ -26,6 +26,18 @@ Most existing MCP integrations for Azure DevOps target Azure DevOps Services (cl
 
 Tools that operate inside a project fall back to `ADOS_DEFAULT_PROJECT` when no project is given. Every tool carries MCP annotations (`readOnlyHint` / `destructiveHint`), so clients can require confirmation only where it matters, and all HTTP calls go through a standard resilience pipeline with retries and timeouts.
 
+Responses are bounded so a single call cannot flood an agent's context: build logs and file contents are capped (30 000 characters by default) and report their total length and whether they were truncated, binary files are detected instead of dumped, list tools take an explicit limit, and work item tools accept a field list instead of returning every field.
+
+## Prompts
+
+Ready-made workflows that chain the tools:
+
+| Prompt | What it does |
+|---|---|
+| `review_pull_request` | Reads the pull request, its changed files, and existing threads, then reports findings by severity |
+| `diagnose_build_failure` | Walks the build timeline to the failing task and reads the relevant part of its log |
+| `sprint_status` | Finds the current iteration and summarizes states, blockers, and risks |
+
 ## Requirements
 
 - .NET 10 SDK
@@ -203,7 +215,10 @@ git clone https://github.com/eXoz00rd/AzureMCP.git
 cd AzureMCP
 dotnet build AzureDevOpsServer.Mcp.slnx
 dotnet run --project tests/AzureDevOpsServer.Mcp.Tests
+dotnet format --verify-no-changes
 ```
+
+CI runs the same steps on every push and pull request, then collects coverage and packs the NuGet package.
 
 ## Publishing a release
 

@@ -44,6 +44,7 @@ clientBuilder.AddHttpMessageHandler<TlsDiagnosticsHandler>();
 builder.Services
        .AddMcpServer()
        .WithStdioServerTransport()
-       .WithToolsFromAssembly();
+       .WithToolsFromAssembly()
+       .WithPromptsFromAssembly();
 
 await builder.Build().RunAsync();

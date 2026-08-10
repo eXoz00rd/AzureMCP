@@ -8,7 +8,8 @@
     <PackageType>McpServer;DotnetTool</PackageType>
     <ToolCommandName>azure-devops-server-mcp</ToolCommandName>
     <PackageId>AzureDevOpsServer.Mcp</PackageId>
-    <Version>0.1.0-preview.1</Version>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>dev</VersionSuffix>
     <Description>MCP server for Azure DevOps Server (on-premises) with PAT authentication.</Description>
     <PackageTags>mcp;mcp-server;azure-devops;azure-devops-server;on-premises;pat</PackageTags>
     <RepositoryUrl>https://github.com/eXoz00rd/AzureMCP</RepositoryUrl>
