@@ -109,24 +109,38 @@ public sealed partial class AzureDevOpsClient
         int id,
         string relation,
         string targetUrl,
+        string? attributeName,
         string? comment,
         CancellationToken cancellationToken)
     {
-        var attributes = string.IsNullOrWhiteSpace(comment) ?
-            null :
-            new Dictionary<string, object?> { ["comment"] = comment };
+        var attributes = new Dictionary<string, object?>();
+        if (!string.IsNullOrWhiteSpace(attributeName))
+        {
+            attributes["name"] = attributeName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(comment))
+        {
+            attributes["comment"] = comment;
+        }
+
+        var value = new Dictionary<string, object?>
+        {
+            ["rel"] = relation,
+            ["url"] = targetUrl
+        };
+        if (attributes.Count > 0)
+        {
+            value["attributes"] = attributes;
+        }
+
         var operations = new[]
         {
             new Dictionary<string, object?>
             {
                 ["op"] = "add",
                 ["path"] = "/relations/-",
-                ["value"] = new Dictionary<string, object?>
-                {
-                    ["rel"] = relation,
-                    ["url"] = targetUrl,
-                    ["attributes"] = attributes
-                }
+                ["value"] = value
             }
         };
 
@@ -169,13 +183,15 @@ public sealed partial class AzureDevOpsClient
 
         await EnsureSuccessAsync(uploadResponse, cancellationToken);
 
-        var attachment = await uploadResponse.Content.ReadFromJsonAsync<WorkItemAttachmentReference>(cancellationToken) ??
+        var attachment =
+            await uploadResponse.Content.ReadFromJsonAsync<WorkItemAttachmentReference>(cancellationToken) ??
             throw new AzureDevOpsClientException("The attachment upload response could not be parsed.");
 
         return await AddWorkItemRelationAsync(
             id,
             "AttachedFile",
             attachment.Url,
+            null,
             comment ?? fileName,
             cancellationToken
         );

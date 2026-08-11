@@ -3,6 +3,7 @@ using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.AzureDevOps.Models;
 using AzureDevOpsServer.Mcp.Configuration;
 using Microsoft.Extensions.Options;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
 namespace AzureDevOpsServer.Mcp.Tools;
@@ -29,8 +30,8 @@ public sealed class WorkItemTools
         )]
         string wiql,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.QueryWorkItemsAsync(wiql, EffectiveProject(project), cancellationToken);
     }
@@ -51,8 +52,8 @@ public sealed class WorkItemTools
         [Description(
             "Optional field reference names to return, for example System.Title and System.State. Relations are only returned when this is omitted."
         )]
-        string[]? fields,
-        CancellationToken cancellationToken)
+        string[]? fields = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetWorkItemAsync(id, fields, cancellationToken);
     }
@@ -62,8 +63,8 @@ public sealed class WorkItemTools
     public Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
         [Description("Work item ids.")] int[] ids,
         [Description("Optional field reference names to return. Relations are only returned when this is omitted.")]
-        string[]? fields,
-        CancellationToken cancellationToken)
+        string[]? fields = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetWorkItemsAsync(ids, fields, cancellationToken);
     }
@@ -73,10 +74,10 @@ public sealed class WorkItemTools
     public Task<WorkItemCommentList> ListWorkItemCommentsAsync(
         [Description("Work item id.")] int id,
         [Description("Maximum number of comments to return. Defaults to 100.")]
-        int? top,
+        int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetWorkItemCommentsAsync(
             id,
@@ -91,25 +92,35 @@ public sealed class WorkItemTools
     public Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(
         [Description("Work item id.")] int id,
         [Description("Maximum number of revisions to return. Defaults to 100.")]
-        int? top,
-        CancellationToken cancellationToken)
+        int? top = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetWorkItemRevisionsAsync(id, top ?? ResponseLimits.DefaultListTop, cancellationToken);
     }
 
     [McpServerTool(Name = "link_work_item", Destructive = false, UseStructuredContent = true)]
-    [Description("Links a work item to another work item, or to a commit or pull request by its artifact URL.")]
+    [Description(
+        "Links a work item to another work item, or to a commit or pull request by its artifact URL. To link a pull request, prefer link_pull_request_to_work_item, which builds the URL itself."
+    )]
     public Task<WorkItem> LinkWorkItemAsync(
         [Description("Work item id that receives the link.")] int id,
-        [Description("Link kind: parent, child, related, duplicate, predecessor, successor, or a raw relation name such as ArtifactLink.")]
+        [Description(
+            "Link kind: parent, child, related, duplicate, predecessor, successor, or a raw relation name such as ArtifactLink."
+        )]
         string linkType,
         [Description("Target work item id. Provide this or targetUrl.")]
-        int? targetWorkItemId,
-        [Description("Target URL for artifact links, for example a commit or pull request vstfs URL. Provide this or targetWorkItemId.")]
-        string? targetUrl,
+        int? targetWorkItemId = null,
+        [Description(
+            "Target URL for artifact links, for example vstfs:///Git/PullRequestId/{projectId}%2F{repositoryId}%2F{pullRequestId}. Provide this or targetWorkItemId."
+        )]
+        string? targetUrl = null,
+        [Description(
+            "Artifact link name required by ArtifactLink relations, for example Pull Request, Fixed in Commit, or Integrated in build. Inferred from a vstfs URL when omitted."
+        )]
+        string? artifactLinkName = null,
         [Description("Optional comment describing the link.")]
-        string? comment,
-        CancellationToken cancellationToken)
+        string? comment = null,
+        CancellationToken cancellationToken = default)
     {
         var relation = ParseLinkType(linkType);
         var url = targetUrl;
@@ -117,16 +128,29 @@ public sealed class WorkItemTools
         {
             if (targetWorkItemId is null)
             {
-                throw new ArgumentException(
-                    "Either targetWorkItemId or targetUrl must be provided.",
-                    nameof(targetWorkItemId)
-                );
+                throw new McpException("Either targetWorkItemId or targetUrl must be provided.");
             }
 
             url = $"{_options.Value.CollectionUrl.TrimEnd('/')}/_apis/wit/workItems/{targetWorkItemId}";
         }
 
-        return _client.AddWorkItemRelationAsync(id, relation, url, comment, cancellationToken);
+        var name = artifactLinkName;
+        if (relation == ArtifactLinks.Relation && string.IsNullOrWhiteSpace(name))
+        {
+            name = ArtifactLinks.NameFor(url) ??
+                throw new McpException(
+                    $"An {ArtifactLinks.Relation} relation requires artifactLinkName, for example '{ArtifactLinks.PullRequestName}' or '{ArtifactLinks.CommitName}', because '{url}' is not a recognised vstfs artifact URL."
+                );
+        }
+
+        return _client.AddWorkItemRelationAsync(
+            id,
+            relation,
+            url,
+            name,
+            comment,
+            cancellationToken
+        );
     }
 
     [McpServerTool(Name = "add_work_item_attachment", Destructive = false, UseStructuredContent = true)]
@@ -135,12 +159,13 @@ public sealed class WorkItemTools
         [Description("Work item id.")] int id,
         [Description("File name including extension, for example build-log.txt.")]
         string fileName,
-        [Description("Text content of the attachment.")] string content,
+        [Description("Text content of the attachment.")]
+        string content,
         [Description("Optional comment stored with the attachment.")]
-        string? comment,
+        string? comment = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.AddWorkItemAttachmentAsync(
             id,
@@ -162,10 +187,9 @@ public sealed class WorkItemTools
             "duplicate" => "System.LinkTypes.Duplicate-Forward",
             "predecessor" => "System.LinkTypes.Dependency-Reverse",
             "successor" => "System.LinkTypes.Dependency-Forward",
-            _ when linkType.Contains('.') || linkType == "ArtifactLink" => linkType,
-            _ => throw new ArgumentException(
-                "Link type must be parent, child, related, duplicate, predecessor, successor, or a raw relation name.",
-                nameof(linkType)
+            _ when linkType.Contains('.') || linkType == ArtifactLinks.Relation => linkType,
+            _ => throw new McpException(
+                "Link type must be parent, child, related, duplicate, predecessor, successor, or a raw relation name."
             )
         };
     }
@@ -177,10 +201,10 @@ public sealed class WorkItemTools
         [Description("Title of the new work item.")]
         string title,
         [Description("Optional additional fields as reference name to value pairs, for example System.Description.")]
-        Dictionary<string, string>? fields,
+        Dictionary<string, string>? fields = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         var allFields = new Dictionary<string, string>
         {
@@ -206,7 +230,7 @@ public sealed class WorkItemTools
         [Description("Work item id.")] int id,
         [Description("Fields to set as reference name to value pairs, for example System.State or System.AssignedTo.")]
         Dictionary<string, string> fields,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         return _client.UpdateWorkItemAsync(id, fields, cancellationToken);
     }
@@ -216,7 +240,7 @@ public sealed class WorkItemTools
     public Task<WorkItem> AddWorkItemCommentAsync(
         [Description("Work item id.")] int id,
         [Description("Comment text.")] string comment,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         var fields = new Dictionary<string, string>
         {

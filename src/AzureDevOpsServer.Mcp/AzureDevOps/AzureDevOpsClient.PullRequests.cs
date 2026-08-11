@@ -51,6 +51,32 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException($"The response for pull request {pullRequestId} could not be parsed.");
     }
 
+    public async Task<WorkItem> LinkPullRequestToWorkItemAsync(
+        string repository,
+        int pullRequestId,
+        int workItemId,
+        string? project,
+        string? comment,
+        CancellationToken cancellationToken)
+    {
+        var pullRequest = await GetPullRequestAsync(repository, pullRequestId, project, cancellationToken);
+        if (pullRequest.Repository is not { } repositoryRef || repositoryRef.Project is not { } projectRef)
+        {
+            throw new AzureDevOpsClientException(
+                $"Pull request {pullRequestId} did not return its repository and project ids, so the artifact link cannot be built."
+            );
+        }
+
+        return await AddWorkItemRelationAsync(
+            workItemId,
+            ArtifactLinks.Relation,
+            ArtifactLinks.PullRequestUrl(projectRef.Id, repositoryRef.Id, pullRequestId),
+            ArtifactLinks.PullRequestName,
+            comment,
+            cancellationToken
+        );
+    }
+
     public async Task<GitPullRequest> CreatePullRequestAsync(
         string repository,
         string sourceBranch,
@@ -438,7 +464,9 @@ public sealed partial class AzureDevOpsClient
 
         var pullRequest = await response.Content.ReadFromJsonAsync<GitPullRequest>(cancellationToken);
         return pullRequest ??
-            throw new AzureDevOpsClientException($"The update response for pull request {pullRequestId} could not be parsed.");
+            throw new AzureDevOpsClientException(
+                $"The update response for pull request {pullRequestId} could not be parsed."
+            );
     }
 
     public async Task<PullRequestReviewer> AddPullRequestReviewerAsync(

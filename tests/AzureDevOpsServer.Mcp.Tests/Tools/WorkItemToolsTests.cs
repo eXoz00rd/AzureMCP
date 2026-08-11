@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AzureDevOpsServer.Mcp.Tools;
+using ModelContextProtocol;
 using Xunit;
 
 namespace AzureDevOpsServer.Mcp.Tests.Tools;
@@ -21,11 +22,13 @@ public sealed class WorkItemToolsTests : ToolTestsBase
             "Login fails",
             new Dictionary<string, string> { ["System.Description"] = "Steps to reproduce" },
             null,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Contains("/FallbackProject/_apis/wit/workitems/$Bug", harness.RequestUri);
         using var body = JsonDocument.Parse(harness.Handler.RequestBodies[0]);
-        var paths = body.RootElement.EnumerateArray()
+        var paths = body.RootElement
+                        .EnumerateArray()
                         .Select(operation => operation.GetProperty("path").GetString())
                         .ToList();
         Assert.Contains("/fields/System.Title", paths);
@@ -57,8 +60,74 @@ public sealed class WorkItemToolsTests : ToolTestsBase
         await tools.QueryWorkItemsAsync(
             "SELECT [System.Id] FROM WorkItems",
             null,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Contains("/FallbackProject/_apis/wit/wiql", harness.RequestUri);
+    }
+
+    [Fact]
+    public async Task LinkWorkItemAsync_WithVstfsUrl_InfersArtifactLinkName()
+    {
+        using var response = JsonResponse(WorkItemJson);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        await tools.LinkWorkItemAsync(
+            63162,
+            "ArtifactLink",
+            null,
+            "vstfs:///Git/PullRequestId/1a2b3c4d-5e6f-4a8b-9c0d-1e2f3a4b5c6d%2F8f1c0d1e-2b3a-4c5d-9e8f-7a6b5c4d3e2f%2F63162",
+            null,
+            null,
+            TestContext.Current.CancellationToken
+        );
+
+        using var body = JsonDocument.Parse(Assert.Single(harness.Handler.RequestBodies));
+        var value = Assert.Single(body.RootElement.EnumerateArray()).GetProperty("value");
+        Assert.True(value.GetProperty("attributes").GetProperty("name").ValueEquals("Pull Request"));
+    }
+
+    [Fact]
+    public async Task LinkWorkItemAsync_WithUnrecognisedArtifactUrl_ExplainsMissingName()
+    {
+        using var response = JsonResponse(WorkItemJson);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var exception = await Assert.ThrowsAsync<McpException>(() => tools.LinkWorkItemAsync(
+                63162,
+                "ArtifactLink",
+                null,
+                "https://devops.example.local/DefaultCollection/WebApp/_git/WebApp/pullrequest/63162",
+                null,
+                null,
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Contains("artifactLinkName", exception.Message);
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task LinkWorkItemAsync_WithoutTarget_ExplainsRequiredArguments()
+    {
+        using var response = JsonResponse(WorkItemJson);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var exception = await Assert.ThrowsAsync<McpException>(() => tools.LinkWorkItemAsync(
+                63162,
+                "related",
+                null,
+                null,
+                null,
+                null,
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Contains("targetWorkItemId or targetUrl", exception.Message);
     }
 }

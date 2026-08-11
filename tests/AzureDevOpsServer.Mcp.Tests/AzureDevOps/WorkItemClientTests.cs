@@ -75,8 +75,10 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
             42,
             "System.LinkTypes.Hierarchy-Reverse",
             "https://devops.example.local/DefaultCollection/_apis/wit/workItems/40",
+            null,
             "parent of the fix",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal(HttpMethod.Patch, request.Method);
@@ -86,7 +88,55 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
         Assert.True(operation.GetProperty("path").ValueEquals("/relations/-"));
         var value = operation.GetProperty("value");
         Assert.True(value.GetProperty("rel").ValueEquals("System.LinkTypes.Hierarchy-Reverse"));
-        Assert.True(value.GetProperty("attributes").GetProperty("comment").ValueEquals("parent of the fix"));
+        var attributes = value.GetProperty("attributes");
+        Assert.True(attributes.GetProperty("comment").ValueEquals("parent of the fix"));
+        Assert.False(attributes.TryGetProperty("name", out _));
+    }
+
+    [Fact]
+    public async Task AddWorkItemRelationAsync_WithArtifactLinkName_SendsNameAttribute()
+    {
+        const string json =
+            """{ "id": 42, "rev": 5, "fields": {}, "url": "https://devops.example.local/_apis/wit/workItems/42" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        await client.AddWorkItemRelationAsync(
+            42,
+            ArtifactLinks.Relation,
+            "vstfs:///Git/PullRequestId/1%2F2%2F63162",
+            ArtifactLinks.PullRequestName,
+            null,
+            TestContext.Current.CancellationToken
+        );
+
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        var value = Assert.Single(body.RootElement.EnumerateArray()).GetProperty("value");
+        Assert.True(value.GetProperty("rel").ValueEquals(ArtifactLinks.Relation));
+        Assert.True(value.GetProperty("url").ValueEquals("vstfs:///Git/PullRequestId/1%2F2%2F63162"));
+        Assert.True(value.GetProperty("attributes").GetProperty("name").ValueEquals(ArtifactLinks.PullRequestName));
+    }
+
+    [Fact]
+    public async Task AddWorkItemRelationAsync_WithoutAttributes_OmitsAttributes()
+    {
+        const string json =
+            """{ "id": 42, "rev": 5, "fields": {}, "url": "https://devops.example.local/_apis/wit/workItems/42" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        await client.AddWorkItemRelationAsync(
+            42,
+            "System.LinkTypes.Related",
+            "https://devops.example.local/DefaultCollection/_apis/wit/workItems/40",
+            null,
+            null,
+            TestContext.Current.CancellationToken
+        );
+
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        var value = Assert.Single(body.RootElement.EnumerateArray()).GetProperty("value");
+        Assert.False(value.TryGetProperty("attributes", out _));
     }
 
     [Fact]
@@ -106,7 +156,8 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
             "##[error]CS1002",
             null,
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal(HttpMethod.Post, handler.Requests[0].Method);
@@ -356,5 +407,4 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
         Assert.Contains("fields=System.Title%2CSystem.State", requestUri);
         Assert.DoesNotContain("$expand", requestUri);
     }
-
 }

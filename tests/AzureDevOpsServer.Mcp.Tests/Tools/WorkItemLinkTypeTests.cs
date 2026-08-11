@@ -1,4 +1,5 @@
 using AzureDevOpsServer.Mcp.Tools;
+using ModelContextProtocol;
 using Xunit;
 
 namespace AzureDevOpsServer.Mcp.Tests.Tools;
@@ -30,7 +31,7 @@ public sealed class WorkItemLinkTypeTests
     [InlineData("")]
     public void ParseLinkType_WithUnknownName_Throws(string input)
     {
-        var exception = Assert.Throws<ArgumentException>(() => WorkItemTools.ParseLinkType(input));
+        var exception = Assert.Throws<McpException>(() => WorkItemTools.ParseLinkType(input));
 
         Assert.Contains("parent", exception.Message);
     }
