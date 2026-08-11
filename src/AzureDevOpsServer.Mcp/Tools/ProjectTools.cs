@@ -29,11 +29,12 @@ public sealed class ProjectTools
     [McpServerTool(Name = "get_project", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets the details of a project including its process template and version control type.")]
     public Task<ProjectDetails> GetProjectAsync(
-        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        var effectiveProject = string.IsNullOrWhiteSpace(project) ? _options.Value.DefaultProject : project;
+        var effectiveProject = string.IsNullOrWhiteSpace(project) ?
+            _options.Value.DefaultProject :
+            project;
         return _client.GetProjectAsync(effectiveProject, cancellationToken);
     }
 }

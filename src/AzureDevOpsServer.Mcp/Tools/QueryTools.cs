@@ -27,10 +27,10 @@ public sealed class QueryTools
         "Lists the saved work item queries of a project as a folder tree. Requires a project name or ADOS_DEFAULT_PROJECT."
     )]
     public Task<IReadOnlyList<QueryHierarchyItem>> ListQueriesAsync(
-        [Description("Folder depth to expand. Defaults to 2.")] int? depth,
+        [Description("Folder depth to expand. Defaults to 2.")] int? depth = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetQueriesAsync(EffectiveProject(project), depth ?? DefaultQueryDepth, cancellationToken);
     }
@@ -40,8 +40,8 @@ public sealed class QueryTools
     public Task<WiqlQueryResult> RunSavedQueryAsync(
         [Description("Saved query id from list_queries.")] string queryId,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.RunSavedQueryAsync(EffectiveProject(project), queryId, cancellationToken);
     }
@@ -49,8 +49,8 @@ public sealed class QueryTools
     [McpServerTool(Name = "list_work_item_types", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the work item types available in a project.")]
     public Task<IReadOnlyList<WorkItemType>> ListWorkItemTypesAsync(
-        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project,
-        CancellationToken cancellationToken)
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetWorkItemTypesAsync(EffectiveProject(project), cancellationToken);
     }
@@ -60,8 +60,8 @@ public sealed class QueryTools
     public Task<IReadOnlyList<WorkItemState>> ListWorkItemStatesAsync(
         [Description("Work item type name.")] string type,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetWorkItemStatesAsync(EffectiveProject(project), type, cancellationToken);
     }
@@ -69,10 +69,10 @@ public sealed class QueryTools
     [McpServerTool(Name = "list_iterations", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the iteration path tree of a project including sprint start and finish dates.")]
     public Task<ClassificationNode> ListIterationsAsync(
-        [Description("Tree depth to expand. Defaults to 3.")] int? depth,
+        [Description("Tree depth to expand. Defaults to 3.")] int? depth = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetClassificationNodesAsync(
             EffectiveProject(project),
@@ -85,10 +85,10 @@ public sealed class QueryTools
     [McpServerTool(Name = "list_areas", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the area path tree of a project.")]
     public Task<ClassificationNode> ListAreasAsync(
-        [Description("Tree depth to expand. Defaults to 3.")] int? depth,
+        [Description("Tree depth to expand. Defaults to 3.")] int? depth = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetClassificationNodesAsync(
             EffectiveProject(project),

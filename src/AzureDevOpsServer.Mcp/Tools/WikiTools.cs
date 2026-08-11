@@ -22,8 +22,8 @@ public sealed class WikiTools
     [McpServerTool(Name = "list_wikis", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the wikis of a project. Requires a project name or ADOS_DEFAULT_PROJECT.")]
     public Task<IReadOnlyList<Wiki>> ListWikisAsync(
-        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project,
-        CancellationToken cancellationToken)
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetWikisAsync(EffectiveProject(project), cancellationToken);
     }
@@ -33,8 +33,8 @@ public sealed class WikiTools
     public Task<WikiPage> ListWikiPagesAsync(
         [Description("Wiki name or id.")] string wiki,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetWikiPageTreeAsync(wiki, EffectiveProject(project), cancellationToken);
     }
@@ -46,24 +46,33 @@ public sealed class WikiTools
         [Description("Page path, for example /Onboarding/Setup.")]
         string path,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetWikiPageAsync(wiki, path, EffectiveProject(project), cancellationToken);
     }
 
     [McpServerTool(Name = "create_or_update_wiki_page", Destructive = false, UseStructuredContent = true)]
-    [Description("Creates a wiki page or replaces the content of an existing one. The whole page content is overwritten, so read the page first when you only want to append.")]
+    [Description(
+        "Creates a wiki page or replaces the content of an existing one. The whole page content is overwritten, so read the page first when you only want to append."
+    )]
     public Task<WikiPageUpdate> CreateOrUpdateWikiPageAsync(
         [Description("Wiki name or id.")] string wiki,
         [Description("Page path, for example /Onboarding/Setup. Parent paths are created automatically.")]
         string path,
-        [Description("Full markdown content of the page.")] string content,
+        [Description("Full markdown content of the page.")]
+        string content,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
-        return _client.CreateOrUpdateWikiPageAsync(wiki, path, content, EffectiveProject(project), cancellationToken);
+        return _client.CreateOrUpdateWikiPageAsync(
+            wiki,
+            path,
+            content,
+            EffectiveProject(project),
+            cancellationToken
+        );
     }
 
     private string? EffectiveProject(string? project)

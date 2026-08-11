@@ -27,8 +27,8 @@ public sealed class RepositoryTools
         [Description(
             "Optional project name. Falls back to ADOS_DEFAULT_PROJECT; lists all repositories when neither is set."
         )]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetRepositoriesAsync(EffectiveProject(project), cancellationToken);
     }
@@ -40,10 +40,10 @@ public sealed class RepositoryTools
     public Task<IReadOnlyList<GitRef>> ListBranchesAsync(
         [Description("Repository name or id.")] string repository,
         [Description("Maximum number of branches to return. Defaults to 100.")]
-        int? top,
+        int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetBranchesAsync(
             repository,
@@ -61,14 +61,14 @@ public sealed class RepositoryTools
         [Description("Repository name or id.")] string repository,
         [Description("File path inside the repository, for example /src/Program.cs.")]
         string path,
-        [Description("Optional branch name.")] string? branch,
+        [Description("Optional branch name.")] string? branch = null,
         [Description(
             "Maximum number of characters to return. Defaults to 30000; the result reports whether it was truncated."
         )]
-        int? maxChars,
+        int? maxChars = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetFileContentAsync(
             repository,
@@ -87,14 +87,14 @@ public sealed class RepositoryTools
         [Description(
             "Optional branch name, with or without the refs/heads/ prefix. Uses the default branch when omitted."
         )]
-        string? branch,
+        string? branch = null,
         [Description("Optional file or folder path to filter the history by.")]
-        string? itemPath,
+        string? itemPath = null,
         [Description("Maximum number of commits to return. Defaults to 20.")]
-        int? top,
+        int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetCommitsAsync(
             repository,
@@ -113,8 +113,8 @@ public sealed class RepositoryTools
         [Description("Full or abbreviated commit SHA.")]
         string commitId,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetCommitAsync(repository, commitId, EffectiveProject(project), cancellationToken);
     }
@@ -124,18 +124,18 @@ public sealed class RepositoryTools
     public Task<LimitedList<GitTreeItem>> ListRepositoryItemsAsync(
         [Description("Repository name or id.")] string repository,
         [Description("Optional folder path, defaults to the repository root.")]
-        string? path,
+        string? path = null,
         [Description("Optional branch name. Uses the default branch when omitted.")]
-        string? branch,
+        string? branch = null,
         [Description("Set to true to list the whole subtree recursively.")]
-        bool? recursive,
+        bool? recursive = null,
         [Description(
             "Maximum number of entries to return. Defaults to 500; the result reports whether it was truncated."
         )]
-        int? maxItems,
+        int? maxItems = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetRepositoryItemsAsync(
             repository,
@@ -155,8 +155,8 @@ public sealed class RepositoryTools
         [Description("Base branch name.")] string baseBranch,
         [Description("Target branch name.")] string targetBranch,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetBranchDiffAsync(
             repository,

@@ -24,8 +24,8 @@ public sealed class BuildTools
     [McpServerTool(Name = "list_build_definitions", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the build definitions of a project. Requires a project name or ADOS_DEFAULT_PROJECT.")]
     public Task<IReadOnlyList<BuildDefinition>> ListBuildDefinitionsAsync(
-        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project,
-        CancellationToken cancellationToken)
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetBuildDefinitionsAsync(EffectiveProject(project), cancellationToken);
     }
@@ -35,12 +35,12 @@ public sealed class BuildTools
         "Lists recent builds of a project, optionally filtered by build definition. Requires a project name or ADOS_DEFAULT_PROJECT."
     )]
     public Task<IReadOnlyList<Build>> ListBuildsAsync(
-        [Description("Optional build definition id to filter by.")] int? definitionId,
+        [Description("Optional build definition id to filter by.")] int? definitionId = null,
         [Description("Maximum number of builds to return. Defaults to 20.")]
-        int? top,
+        int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetBuildsAsync(
             EffectiveProject(project),
@@ -57,10 +57,10 @@ public sealed class BuildTools
         [Description(
             "Optional source branch, with or without the refs/heads/ prefix. Uses the definition default when omitted."
         )]
-        string? sourceBranch,
+        string? sourceBranch = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.QueueBuildAsync(EffectiveProject(project), definitionId, sourceBranch, cancellationToken);
     }
@@ -72,8 +72,8 @@ public sealed class BuildTools
     public Task<IReadOnlyList<TimelineRecord>> GetBuildTimelineAsync(
         [Description("Build id.")] int buildId,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetBuildTimelineAsync(EffectiveProject(project), buildId, cancellationToken);
     }
@@ -87,16 +87,16 @@ public sealed class BuildTools
         [Description("Log id from the timeline record.")]
         int logId,
         [Description("Optional 1-based first line to return.")]
-        int? startLine,
+        int? startLine = null,
         [Description("Optional 1-based last line to return.")]
-        int? endLine,
+        int? endLine = null,
         [Description(
             "Maximum number of characters to return. Defaults to 30000; the result reports the total length and whether it was truncated."
         )]
-        int? maxChars,
+        int? maxChars = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetBuildLogAsync(
             EffectiveProject(project),
@@ -114,8 +114,8 @@ public sealed class BuildTools
     public Task<IReadOnlyList<BuildArtifact>> ListBuildArtifactsAsync(
         [Description("Build id.")] int buildId,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
-        string? project,
-        CancellationToken cancellationToken)
+        string? project = null,
+        CancellationToken cancellationToken = default)
     {
         return _client.GetBuildArtifactsAsync(EffectiveProject(project), buildId, cancellationToken);
     }
