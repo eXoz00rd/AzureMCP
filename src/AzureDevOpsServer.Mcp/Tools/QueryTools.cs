@@ -22,7 +22,7 @@ public sealed class QueryTools
         _options = options;
     }
 
-    [McpServerTool(Name = "list_queries", ReadOnly = true)]
+    [McpServerTool(Name = "list_queries", ReadOnly = true, UseStructuredContent = true)]
     [Description(
         "Lists the saved work item queries of a project as a folder tree. Requires a project name or ADOS_DEFAULT_PROJECT."
     )]
@@ -35,7 +35,7 @@ public sealed class QueryTools
         return _client.GetQueriesAsync(EffectiveProject(project), depth ?? DefaultQueryDepth, cancellationToken);
     }
 
-    [McpServerTool(Name = "run_saved_query", ReadOnly = true)]
+    [McpServerTool(Name = "run_saved_query", ReadOnly = true, UseStructuredContent = true)]
     [Description("Runs a saved work item query by its id and returns the matching work item references.")]
     public Task<WiqlQueryResult> RunSavedQueryAsync(
         [Description("Saved query id from list_queries.")] string queryId,
@@ -46,7 +46,7 @@ public sealed class QueryTools
         return _client.RunSavedQueryAsync(EffectiveProject(project), queryId, cancellationToken);
     }
 
-    [McpServerTool(Name = "list_work_item_types", ReadOnly = true)]
+    [McpServerTool(Name = "list_work_item_types", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the work item types available in a project.")]
     public Task<IReadOnlyList<WorkItemType>> ListWorkItemTypesAsync(
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project,
@@ -55,7 +55,7 @@ public sealed class QueryTools
         return _client.GetWorkItemTypesAsync(EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "list_work_item_states", ReadOnly = true)]
+    [McpServerTool(Name = "list_work_item_states", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the valid states of a work item type, for example for Bug or User Story.")]
     public Task<IReadOnlyList<WorkItemState>> ListWorkItemStatesAsync(
         [Description("Work item type name.")] string type,
@@ -66,7 +66,7 @@ public sealed class QueryTools
         return _client.GetWorkItemStatesAsync(EffectiveProject(project), type, cancellationToken);
     }
 
-    [McpServerTool(Name = "list_iterations", ReadOnly = true)]
+    [McpServerTool(Name = "list_iterations", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the iteration path tree of a project including sprint start and finish dates.")]
     public Task<ClassificationNode> ListIterationsAsync(
         [Description("Tree depth to expand. Defaults to 3.")] int? depth,
@@ -82,7 +82,7 @@ public sealed class QueryTools
         );
     }
 
-    [McpServerTool(Name = "list_areas", ReadOnly = true)]
+    [McpServerTool(Name = "list_areas", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the area path tree of a project.")]
     public Task<ClassificationNode> ListAreasAsync(
         [Description("Tree depth to expand. Defaults to 3.")] int? depth,

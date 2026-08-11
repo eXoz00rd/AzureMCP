@@ -19,17 +19,10 @@ public sealed class WorkItemTools
         _options = options;
     }
 
-    [McpServerTool(Name = "query_work_items", ReadOnly = true)]
+    [McpServerTool(Name = "query_work_items", ReadOnly = true, UseStructuredContent = true)]
     [Description(
         "Runs a WIQL query and returns matching work item references. Scopes the query to the given project, the default project, or the whole collection."
     )]
-    private string? EffectiveProject(string? project)
-    {
-        return string.IsNullOrWhiteSpace(project) ?
-            _options.Value.DefaultProject :
-            project;
-    }
-
     public Task<WiqlQueryResult> QueryWorkItemsAsync(
         [Description(
             "WIQL query text, for example: SELECT [System.Id] FROM WorkItems WHERE [System.State] = 'Active'."
@@ -39,13 +32,17 @@ public sealed class WorkItemTools
         string? project,
         CancellationToken cancellationToken)
     {
-        var effectiveProject = string.IsNullOrWhiteSpace(project) ?
-            _options.Value.DefaultProject :
-            project;
-        return _client.QueryWorkItemsAsync(wiql, effectiveProject, cancellationToken);
+        return _client.QueryWorkItemsAsync(wiql, EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "get_work_item", ReadOnly = true)]
+    private string? EffectiveProject(string? project)
+    {
+        return string.IsNullOrWhiteSpace(project) ?
+            _options.Value.DefaultProject :
+            project;
+    }
+
+    [McpServerTool(Name = "get_work_item", ReadOnly = true, UseStructuredContent = true)]
     [Description(
         "Gets a single work item. Returns all fields and relations unless a field list is given; prefer a field list to avoid pulling large HTML descriptions."
     )]
@@ -60,7 +57,7 @@ public sealed class WorkItemTools
         return _client.GetWorkItemAsync(id, fields, cancellationToken);
     }
 
-    [McpServerTool(Name = "get_work_items", ReadOnly = true)]
+    [McpServerTool(Name = "get_work_items", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets multiple work items by their ids in one call. Prefer a field list when fetching many items.")]
     public Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
         [Description("Work item ids.")] int[] ids,
@@ -71,7 +68,7 @@ public sealed class WorkItemTools
         return _client.GetWorkItemsAsync(ids, fields, cancellationToken);
     }
 
-    [McpServerTool(Name = "list_work_item_comments", ReadOnly = true)]
+    [McpServerTool(Name = "list_work_item_comments", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the discussion comments of a work item with their authors and dates.")]
     public Task<WorkItemCommentList> ListWorkItemCommentsAsync(
         [Description("Work item id.")] int id,
@@ -89,7 +86,7 @@ public sealed class WorkItemTools
         );
     }
 
-    [McpServerTool(Name = "get_work_item_revisions", ReadOnly = true)]
+    [McpServerTool(Name = "get_work_item_revisions", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets the revision history of a work item so field changes over time can be compared.")]
     public Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(
         [Description("Work item id.")] int id,
@@ -100,7 +97,7 @@ public sealed class WorkItemTools
         return _client.GetWorkItemRevisionsAsync(id, top ?? ResponseLimits.DefaultListTop, cancellationToken);
     }
 
-    [McpServerTool(Name = "link_work_item", Destructive = false)]
+    [McpServerTool(Name = "link_work_item", Destructive = false, UseStructuredContent = true)]
     [Description("Links a work item to another work item, or to a commit or pull request by its artifact URL.")]
     public Task<WorkItem> LinkWorkItemAsync(
         [Description("Work item id that receives the link.")] int id,
@@ -132,7 +129,7 @@ public sealed class WorkItemTools
         return _client.AddWorkItemRelationAsync(id, relation, url, comment, cancellationToken);
     }
 
-    [McpServerTool(Name = "add_work_item_attachment", Destructive = false)]
+    [McpServerTool(Name = "add_work_item_attachment", Destructive = false, UseStructuredContent = true)]
     [Description("Uploads text content as a file and attaches it to a work item, for example a log excerpt or a note.")]
     public Task<WorkItem> AddWorkItemAttachmentAsync(
         [Description("Work item id.")] int id,
@@ -173,7 +170,7 @@ public sealed class WorkItemTools
         };
     }
 
-    [McpServerTool(Name = "create_work_item", Destructive = false)]
+    [McpServerTool(Name = "create_work_item", Destructive = false, UseStructuredContent = true)]
     [Description("Creates a new work item of the given type. Requires a project name or ADOS_DEFAULT_PROJECT.")]
     public Task<WorkItem> CreateWorkItemAsync(
         [Description("Work item type, for example Bug, Task, or User Story.")] string type,
@@ -203,7 +200,7 @@ public sealed class WorkItemTools
         return _client.CreateWorkItemAsync(effectiveProject, type, allFields, cancellationToken);
     }
 
-    [McpServerTool(Name = "update_work_item", Destructive = true)]
+    [McpServerTool(Name = "update_work_item", Destructive = true, UseStructuredContent = true)]
     [Description("Updates fields of an existing work item.")]
     public Task<WorkItem> UpdateWorkItemAsync(
         [Description("Work item id.")] int id,
@@ -214,7 +211,7 @@ public sealed class WorkItemTools
         return _client.UpdateWorkItemAsync(id, fields, cancellationToken);
     }
 
-    [McpServerTool(Name = "add_work_item_comment", Destructive = false)]
+    [McpServerTool(Name = "add_work_item_comment", Destructive = false, UseStructuredContent = true)]
     [Description("Adds a comment to the discussion of a work item.")]
     public Task<WorkItem> AddWorkItemCommentAsync(
         [Description("Work item id.")] int id,

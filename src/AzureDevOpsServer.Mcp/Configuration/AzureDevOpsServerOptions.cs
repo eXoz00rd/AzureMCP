@@ -12,6 +12,8 @@ public sealed class AzureDevOpsServerOptions
     public const string ReleaseApiVersionVariable = "ADOS_API_VERSION_RELEASE";
     public const string WikiApiVersionVariable = "ADOS_API_VERSION_WIKI";
     public const string WorkItemCommentsApiVersionVariable = "ADOS_API_VERSION_WIT_COMMENTS";
+    public const string ToolsetsVariable = "ADOS_TOOLSETS";
+    public const string ReadOnlyVariable = "ADOS_READ_ONLY";
     public const string LogLevelVariable = "ADOS_LOG_LEVEL";
     public const string DefaultApiVersion = "7.0";
     public const string DefaultWorkItemCommentsApiVersion = "7.0-preview.3";
@@ -36,6 +38,10 @@ public sealed class AzureDevOpsServerOptions
 
     public string WorkItemCommentsApiVersion { get; set; } = DefaultWorkItemCommentsApiVersion;
 
+    public string? Toolsets { get; set; }
+
+    public bool ReadOnly { get; set; }
+
     public void LoadFromEnvironment()
     {
         CollectionUrl = Environment.GetEnvironmentVariable(CollectionUrlVariable) ?? string.Empty;
@@ -49,6 +55,16 @@ public sealed class AzureDevOpsServerOptions
         WikiApiVersion = Environment.GetEnvironmentVariable(WikiApiVersionVariable);
         WorkItemCommentsApiVersion = Environment.GetEnvironmentVariable(WorkItemCommentsApiVersionVariable) ??
             DefaultWorkItemCommentsApiVersion;
+        Toolsets = Environment.GetEnvironmentVariable(ToolsetsVariable);
+        ReadOnly = ParseBoolean(Environment.GetEnvironmentVariable(ReadOnlyVariable));
+    }
+
+    private static bool ParseBoolean(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value) &&
+            (value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("1", StringComparison.Ordinal) ||
+                value.Equals("yes", StringComparison.OrdinalIgnoreCase));
     }
 
     public string ApiVersionFor(ApiArea area)

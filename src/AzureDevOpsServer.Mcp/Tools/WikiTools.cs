@@ -19,7 +19,7 @@ public sealed class WikiTools
         _options = options;
     }
 
-    [McpServerTool(Name = "list_wikis", ReadOnly = true)]
+    [McpServerTool(Name = "list_wikis", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the wikis of a project. Requires a project name or ADOS_DEFAULT_PROJECT.")]
     public Task<IReadOnlyList<Wiki>> ListWikisAsync(
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")] string? project,
@@ -28,7 +28,7 @@ public sealed class WikiTools
         return _client.GetWikisAsync(EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "list_wiki_pages", ReadOnly = true)]
+    [McpServerTool(Name = "list_wiki_pages", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the full page tree of a wiki as nested paths without content.")]
     public Task<WikiPage> ListWikiPagesAsync(
         [Description("Wiki name or id.")] string wiki,
@@ -39,7 +39,7 @@ public sealed class WikiTools
         return _client.GetWikiPageTreeAsync(wiki, EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "get_wiki_page", ReadOnly = true)]
+    [McpServerTool(Name = "get_wiki_page", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets the markdown content of a wiki page by its path.")]
     public Task<WikiPage> GetWikiPageAsync(
         [Description("Wiki name or id.")] string wiki,
@@ -52,7 +52,7 @@ public sealed class WikiTools
         return _client.GetWikiPageAsync(wiki, path, EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "create_or_update_wiki_page", Destructive = false)]
+    [McpServerTool(Name = "create_or_update_wiki_page", Destructive = false, UseStructuredContent = true)]
     [Description("Creates a wiki page or replaces the content of an existing one. The whole page content is overwritten, so read the page first when you only want to append.")]
     public Task<WikiPageUpdate> CreateOrUpdateWikiPageAsync(
         [Description("Wiki name or id.")] string wiki,

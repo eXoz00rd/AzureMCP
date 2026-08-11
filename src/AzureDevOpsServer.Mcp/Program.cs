@@ -41,10 +41,14 @@ var clientBuilder = builder.Services.AddHttpClient<AzureDevOpsClient>((servicePr
 clientBuilder.AddStandardResilienceHandler();
 clientBuilder.AddHttpMessageHandler<TlsDiagnosticsHandler>();
 
+var startupOptions = new AzureDevOpsServerOptions();
+startupOptions.LoadFromEnvironment();
+
+var toolCount = ToolRegistration.AddTools(builder.Services, startupOptions);
+
 builder.Services
-       .AddMcpServer()
+       .AddMcpServer(options => options.ServerInstructions = ServerInstructions.Build(startupOptions, toolCount))
        .WithStdioServerTransport()
-       .WithToolsFromAssembly()
        .WithPromptsFromAssembly();
 
 await builder.Build().RunAsync();

@@ -134,8 +134,37 @@ public sealed partial class AzureDevOpsClient
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         throw new AzureDevOpsClientException(
-            $"Azure DevOps Server request failed with status {(int)response.StatusCode} ({response.StatusCode}). {Truncate(body)}"
+            $"Azure DevOps Server request failed with status {(int)response.StatusCode} ({response.StatusCode}). {ExtractErrorMessage(body)}"
         );
+    }
+
+    internal static string ExtractErrorMessage(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return "The response body was empty.";
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty("message", out var message) &&
+                message.ValueKind == JsonValueKind.String)
+            {
+                var text = message.GetString();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    return Truncate(text);
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // The body is not JSON, so fall back to the raw text below.
+        }
+
+        return Truncate(body);
     }
 
     private static string Truncate(string value)

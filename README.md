@@ -33,6 +33,17 @@ Most existing MCP integrations for Azure DevOps target Azure DevOps Services (cl
 
 Tools that operate inside a project fall back to `ADOS_DEFAULT_PROJECT` when no project is given. Every tool carries MCP annotations (`readOnlyHint` / `destructiveHint`), so clients can require confirmation only where it matters, and all HTTP calls go through a standard resilience pipeline with retries and timeouts.
 
+### Trimming the tool list
+
+59 tools is a lot for one client to carry, and clients cap how many tools they send per request. Two variables keep the surface small:
+
+- **`ADOS_TOOLSETS=workitems,pullrequests`** exposes only the areas a team actually uses — the example above drops the list from 59 tools to 27.
+- **`ADOS_READ_ONLY=true`** removes every write tool, leaving 40 read-only tools. Useful when an agent should be able to look at Azure DevOps but not change it, without relying on PAT scopes alone.
+
+Both can be combined, and an unknown toolset name fails at startup with the list of valid names instead of silently exposing the wrong tools.
+
+The server also sends MCP `instructions` on connect: the default project, whether it runs read-only, and how to use the tools well (field lists for work items, timeline before logs, raising limits instead of assuming something is missing). Tools publish output schemas, so clients receive structured results rather than opaque JSON, and failures carry the Azure DevOps error message instead of the raw error envelope.
+
 Responses are bounded so a single call cannot flood an agent's context: build logs and file contents are capped (30 000 characters by default) and report their total length and whether they were truncated, binary files are detected instead of dumped, list tools take an explicit limit, and work item tools accept a field list instead of returning every field.
 
 ## Prompts
@@ -206,6 +217,8 @@ Try these prompts in Copilot agent mode and watch which tool gets called:
 | `ADOS_API_VERSION_RELEASE` | no | REST API version for release calls |
 | `ADOS_API_VERSION_WIKI` | no | REST API version for wiki calls |
 | `ADOS_API_VERSION_WIT_COMMENTS` | no | REST API version for the work item comments API (defaults to `7.0-preview.3`) |
+| `ADOS_TOOLSETS` | no | Comma-separated toolsets to expose: `projects`, `workitems`, `queries`, `repositories`, `pullrequests`, `builds`, `releases`, `wiki`. All are enabled by default; `server_info` is always available |
+| `ADOS_READ_ONLY` | no | Set to `true` to expose only read-only tools; every create, update, and delete tool disappears from the tool list |
 | `ADOS_LOG_LEVEL` | no | Minimum level of logs written to stderr (defaults to `Warning`; use `Information` or `Debug` for diagnostics) |
 
 ## Security

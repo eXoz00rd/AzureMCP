@@ -19,14 +19,14 @@ public sealed class ProjectTools
         _options = options;
     }
 
-    [McpServerTool(Name = "list_projects", ReadOnly = true)]
+    [McpServerTool(Name = "list_projects", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the projects in the configured Azure DevOps Server collection.")]
     public Task<IReadOnlyList<TeamProject>> ListProjectsAsync(CancellationToken cancellationToken)
     {
         return _client.GetProjectsAsync(cancellationToken);
     }
 
-    [McpServerTool(Name = "get_project", ReadOnly = true)]
+    [McpServerTool(Name = "get_project", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets the details of a project including its process template and version control type.")]
     public Task<ProjectDetails> GetProjectAsync(
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]

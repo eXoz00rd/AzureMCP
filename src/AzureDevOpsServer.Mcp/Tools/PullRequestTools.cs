@@ -19,7 +19,7 @@ public sealed class PullRequestTools
         _options = options;
     }
 
-    [McpServerTool(Name = "list_pull_requests", ReadOnly = true)]
+    [McpServerTool(Name = "list_pull_requests", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists pull requests of a Git repository filtered by status.")]
     public Task<IReadOnlyList<GitPullRequest>> ListPullRequestsAsync(
         [Description("Repository name or id.")] string repository,
@@ -40,7 +40,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "get_pull_request", ReadOnly = true)]
+    [McpServerTool(Name = "get_pull_request", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets the details of a single pull request.")]
     public Task<GitPullRequest> GetPullRequestAsync(
         [Description("Repository name or id.")] string repository,
@@ -52,7 +52,7 @@ public sealed class PullRequestTools
         return _client.GetPullRequestAsync(repository, pullRequestId, EffectiveProject(project), cancellationToken);
     }
 
-    [McpServerTool(Name = "create_pull_request", Destructive = false)]
+    [McpServerTool(Name = "create_pull_request", Destructive = false, UseStructuredContent = true)]
     [Description("Creates a pull request from a source branch to a target branch.")]
     public Task<GitPullRequest> CreatePullRequestAsync(
         [Description("Repository name or id.")] string repository,
@@ -79,7 +79,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "get_pull_request_changes", ReadOnly = true)]
+    [McpServerTool(Name = "get_pull_request_changes", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the files changed in a pull request, based on its latest iteration.")]
     public Task<IReadOnlyList<PullRequestChange>> GetPullRequestChangesAsync(
         [Description("Repository name or id.")] string repository,
@@ -96,7 +96,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "list_pull_request_threads", ReadOnly = true)]
+    [McpServerTool(Name = "list_pull_request_threads", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the comment threads of a pull request, including file context and authors.")]
     public Task<IReadOnlyList<PullRequestThread>> ListPullRequestThreadsAsync(
         [Description("Repository name or id.")] string repository,
@@ -113,7 +113,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "add_pull_request_comment", Destructive = false)]
+    [McpServerTool(Name = "add_pull_request_comment", Destructive = false, UseStructuredContent = true)]
     [Description("Adds a comment to a pull request as a new thread, optionally anchored to a file and line.")]
     public Task<PullRequestThread> AddPullRequestCommentAsync(
         [Description("Repository name or id.")] string repository,
@@ -138,7 +138,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "vote_on_pull_request", Destructive = false)]
+    [McpServerTool(Name = "vote_on_pull_request", Destructive = false, UseStructuredContent = true)]
     [Description("Casts the authenticated user's vote on a pull request.")]
     public Task<PullRequestReviewer> VoteOnPullRequestAsync(
         [Description("Repository name or id.")] string repository,
@@ -158,7 +158,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "list_my_pull_requests", ReadOnly = true)]
+    [McpServerTool(Name = "list_my_pull_requests", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists pull requests across all repositories of a project, optionally only those the signed-in user created or reviews. Answers questions like which pull requests are waiting for me.")]
     public Task<IReadOnlyList<GitPullRequest>> ListMyPullRequestsAsync(
         [Description("Optional status filter: active, completed, abandoned, or all. Defaults to active.")]
@@ -183,7 +183,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "get_pull_request_policies", ReadOnly = true)]
+    [McpServerTool(Name = "get_pull_request_policies", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets the policy evaluations of a pull request: required builds, reviewer rules, and linked work item checks with their status. Explains why a pull request cannot be completed.")]
     public Task<IReadOnlyList<PolicyEvaluation>> GetPullRequestPoliciesAsync(
         [Description("Repository name or id.")] string repository,
@@ -200,7 +200,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "list_pull_request_work_items", ReadOnly = true)]
+    [McpServerTool(Name = "list_pull_request_work_items", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the work items linked to a pull request. Use get_work_items with the returned ids for details.")]
     public Task<IReadOnlyList<ResourceRef>> ListPullRequestWorkItemsAsync(
         [Description("Repository name or id.")] string repository,
@@ -217,7 +217,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "reply_to_pull_request_thread", Destructive = false)]
+    [McpServerTool(Name = "reply_to_pull_request_thread", Destructive = false, UseStructuredContent = true)]
     [Description("Replies to an existing comment thread of a pull request. Use list_pull_request_threads to find the thread id.")]
     public Task<PullRequestComment> ReplyToPullRequestThreadAsync(
         [Description("Repository name or id.")] string repository,
@@ -238,7 +238,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "set_pull_request_thread_status", Destructive = false)]
+    [McpServerTool(Name = "set_pull_request_thread_status", Destructive = false, UseStructuredContent = true)]
     [Description("Sets the status of a pull request comment thread, for example to resolve it as fixed or won't fix.")]
     public Task<PullRequestThread> SetPullRequestThreadStatusAsync(
         [Description("Repository name or id.")] string repository,
@@ -260,7 +260,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "update_pull_request", Destructive = false)]
+    [McpServerTool(Name = "update_pull_request", Destructive = false, UseStructuredContent = true)]
     [Description("Updates the title or description of a pull request, or turns auto-complete on or off for the signed-in user.")]
     public Task<GitPullRequest> UpdatePullRequestAsync(
         [Description("Repository name or id.")] string repository,
@@ -285,7 +285,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "add_pull_request_reviewer", Destructive = false)]
+    [McpServerTool(Name = "add_pull_request_reviewer", Destructive = false, UseStructuredContent = true)]
     [Description("Adds a reviewer to a pull request. Accepts an identity id, an account name, or 'me' for the signed-in user.")]
     public Task<PullRequestReviewer> AddPullRequestReviewerAsync(
         [Description("Repository name or id.")] string repository,
@@ -308,7 +308,7 @@ public sealed class PullRequestTools
         );
     }
 
-    [McpServerTool(Name = "remove_pull_request_reviewer", Destructive = true)]
+    [McpServerTool(Name = "remove_pull_request_reviewer", Destructive = true, UseStructuredContent = true)]
     [Description("Removes a reviewer from a pull request, discarding any vote they cast.")]
     public async Task<string> RemovePullRequestReviewerAsync(
         [Description("Repository name or id.")] string repository,
@@ -345,7 +345,7 @@ public sealed class PullRequestTools
         };
     }
 
-    [McpServerTool(Name = "update_pull_request_status", Destructive = true)]
+    [McpServerTool(Name = "update_pull_request_status", Destructive = true, UseStructuredContent = true)]
     [Description("Completes, abandons, or reactivates a pull request.")]
     public Task<GitPullRequest> UpdatePullRequestStatusAsync(
         [Description("Repository name or id.")] string repository,
