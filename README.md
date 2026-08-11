@@ -250,7 +250,7 @@ Releases are published to NuGet.org by the [release workflow](.github/workflows/
 
 ## Support the project
 
-If this server saves you time, you can support its development here: [Buy me a coffee](https://buymeacoffee.com/exoz0rd/e/565041). Entirely optional — the package stays free and MIT licensed either way.
+If this server saves you time, you can support its development here: [suppi.pl/exoz0rd](https://suppi.pl/exoz0rd). Entirely optional — the package stays free and MIT licensed either way.
 
 ## License
 
