@@ -92,8 +92,6 @@ dotnet build AzureDevOpsServer.Mcp.slnx
 dotnet run --project tests/AzureDevOpsServer.Mcp.Tests
 ```
 
-The repository is currently private — authenticate first (e.g. `gh auth login`).
-
 ### 4. Configure your MCP client
 
 Use one of the configurations from [Usage](#usage) below — VS Code Copilot (`.vscode/mcp.json`), Visual Studio (`.mcp.json`), or any other MCP-capable client. For Claude Code:
