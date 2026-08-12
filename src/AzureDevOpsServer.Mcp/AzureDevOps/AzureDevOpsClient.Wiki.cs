@@ -96,7 +96,7 @@ public sealed partial class AzureDevOpsClient
 
     private async Task<string?> GetWikiPageVersionAsync(string pageUri, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Head, pageUri);
+        using var request = new HttpRequestMessage(HttpMethod.Get, pageUri);
         using var response = await _httpClient.SendAsync(
             request,
             HttpCompletionOption.ResponseHeadersRead,

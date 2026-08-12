@@ -12,23 +12,24 @@ public sealed class WikiClientTests : AzureDevOpsClientTestsBase
     [Fact]
     public async Task CreateOrUpdateWikiPageAsync_WhenPageIsMissing_CreatesWithoutIfMatch()
     {
-        using var head = new HttpResponseMessage(HttpStatusCode.NotFound);
+        using var versionCheck = new HttpResponseMessage(HttpStatusCode.NotFound);
         using var put = JsonResponse("""{ "path": "/Runbooks/Deploy" }""");
         put.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue("\"v1\"");
-        var client = CreateClient(out var handler, head, put);
+        var client = CreateClient(out var handler, versionCheck, put);
 
         var result = await client.CreateOrUpdateWikiPageAsync(
             "Alpha.wiki",
             "/Runbooks/Deploy",
             "# Deploy",
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(result.Created);
         Assert.Equal("/Runbooks/Deploy", result.Path);
         Assert.Equal("\"v1\"", result.Version);
         Assert.Equal(2, handler.Requests.Count);
-        Assert.Equal(HttpMethod.Head, handler.Requests[0].Method);
+        Assert.Equal(HttpMethod.Get, handler.Requests[0].Method);
         Assert.Equal(HttpMethod.Put, handler.Requests[1].Method);
         Assert.False(handler.Requests[1].Headers.Contains("If-Match"));
         Assert.Contains("path=%2FRunbooks%2FDeploy", handler.Requests[1].RequestUri!.AbsoluteUri);
@@ -37,19 +38,21 @@ public sealed class WikiClientTests : AzureDevOpsClientTestsBase
     [Fact]
     public async Task CreateOrUpdateWikiPageAsync_WhenPageExists_SendsIfMatchVersion()
     {
-        using var head = new HttpResponseMessage(HttpStatusCode.OK);
-        head.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue("\"v3\"");
+        using var versionCheck = JsonResponse("""{ "path": "/Runbooks/Deploy" }""");
+        versionCheck.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue("\"v3\"");
         using var put = JsonResponse("""{ "path": "/Runbooks/Deploy" }""");
-        var client = CreateClient(out var handler, head, put);
+        var client = CreateClient(out var handler, versionCheck, put);
 
         var result = await client.CreateOrUpdateWikiPageAsync(
             "Alpha.wiki",
             "/Runbooks/Deploy",
             "# Deploy v2",
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.False(result.Created);
+        Assert.Equal(HttpMethod.Get, handler.Requests[0].Method);
         Assert.Equal("\"v3\"", Assert.Single(handler.Requests[1].Headers.GetValues("If-Match")));
     }
 
@@ -58,13 +61,14 @@ public sealed class WikiClientTests : AzureDevOpsClientTestsBase
     {
         var client = CreateClient(out var handler);
 
-        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
-            () => client.CreateOrUpdateWikiPageAsync(
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(() => client.CreateOrUpdateWikiPageAsync(
                 "Alpha.wiki",
                 "/Page",
                 "content",
                 null,
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Contains("ADOS_DEFAULT_PROJECT", exception.Message);
         Assert.Empty(handler.Requests);
@@ -161,5 +165,4 @@ public sealed class WikiClientTests : AzureDevOpsClientTestsBase
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("path=%2F&recursionLevel=full", requestUri);
     }
-
 }
