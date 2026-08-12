@@ -15,7 +15,7 @@ Most existing MCP integrations for Azure DevOps target Azure DevOps Services (cl
 
 ## Tools
 
-59 tools across 9 areas:
+60 tools across 9 areas:
 
 | Area | Tools |
 |---|---|
@@ -35,9 +35,9 @@ Tools that operate inside a project fall back to `ADOS_DEFAULT_PROJECT` when no 
 
 ### Trimming the tool list
 
-59 tools is a lot for one client to carry, and clients cap how many tools they send per request. Two variables keep the surface small:
+60 tools is a lot for one client to carry, and clients cap how many tools they send per request. Two variables keep the surface small:
 
-- **`ADOS_TOOLSETS=workitems,pullrequests`** exposes only the areas a team actually uses — the example above drops the list from 59 tools to 27.
+- **`ADOS_TOOLSETS=workitems,pullrequests`** exposes only the areas a team actually uses — the example above drops the list from 60 tools to 27.
 - **`ADOS_READ_ONLY=true`** removes every write tool, leaving 40 read-only tools. Useful when an agent should be able to look at Azure DevOps but not change it, without relying on PAT scopes alone.
 
 Both can be combined, and an unknown toolset name fails at startup with the list of valid names instead of silently exposing the wrong tools.
