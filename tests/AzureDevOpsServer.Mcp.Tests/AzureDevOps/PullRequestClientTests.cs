@@ -427,6 +427,32 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         Assert.True(body.RootElement.GetProperty("content").ValueEquals("Fixed in the latest push"));
     }
 
+    [Fact]
+    public async Task UpdatePullRequestCommentAsync_PatchesCommentContent()
+    {
+        using var response = JsonResponse("""{ "id": 3, "content": "Fixed in the latest push (corrected)" }""");
+        var client = CreateClient(out var handler, response);
+
+        var comment = await client.UpdatePullRequestCommentAsync(
+            "WebApp",
+            7,
+            10,
+            3,
+            "Fixed in the latest push (corrected)",
+            "Alpha",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, comment.Id);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Patch, request.Method);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/pullRequests/7/threads/10/comments/3?api-version=7.0",
+            request.RequestUri!.AbsoluteUri
+        );
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("content").ValueEquals("Fixed in the latest push (corrected)"));
+    }
+
     [Theory]
     [InlineData("fixed", "fixed")]
     [InlineData("wontfix", "wontFix")]

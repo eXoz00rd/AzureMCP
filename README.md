@@ -15,7 +15,7 @@ Most existing MCP integrations for Azure DevOps target Azure DevOps Services (cl
 
 ## Tools
 
-60 tools across 9 areas:
+61 tools across 9 areas:
 
 | Area | Tools |
 |---|---|
@@ -24,7 +24,7 @@ Most existing MCP integrations for Azure DevOps target Azure DevOps Services (cl
 | Work items | `query_work_items`, `get_work_item`, `get_work_items`, `get_work_item_revisions`, `create_work_item`, `update_work_item`, `add_work_item_comment`, `list_work_item_comments`, `link_work_item`, `add_work_item_attachment` |
 | Queries & metadata | `list_queries`, `run_saved_query`, `list_work_item_types`, `list_work_item_states`, `list_iterations`, `list_areas` |
 | Repositories | `list_repositories`, `list_branches`, `get_file_content`, `list_commits`, `get_commit`, `list_repository_items`, `diff_branches` |
-| Pull requests | `list_pull_requests`, `list_my_pull_requests`, `get_pull_request`, `create_pull_request`, `get_pull_request_changes`, `get_pull_request_policies`, `list_pull_request_work_items`, `link_pull_request_to_work_item`, `list_pull_request_threads`, `add_pull_request_comment`, `reply_to_pull_request_thread`, `set_pull_request_thread_status`, `vote_on_pull_request`, `update_pull_request`, `update_pull_request_status`, `add_pull_request_reviewer`, `remove_pull_request_reviewer` |
+| Pull requests | `list_pull_requests`, `list_my_pull_requests`, `get_pull_request`, `create_pull_request`, `get_pull_request_changes`, `get_pull_request_policies`, `list_pull_request_work_items`, `link_pull_request_to_work_item`, `list_pull_request_threads`, `add_pull_request_comment`, `reply_to_pull_request_thread`, `update_pull_request_comment`, `set_pull_request_thread_status`, `vote_on_pull_request`, `update_pull_request`, `update_pull_request_status`, `add_pull_request_reviewer`, `remove_pull_request_reviewer` |
 | Builds | `list_build_definitions`, `list_builds`, `queue_build`, `get_build_timeline`, `get_build_log`, `list_build_artifacts` |
 | Releases | `list_release_definitions`, `list_releases`, `get_release`, `create_release`, `list_release_approvals`, `update_release_approval`, `deploy_release_environment` |
 | Wiki | `list_wikis`, `list_wiki_pages`, `get_wiki_page`, `create_or_update_wiki_page` |
@@ -35,9 +35,9 @@ Tools that operate inside a project fall back to `ADOS_DEFAULT_PROJECT` when no 
 
 ### Trimming the tool list
 
-60 tools is a lot for one client to carry, and clients cap how many tools they send per request. Two variables keep the surface small:
+61 tools is a lot for one client to carry, and clients cap how many tools they send per request. Two variables keep the surface small:
 
-- **`ADOS_TOOLSETS=workitems,pullrequests`** exposes only the areas a team actually uses — the example above drops the list from 60 tools to 27.
+- **`ADOS_TOOLSETS=workitems,pullrequests`** exposes only the areas a team actually uses — the example above drops the list from 61 tools to 28.
 - **`ADOS_READ_ONLY=true`** removes every write tool, leaving 40 read-only tools. Useful when an agent should be able to look at Azure DevOps but not change it, without relying on PAT scopes alone.
 
 Both can be combined, and an unknown toolset name fails at startup with the list of valid names instead of silently exposing the wrong tools.

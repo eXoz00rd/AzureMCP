@@ -388,6 +388,28 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException("The reply response could not be parsed.");
     }
 
+    public async Task<PullRequestComment> UpdatePullRequestCommentAsync(
+        string repository,
+        int pullRequestId,
+        int threadId,
+        int commentId,
+        string content,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.PatchAsJsonAsync(
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/threads/{threadId}/comments/{commentId}?api-version={ApiVersion(ApiArea.Git)}",
+            new { content },
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var updated = await response.Content.ReadFromJsonAsync<PullRequestComment>(cancellationToken);
+        return updated ??
+            throw new AzureDevOpsClientException($"The update response for comment {commentId} could not be parsed.");
+    }
+
     public async Task<PullRequestThread> SetPullRequestThreadStatusAsync(
         string repository,
         int pullRequestId,

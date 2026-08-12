@@ -273,6 +273,33 @@ public sealed class PullRequestTools
         );
     }
 
+    [McpServerTool(Name = "update_pull_request_comment", Destructive = true, UseStructuredContent = true)]
+    [Description(
+        "Updates the text of an existing pull request comment. Use list_pull_request_threads to find the thread id and comment id."
+    )]
+    public Task<PullRequestComment> UpdatePullRequestCommentAsync(
+        [Description("Repository name or id.")] string repository,
+        [Description("Pull request id.")] int pullRequestId,
+        [Description("Thread id from list_pull_request_threads.")]
+        int threadId,
+        [Description("Comment id from list_pull_request_threads.")]
+        int commentId,
+        [Description("New comment text.")] string comment,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
+    {
+        return _client.UpdatePullRequestCommentAsync(
+            repository,
+            pullRequestId,
+            threadId,
+            commentId,
+            comment,
+            EffectiveProject(project),
+            cancellationToken
+        );
+    }
+
     [McpServerTool(Name = "set_pull_request_thread_status", Destructive = false, UseStructuredContent = true)]
     [Description("Sets the status of a pull request comment thread, for example to resolve it as fixed or won't fix.")]
     public Task<PullRequestThread> SetPullRequestThreadStatusAsync(
