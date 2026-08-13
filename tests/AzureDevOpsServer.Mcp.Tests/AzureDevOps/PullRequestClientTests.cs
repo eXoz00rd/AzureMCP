@@ -1,8 +1,6 @@
-using System.Net;
-using System.Text;
-using System.Text.Json;
 using AzureDevOpsServer.Mcp.AzureDevOps;
-using AzureDevOpsServer.Mcp.Tests.Infrastructure;
+using System.Net;
+using System.Text.Json;
 using Xunit;
 
 namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;
@@ -85,8 +83,10 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             "New title",
             "New description",
             null,
+            null,
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal(HttpMethod.Patch, request.Method);
@@ -94,6 +94,7 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         Assert.True(body.RootElement.GetProperty("title").ValueEquals("New title"));
         Assert.True(body.RootElement.GetProperty("description").ValueEquals("New description"));
         Assert.False(body.RootElement.TryGetProperty("autoCompleteSetBy", out _));
+        Assert.False(body.RootElement.TryGetProperty("isDraft", out _));
     }
 
     [Fact]
@@ -107,15 +108,50 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         );
         var client = CreateClient(out var handler, connectionData, response);
 
-        await client.UpdatePullRequestAsync("WebApp", 7, null, null, true, "Alpha", TestContext.Current.CancellationToken);
+        await client.UpdatePullRequestAsync(
+            "WebApp",
+            7,
+            null,
+            null,
+            true,
+            null,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(2, handler.Requests.Count);
         using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
         Assert.True(
-            body.RootElement.GetProperty("autoCompleteSetBy")
+            body.RootElement
+                .GetProperty("autoCompleteSetBy")
                 .GetProperty("id")
                 .ValueEquals("0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb")
         );
+    }
+
+    [Fact]
+    public async Task UpdatePullRequestAsync_WithIsDraft_SendsIsDraftFlag()
+    {
+        using var response = JsonResponse(
+            """{ "pullRequestId": 7, "title": "Add feature", "status": "active", "sourceRefName": "refs/heads/develop", "targetRefName": "refs/heads/main", "isDraft": false }"""
+        );
+        var client = CreateClient(out var handler, response);
+
+        await client.UpdatePullRequestAsync(
+            "WebApp",
+            7,
+            null,
+            null,
+            null,
+            false,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Patch, request.Method);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.False(body.RootElement.GetProperty("isDraft").GetBoolean());
     }
 
     [Fact]
@@ -123,8 +159,17 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
     {
         var client = CreateClient(out var handler);
 
-        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
-            () => client.UpdatePullRequestAsync("WebApp", 7, null, null, null, "Alpha", TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(() => client.UpdatePullRequestAsync(
+                "WebApp",
+                7,
+                null,
+                null,
+                null,
+                null,
+                "Alpha",
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Contains("At least one of title", exception.Message);
         Assert.Empty(handler.Requests);
@@ -144,7 +189,8 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb",
             true,
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(reviewer.IsRequired);
         var request = Assert.Single(handler.Requests);
@@ -172,12 +218,16 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             "sebastian@example.local",
             false,
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(2, handler.Requests.Count);
         Assert.Contains("_apis/identities", handler.Requests[0].RequestUri!.AbsoluteUri);
         Assert.Contains("filterValue=sebastian%40example.local", handler.Requests[0].RequestUri!.AbsoluteUri);
-        Assert.EndsWith("reviewers/b3f11a5c-9d24-4c5e-8a4f-2f47c1d0e9aa?api-version=7.0", handler.Requests[1].RequestUri!.AbsoluteUri);
+        Assert.EndsWith(
+            "reviewers/b3f11a5c-9d24-4c5e-8a4f-2f47c1d0e9aa?api-version=7.0",
+            handler.Requests[1].RequestUri!.AbsoluteUri
+        );
     }
 
     [Fact]
@@ -186,14 +236,15 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         using var identities = JsonResponse("""{ "count": 0, "value": [] }""");
         var client = CreateClient(out var handler, identities);
 
-        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
-            () => client.AddPullRequestReviewerAsync(
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(() => client.AddPullRequestReviewerAsync(
                 "WebApp",
                 7,
                 "ghost@example.local",
                 false,
                 "Alpha",
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Contains("could not be resolved to an identity", exception.Message);
         Assert.Single(handler.Requests);
@@ -208,7 +259,13 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         using var response = new HttpResponseMessage(HttpStatusCode.NoContent);
         var client = CreateClient(out var handler, connectionData, response);
 
-        await client.RemovePullRequestReviewerAsync("WebApp", 7, "me", "Alpha", TestContext.Current.CancellationToken);
+        await client.RemovePullRequestReviewerAsync(
+            "WebApp",
+            7,
+            "me",
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal(HttpMethod.Delete, handler.Requests[1].Method);
@@ -264,7 +321,14 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         using var response = JsonResponse("""{ "count": 0, "value": [] }""");
         var client = CreateClient(out var handler, response);
 
-        await client.GetProjectPullRequestsAsync("Alpha", null, false, false, 100, TestContext.Current.CancellationToken);
+        await client.GetProjectPullRequestsAsync(
+            "Alpha",
+            null,
+            false,
+            false,
+            100,
+            TestContext.Current.CancellationToken
+        );
 
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("Alpha/_apis/git/pullrequests", requestUri);
@@ -283,7 +347,14 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         using var pullRequests = JsonResponse("""{ "count": 0, "value": [] }""");
         var client = CreateClient(out var handler, connectionData, pullRequests);
 
-        await client.GetProjectPullRequestsAsync("Alpha", "all", true, true, 50, TestContext.Current.CancellationToken);
+        await client.GetProjectPullRequestsAsync(
+            "Alpha",
+            "all",
+            true,
+            true,
+            50,
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(2, handler.Requests.Count);
         Assert.EndsWith("/_apis/connectionData", handler.Requests[0].RequestUri!.AbsoluteUri);
@@ -335,7 +406,8 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             "WebApp",
             7,
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(2, evaluations.Count);
         Assert.Equal("approved", evaluations[0].Status);
@@ -365,8 +437,9 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         using var pullRequest = JsonResponse(pullRequestJson);
         var client = CreateClient(out var handler, pullRequest);
 
-        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
-            () => client.GetPullRequestPolicyEvaluationsAsync("WebApp", 7, "Alpha", TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+            => client.GetPullRequestPolicyEvaluationsAsync("WebApp", 7, "Alpha", TestContext.Current.CancellationToken)
+        );
 
         Assert.Contains("could not be resolved", exception.Message);
         Assert.Single(handler.Requests);
@@ -392,7 +465,8 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             "WebApp",
             7,
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(2, workItems.Count);
         Assert.Equal("42", workItems[0].Id);
@@ -414,7 +488,8 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             10,
             "Fixed in the latest push",
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(3, comment.Id);
         var request = Assert.Single(handler.Requests);
@@ -440,7 +515,8 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             3,
             "Fixed in the latest push (corrected)",
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(3, comment.Id);
         var request = Assert.Single(handler.Requests);
@@ -468,7 +544,8 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             10,
             input,
             "Alpha",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal(HttpMethod.Patch, request.Method);
@@ -481,14 +558,16 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
     {
         var client = CreateClient(out var handler);
 
-        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
-            () => client.SetPullRequestThreadStatusAsync(
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+            => client.SetPullRequestThreadStatusAsync(
                 "WebApp",
                 7,
                 10,
                 "resolved",
                 "Alpha",
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Contains("wontFix", exception.Message);
         Assert.Empty(handler.Requests);
@@ -542,6 +621,7 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             "refs/heads/main",
             "New PR",
             "Description",
+            null,
             "Alpha",
             TestContext.Current.CancellationToken
         );
@@ -557,6 +637,40 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         Assert.True(body.RootElement.GetProperty("sourceRefName").ValueEquals("refs/heads/develop"));
         Assert.True(body.RootElement.GetProperty("targetRefName").ValueEquals("refs/heads/main"));
         Assert.True(body.RootElement.GetProperty("title").ValueEquals("New PR"));
+        Assert.False(body.RootElement.GetProperty("isDraft").GetBoolean());
+    }
+
+    [Fact]
+    public async Task CreatePullRequestAsync_WithIsDraft_SendsIsDraftTrue()
+    {
+        const string json =
+            """
+            {
+              "pullRequestId": 8,
+              "title": "New PR",
+              "status": "active",
+              "sourceRefName": "refs/heads/develop",
+              "targetRefName": "refs/heads/main",
+              "isDraft": true
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var pullRequest = await client.CreatePullRequestAsync(
+            "WebApp",
+            "develop",
+            "refs/heads/main",
+            "New PR",
+            "Description",
+            true,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.True(pullRequest.IsDraft);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("isDraft").GetBoolean());
     }
 
 
@@ -861,5 +975,4 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
 
         Assert.Contains("$top=25", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
     }
-
 }

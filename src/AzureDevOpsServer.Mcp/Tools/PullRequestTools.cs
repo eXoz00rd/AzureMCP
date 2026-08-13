@@ -65,6 +65,8 @@ public sealed class PullRequestTools
         string title,
         [Description("Optional description of the pull request.")]
         string? description = null,
+        [Description("Set to true to create the pull request as a draft.")]
+        bool? isDraft = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project = null,
         CancellationToken cancellationToken = default)
@@ -75,6 +77,7 @@ public sealed class PullRequestTools
             targetBranch,
             title,
             description,
+            isDraft,
             EffectiveProject(project),
             cancellationToken
         );
@@ -325,7 +328,7 @@ public sealed class PullRequestTools
 
     [McpServerTool(Name = "update_pull_request", Destructive = false, UseStructuredContent = true)]
     [Description(
-        "Updates the title or description of a pull request, or turns auto-complete on or off for the signed-in user."
+        "Updates the title or description of a pull request, turns auto-complete on or off for the signed-in user, or toggles its draft status."
     )]
     public Task<GitPullRequest> UpdatePullRequestAsync(
         [Description("Repository name or id.")] string repository,
@@ -335,6 +338,8 @@ public sealed class PullRequestTools
         string? description = null,
         [Description("Optional auto-complete switch: true sets it for the signed-in user, false clears it.")]
         bool? autoComplete = null,
+        [Description("Optional draft switch: true marks the pull request as a draft, false publishes it.")]
+        bool? isDraft = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project = null,
         CancellationToken cancellationToken = default)
@@ -345,6 +350,7 @@ public sealed class PullRequestTools
             title,
             description,
             autoComplete,
+            isDraft,
             EffectiveProject(project),
             cancellationToken
         );

@@ -1,10 +1,6 @@
-using System.Net;
-using System.Net.Http.Json;
-using System.Text;
-using System.Text.Json;
 using AzureDevOpsServer.Mcp.AzureDevOps.Models;
 using AzureDevOpsServer.Mcp.Configuration;
-using Microsoft.Extensions.Options;
+using System.Net.Http.Json;
 
 namespace AzureDevOpsServer.Mcp.AzureDevOps;
 
@@ -83,6 +79,7 @@ public sealed partial class AzureDevOpsClient
         string targetBranch,
         string title,
         string? description,
+        bool? isDraft,
         string? project,
         CancellationToken cancellationToken)
     {
@@ -93,7 +90,8 @@ public sealed partial class AzureDevOpsClient
                 sourceRefName = ToRefName(sourceBranch),
                 targetRefName = ToRefName(targetBranch),
                 title,
-                description
+                description,
+                isDraft = isDraft ?? false
             },
             cancellationToken
         );
@@ -124,7 +122,7 @@ public sealed partial class AzureDevOpsClient
 
         var iterations =
             await iterationsResponse.Content.ReadFromJsonAsync<ListResult<PullRequestIteration>>(cancellationToken);
-        var latestIteration = iterations?.Value?.MaxBy(iteration => iteration.Id);
+        var latestIteration = iterations?.Value.MaxBy(iteration => iteration.Id);
         if (latestIteration is null)
         {
             return [];
@@ -450,6 +448,7 @@ public sealed partial class AzureDevOpsClient
         string? title,
         string? description,
         bool? autoComplete,
+        bool? isDraft,
         string? project,
         CancellationToken cancellationToken)
     {
@@ -471,9 +470,16 @@ public sealed partial class AzureDevOpsClient
                 null;
         }
 
+        if (isDraft is not null)
+        {
+            payload["isDraft"] = isDraft.Value;
+        }
+
         if (payload.Count == 0)
         {
-            throw new AzureDevOpsClientException("At least one of title, description, or autoComplete is required.");
+            throw new AzureDevOpsClientException(
+                "At least one of title, description, autoComplete, or isDraft is required."
+            );
         }
 
         using var response = await _httpClient.PatchAsJsonAsync(
@@ -499,7 +505,7 @@ public sealed partial class AzureDevOpsClient
         string? project,
         CancellationToken cancellationToken)
     {
-        var reviewerId = await ResolveIdentityIdAsync(reviewer, project, cancellationToken);
+        var reviewerId = await ResolveIdentityIdAsync(reviewer, cancellationToken);
 
         using var response = await _httpClient.PutAsJsonAsync(
             $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/reviewers/{reviewerId}?api-version={ApiVersion(ApiArea.Git)}",
@@ -521,7 +527,7 @@ public sealed partial class AzureDevOpsClient
         string? project,
         CancellationToken cancellationToken)
     {
-        var reviewerId = await ResolveIdentityIdAsync(reviewer, project, cancellationToken);
+        var reviewerId = await ResolveIdentityIdAsync(reviewer, cancellationToken);
 
         using var response = await _httpClient.DeleteAsync(
             $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/reviewers/{reviewerId}?api-version={ApiVersion(ApiArea.Git)}",
@@ -533,7 +539,6 @@ public sealed partial class AzureDevOpsClient
 
     private async Task<string> ResolveIdentityIdAsync(
         string reviewer,
-        string? project,
         CancellationToken cancellationToken)
     {
         if (Guid.TryParse(reviewer, out var reviewerId))
@@ -555,12 +560,11 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var identities = await response.Content.ReadFromJsonAsync<ListResult<IdentityRecord>>(cancellationToken);
-        var match = identities?.Value?.FirstOrDefault();
-        return match is null ?
+        return identities?.Value is [var match, ..] ?
+            match.Id.ToString() :
             throw new AzureDevOpsClientException(
                 $"The reviewer '{reviewer}' could not be resolved to an identity. Pass the identity id, a unique account name, or 'me' for the signed-in user."
-            ) :
-            match.Id.ToString();
+            );
     }
 
     private async Task<Guid> GetAuthenticatedUserIdAsync(CancellationToken cancellationToken)
