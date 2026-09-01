@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
 using AzureDevOpsServer.Mcp.Configuration;
@@ -62,6 +63,32 @@ public sealed class ToolSchemaTests
         var required = RequiredNames(method).Order().ToArray();
 
         Assert.Equal(new[] { "pullRequestId", "repository", "workItemId" }, required);
+    }
+
+    [Fact]
+    public void LimitParameters_DocumentTheirValidRange()
+    {
+        string[] limitNames = ["top", "maxChars", "maxItems", "depth"];
+        var offenders = new List<string>();
+
+        foreach (var toolType in Toolsets.Resolve(null))
+        {
+            foreach (var method in ToolMethods(toolType))
+            {
+                var tool = method.GetCustomAttribute<McpServerToolAttribute>()!.Name;
+                offenders.AddRange(
+                    method.GetParameters()
+                          .Where(parameter => limitNames.Contains(parameter.Name))
+                          .Where(parameter =>
+                              parameter.GetCustomAttribute<DescriptionAttribute>()
+                                  ?.Description.Contains("alid range", StringComparison.Ordinal) != true
+                          )
+                          .Select(parameter => $"{tool}.{parameter.Name}")
+                );
+            }
+        }
+
+        Assert.Empty(offenders);
     }
 
     private static IEnumerable<MethodInfo> ToolMethods(Type toolType)

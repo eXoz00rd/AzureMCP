@@ -26,7 +26,7 @@ public sealed class PullRequestTools
         [Description("Repository name or id.")] string repository,
         [Description("Optional status filter: active, completed, abandoned, or all. Defaults to active.")]
         string? status = null,
-        [Description("Maximum number of pull requests to return. Defaults to 100.")]
+        [Description("Maximum number of pull requests to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project = null,
@@ -36,7 +36,7 @@ public sealed class PullRequestTools
             repository,
             EffectiveProject(project),
             status,
-            top ?? ResponseLimits.DefaultListTop,
+            ResponseLimits.ResolveTop(top),
             cancellationToken
         );
     }
@@ -173,7 +173,7 @@ public sealed class PullRequestTools
         bool? createdByMe = null,
         [Description("Set to true to only return pull requests where the signed-in user is a reviewer.")]
         bool? assignedToMe = null,
-        [Description("Maximum number of pull requests to return. Defaults to 100.")]
+        [Description("Maximum number of pull requests to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project = null,
@@ -184,7 +184,7 @@ public sealed class PullRequestTools
             status,
             createdByMe ?? false,
             assignedToMe ?? false,
-            top ?? ResponseLimits.DefaultListTop,
+            ResponseLimits.ResolveTop(top),
             cancellationToken
         );
     }

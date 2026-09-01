@@ -10,8 +10,6 @@ namespace AzureDevOpsServer.Mcp.Tools;
 [McpServerToolType]
 public sealed class BuildTools
 {
-    private const int DefaultBuildCount = 20;
-
     private readonly AzureDevOpsClient _client;
     private readonly IOptions<AzureDevOpsServerOptions> _options;
 
@@ -36,7 +34,7 @@ public sealed class BuildTools
     )]
     public Task<IReadOnlyList<Build>> ListBuildsAsync(
         [Description("Optional build definition id to filter by.")] int? definitionId = null,
-        [Description("Maximum number of builds to return. Defaults to 20.")]
+        [Description("Maximum number of builds to return. Defaults to 20. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project = null,
@@ -45,7 +43,7 @@ public sealed class BuildTools
         return _client.GetBuildsAsync(
             EffectiveProject(project),
             definitionId,
-            top ?? DefaultBuildCount,
+            ResponseLimits.ResolveTop(top, ResponseLimits.DefaultBuildCount),
             cancellationToken
         );
     }
@@ -91,7 +89,7 @@ public sealed class BuildTools
         [Description("Optional 1-based last line to return.")]
         int? endLine = null,
         [Description(
-            "Maximum number of characters to return. Defaults to 30000; the result reports the total length and whether it was truncated."
+            "Maximum number of characters to return. Defaults to 30000, valid range 1-1000000; the result reports the total length and whether it was truncated."
         )]
         int? maxChars = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
@@ -104,7 +102,7 @@ public sealed class BuildTools
             logId,
             startLine,
             endLine,
-            maxChars ?? ResponseLimits.DefaultMaxChars,
+            ResponseLimits.ResolveMaxChars(maxChars),
             cancellationToken
         );
     }
