@@ -82,7 +82,7 @@ For Azure DevOps integration changes, distinguish stub-handler verification from
 
 ## 7. Pull request
 
-Push and pull-request creation each require explicit authorization. Open at most one focused draft pull request against `main` with:
+Push and pull-request creation each require explicit authorization. Open at most one focused pull request against `main` with `draft: false`. Never create a draft pull request in this repository.
 
 ```markdown
 ## Summary
