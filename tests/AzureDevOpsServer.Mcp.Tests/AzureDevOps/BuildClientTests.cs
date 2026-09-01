@@ -261,4 +261,75 @@ public sealed class BuildClientTests : AzureDevOpsClientTestsBase
         Assert.True(log.Truncated);
     }
 
+    [Fact]
+    public async Task GetBuildLogAsync_WithKnownContentLength_ReportsTotalAndTruncates()
+    {
+        var content = new StringContent(new string('x', 5000));
+        using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+        var client = CreateClient(out _, response);
+        Assert.NotNull(content.Headers.ContentLength);
+
+        var log = await client.GetBuildLogAsync(
+            "Alpha",
+            500,
+            7,
+            null,
+            null,
+            100,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(100, log.Content.Length);
+        Assert.Equal(5000, log.TotalChars);
+        Assert.True(log.Truncated);
+    }
+
+    [Fact]
+    public async Task GetBuildLogAsync_WithUnknownContentLength_ReportsTotalAndTruncates()
+    {
+        var stream = new GeneratedStream(200_000);
+        var content = new StreamContent(stream);
+        using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+        var client = CreateClient(out _, response);
+        Assert.Null(content.Headers.ContentLength);
+
+        var log = await client.GetBuildLogAsync(
+            "Alpha",
+            500,
+            7,
+            null,
+            null,
+            100,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(100, log.Content.Length);
+        Assert.Equal(200_000, log.TotalChars);
+        Assert.True(log.Truncated);
+    }
+
+    [Fact]
+    public async Task GetBuildLogAsync_WhenLogIsFarLargerThanLimit_DoesNotBufferWholeResponse()
+    {
+        const long length = 20_000_000;
+        using var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new GeneratedStream(length))
+        };
+        var client = CreateClient(out _, response);
+
+        var log = await client.GetBuildLogAsync(
+            "Alpha",
+            500,
+            7,
+            null,
+            null,
+            1_000,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(1_000, log.Content.Length);
+        Assert.Equal(length, log.TotalChars);
+        Assert.True(log.Truncated);
+    }
 }
