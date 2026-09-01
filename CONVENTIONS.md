@@ -1,6 +1,8 @@
 # Task-writing conventions — AzureMCP
 
-Applies to tasks and issues in this repository. This document is the source of truth for humans and AI tools. Do not copy these rules into other instruction files; link to this document instead.
+Applies to tasks and issues in this repository. This document is the source of truth for humans and AI tools. Development rules live in [`CONTRIBUTING.md`](CONTRIBUTING.md), while repository instructions for AI tools live in [`AGENTS.md`](AGENTS.md).
+
+This is a living document and should be extended as the conventions mature.
 
 ## Language
 
@@ -76,6 +78,8 @@ Tasks that change Azure DevOps integration must state whether verification again
 
 Tasks that change MCP hosting or transport must verify the actual server boundary where practical, including stdio output separation and protocol initialization.
 
+Tasks that add or change an MCP tool must include end-to-end reachability in the Definition of Done: registered, visible through `tools/list`, and callable through `tools/call`.
+
 ## Board workflow
 
 The AzureMCP board uses these statuses:
@@ -87,6 +91,10 @@ The AzureMCP board uses these statuses:
 - `Done`: linked issue is closed after merge
 
 Work on one task at a time. Move its status as work progresses and do not leave completed work in `In progress`.
+
+## Pull requests
+
+Pull requests are always opened ready for review. Do not create draft pull requests in this repository.
 
 ## Milestones
 
