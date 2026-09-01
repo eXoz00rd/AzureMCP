@@ -56,9 +56,8 @@ public sealed partial class AzureDevOpsClient
 
         await EnsureSuccessAsync(response, cancellationToken);
 
-        var log = await response.Content.ReadAsStringAsync(cancellationToken);
-        var (text, truncated) = Limit(log, maxChars);
-        return new TextContent(text, log.Length, truncated);
+        var log = await BoundedText.ReadAsync(response.Content, maxChars, cancellationToken);
+        return new TextContent(log.Text, log.TotalChars, log.Truncated);
     }
 
     public async Task<IReadOnlyList<BuildArtifact>> GetBuildArtifactsAsync(
