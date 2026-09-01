@@ -10,9 +10,6 @@ namespace AzureDevOpsServer.Mcp.Tools;
 [McpServerToolType]
 public sealed class QueryTools
 {
-    private const int DefaultQueryDepth = 2;
-    private const int DefaultNodeDepth = 3;
-
     private readonly AzureDevOpsClient _client;
     private readonly IOptions<AzureDevOpsServerOptions> _options;
 
@@ -27,12 +24,16 @@ public sealed class QueryTools
         "Lists the saved work item queries of a project as a folder tree. Requires a project name or ADOS_DEFAULT_PROJECT."
     )]
     public Task<IReadOnlyList<QueryHierarchyItem>> ListQueriesAsync(
-        [Description("Folder depth to expand. Defaults to 2.")] int? depth = null,
+        [Description("Folder depth to expand. Defaults to 2. Valid range 0-10.")] int? depth = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GetQueriesAsync(EffectiveProject(project), depth ?? DefaultQueryDepth, cancellationToken);
+        return _client.GetQueriesAsync(
+            EffectiveProject(project),
+            ResponseLimits.ResolveDepth(depth, ResponseLimits.DefaultQueryDepth),
+            cancellationToken
+        );
     }
 
     [McpServerTool(Name = "run_saved_query", ReadOnly = true, UseStructuredContent = true)]
@@ -69,7 +70,7 @@ public sealed class QueryTools
     [McpServerTool(Name = "list_iterations", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the iteration path tree of a project including sprint start and finish dates.")]
     public Task<ClassificationNode> ListIterationsAsync(
-        [Description("Tree depth to expand. Defaults to 3.")] int? depth = null,
+        [Description("Tree depth to expand. Defaults to 3. Valid range 0-10.")] int? depth = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project = null,
         CancellationToken cancellationToken = default)
@@ -77,7 +78,7 @@ public sealed class QueryTools
         return _client.GetClassificationNodesAsync(
             EffectiveProject(project),
             "Iterations",
-            depth ?? DefaultNodeDepth,
+            ResponseLimits.ResolveDepth(depth, ResponseLimits.DefaultNodeDepth),
             cancellationToken
         );
     }
@@ -85,7 +86,7 @@ public sealed class QueryTools
     [McpServerTool(Name = "list_areas", ReadOnly = true, UseStructuredContent = true)]
     [Description("Lists the area path tree of a project.")]
     public Task<ClassificationNode> ListAreasAsync(
-        [Description("Tree depth to expand. Defaults to 3.")] int? depth = null,
+        [Description("Tree depth to expand. Defaults to 3. Valid range 0-10.")] int? depth = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project = null,
         CancellationToken cancellationToken = default)
@@ -93,7 +94,7 @@ public sealed class QueryTools
         return _client.GetClassificationNodesAsync(
             EffectiveProject(project),
             "Areas",
-            depth ?? DefaultNodeDepth,
+            ResponseLimits.ResolveDepth(depth, ResponseLimits.DefaultNodeDepth),
             cancellationToken
         );
     }

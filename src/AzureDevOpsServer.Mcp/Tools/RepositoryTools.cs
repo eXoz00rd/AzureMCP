@@ -10,8 +10,6 @@ namespace AzureDevOpsServer.Mcp.Tools;
 [McpServerToolType]
 public sealed class RepositoryTools
 {
-    private const int DefaultCommitCount = 20;
-
     private readonly AzureDevOpsClient _client;
     private readonly IOptions<AzureDevOpsServerOptions> _options;
 
@@ -39,7 +37,7 @@ public sealed class RepositoryTools
     )]
     public Task<IReadOnlyList<GitRef>> ListBranchesAsync(
         [Description("Repository name or id.")] string repository,
-        [Description("Maximum number of branches to return. Defaults to 100.")]
+        [Description("Maximum number of branches to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project = null,
@@ -48,7 +46,7 @@ public sealed class RepositoryTools
         return _client.GetBranchesAsync(
             repository,
             EffectiveProject(project),
-            top ?? ResponseLimits.DefaultListTop,
+            ResponseLimits.ResolveTop(top),
             cancellationToken
         );
     }
@@ -63,7 +61,7 @@ public sealed class RepositoryTools
         string path,
         [Description("Optional branch name.")] string? branch = null,
         [Description(
-            "Maximum number of characters to return. Defaults to 30000; the result reports whether it was truncated."
+            "Maximum number of characters to return. Defaults to 30000, valid range 1-1000000; the result reports whether it was truncated."
         )]
         int? maxChars = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
@@ -75,7 +73,7 @@ public sealed class RepositoryTools
             path,
             branch,
             EffectiveProject(project),
-            maxChars ?? ResponseLimits.DefaultMaxChars,
+            ResponseLimits.ResolveMaxChars(maxChars),
             cancellationToken
         );
     }
@@ -90,7 +88,7 @@ public sealed class RepositoryTools
         string? branch = null,
         [Description("Optional file or folder path to filter the history by.")]
         string? itemPath = null,
-        [Description("Maximum number of commits to return. Defaults to 20.")]
+        [Description("Maximum number of commits to return. Defaults to 20. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project = null,
@@ -100,7 +98,7 @@ public sealed class RepositoryTools
             repository,
             branch,
             itemPath,
-            top ?? DefaultCommitCount,
+            ResponseLimits.ResolveTop(top, ResponseLimits.DefaultCommitCount),
             EffectiveProject(project),
             cancellationToken
         );
@@ -130,7 +128,7 @@ public sealed class RepositoryTools
         [Description("Set to true to list the whole subtree recursively.")]
         bool? recursive = null,
         [Description(
-            "Maximum number of entries to return. Defaults to 500; the result reports whether it was truncated."
+            "Maximum number of entries to return. Defaults to 500, valid range 1-10000; the result reports whether it was truncated."
         )]
         int? maxItems = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
@@ -143,7 +141,7 @@ public sealed class RepositoryTools
             branch,
             recursive ?? false,
             EffectiveProject(project),
-            maxItems ?? ResponseLimits.DefaultMaxItems,
+            ResponseLimits.ResolveMaxItems(maxItems),
             cancellationToken
         );
     }

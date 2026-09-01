@@ -10,8 +10,6 @@ namespace AzureDevOpsServer.Mcp.Tools;
 [McpServerToolType]
 public sealed class ReleaseTools
 {
-    private const int DefaultReleaseCount = 20;
-
     private readonly AzureDevOpsClient _client;
     private readonly IOptions<AzureDevOpsServerOptions> _options;
 
@@ -36,7 +34,7 @@ public sealed class ReleaseTools
     )]
     public Task<IReadOnlyList<Release>> ListReleasesAsync(
         [Description("Optional release definition id to filter by.")] int? definitionId = null,
-        [Description("Maximum number of releases to return. Defaults to 20.")]
+        [Description("Maximum number of releases to return. Defaults to 20. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project = null,
@@ -45,7 +43,7 @@ public sealed class ReleaseTools
         return _client.GetReleasesAsync(
             EffectiveProject(project),
             definitionId,
-            top ?? DefaultReleaseCount,
+            ResponseLimits.ResolveTop(top, ResponseLimits.DefaultReleaseCount),
             cancellationToken
         );
     }
@@ -80,7 +78,7 @@ public sealed class ReleaseTools
     )]
     public Task<IReadOnlyList<ReleaseApproval>> ListReleaseApprovalsAsync(
         [Description("Optional release id to filter by.")] int? releaseId = null,
-        [Description("Maximum number of approvals to return. Defaults to 100.")]
+        [Description("Maximum number of approvals to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project = null,
@@ -89,7 +87,7 @@ public sealed class ReleaseTools
         return _client.GetReleaseApprovalsAsync(
             EffectiveProject(project),
             releaseId,
-            top ?? ResponseLimits.DefaultListTop,
+            ResponseLimits.ResolveTop(top),
             cancellationToken
         );
     }

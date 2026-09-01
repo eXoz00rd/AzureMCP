@@ -73,7 +73,7 @@ public sealed class WorkItemTools
     [Description("Lists the discussion comments of a work item with their authors and dates.")]
     public Task<WorkItemCommentList> ListWorkItemCommentsAsync(
         [Description("Work item id.")] int id,
-        [Description("Maximum number of comments to return. Defaults to 100.")]
+        [Description("Maximum number of comments to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project = null,
@@ -82,7 +82,7 @@ public sealed class WorkItemTools
         return _client.GetWorkItemCommentsAsync(
             id,
             EffectiveProject(project),
-            top ?? ResponseLimits.DefaultListTop,
+            ResponseLimits.ResolveTop(top),
             cancellationToken
         );
     }
@@ -91,11 +91,11 @@ public sealed class WorkItemTools
     [Description("Gets the revision history of a work item so field changes over time can be compared.")]
     public Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(
         [Description("Work item id.")] int id,
-        [Description("Maximum number of revisions to return. Defaults to 100.")]
+        [Description("Maximum number of revisions to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GetWorkItemRevisionsAsync(id, top ?? ResponseLimits.DefaultListTop, cancellationToken);
+        return _client.GetWorkItemRevisionsAsync(id, ResponseLimits.ResolveTop(top), cancellationToken);
     }
 
     [McpServerTool(Name = "link_work_item", Destructive = false, UseStructuredContent = true)]
