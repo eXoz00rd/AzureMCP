@@ -20,6 +20,8 @@ coverage/
 *.trx
 *.coverage
 *.coveragexml
+coverage.cobertura.xml
+code-coverage-results.md
 
 ## Local settings and secrets
 appsettings.*.local.json

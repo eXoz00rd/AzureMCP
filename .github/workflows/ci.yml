@@ -20,11 +20,26 @@ jobs:
         run: dotnet format --verify-no-changes --no-restore
       - name: Build
         run: dotnet build AzureDevOpsServer.Mcp.slnx --configuration Release --no-restore
-      - name: Install coverage tool
-        run: dotnet tool install --global dotnet-coverage
+      - name: Restore coverage tool
+        run: dotnet tool restore
       - name: Test with coverage
-        run: dotnet-coverage collect --output coverage.cobertura.xml --output-format cobertura "dotnet run --project tests/AzureDevOpsServer.Mcp.Tests --configuration Release --no-build"
+        run: dotnet dotnet-coverage collect --output coverage.cobertura.xml --output-format cobertura "dotnet run --project tests/AzureDevOpsServer.Mcp.Tests --configuration Release --no-build"
+      - name: Coverage summary
+        # Lower threshold sits a few points under the measured baseline (~92% line rate)
+        # to absorb minor fluctuation while still failing on a meaningful regression.
+        uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
+        with:
+          filename: coverage.cobertura.xml
+          badge: false
+          format: markdown
+          output: both
+          thresholds: '88 92'
+          fail_below_min: true
+      - name: Add coverage summary to job summary
+        if: always()
+        run: cat code-coverage-results.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload coverage artifact
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage
