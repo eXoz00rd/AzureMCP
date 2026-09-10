@@ -1,10 +1,12 @@
 using System.Text;
+using System.Text.Json;
 
 namespace AzureDevOpsServer.Mcp.Tests.Infrastructure;
 
-// Produces {"path":"<path>","content":"<fillLength filler characters>"} without ever
-// materializing the filler, so tests can exercise repository item responses far larger than any
-// buffer under test.
+// Produces {"path":"<path>","content":"<fillLength filler bytes>"} without ever materializing the
+// filler, so tests can exercise repository item responses far larger than any buffer under test.
+// The fill character is restricted to plain printable ASCII so each filler byte is always exactly
+// one valid, unescaped JSON content character.
 public sealed class JsonEnvelopeStream : Stream
 {
     private readonly byte[] _prefix;
@@ -24,7 +26,16 @@ public sealed class JsonEnvelopeStream : Stream
         CancellationTokenSource? cancelSource = null,
         int cancelAfterReads = 0)
     {
-        _prefix = Encoding.UTF8.GetBytes($"{{\"path\":\"{path}\",\"content\":\"");
+        if (fill is < (char)0x20 or > (char)0x7E or '"' or '\\')
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(fill),
+                fill,
+                "Fill character must be printable ASCII other than '\"' or '\\', so every filler byte is a single valid, unescaped JSON content character."
+            );
+        }
+
+        _prefix = Encoding.UTF8.GetBytes($"{{\"path\":{JsonSerializer.Serialize(path)},\"content\":\"");
         _suffix = "\"}"u8.ToArray();
         _fillLength = fillLength;
         _fill = (byte)fill;

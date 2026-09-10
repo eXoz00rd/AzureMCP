@@ -509,6 +509,71 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
     }
 
     [Fact]
+    public async Task GetFileContentAsync_WithOverlongUtf8Sequence_ThrowsParseException()
+    {
+        var body = Encoding.UTF8.GetBytes("{ \"path\": \"/x\", \"content\": \"")
+                            .Concat(new byte[] { 0xC0, 0x80 })
+                            .Concat(Encoding.UTF8.GetBytes("\" }"))
+                            .ToArray();
+        using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) };
+        var client = CreateClient(out _, response);
+
+        await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetFileContentAsync(
+                "WebApp",
+                "/x",
+                null,
+                "Alpha",
+                ResponseLimits.DefaultMaxChars,
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WithUtf8EncodedSurrogateCodepoint_ThrowsParseException()
+    {
+        var body = Encoding.UTF8.GetBytes("{ \"path\": \"/x\", \"content\": \"")
+                            .Concat(new byte[] { 0xED, 0xA0, 0x80 })
+                            .Concat(Encoding.UTF8.GetBytes("\" }"))
+                            .ToArray();
+        using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) };
+        var client = CreateClient(out _, response);
+
+        await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetFileContentAsync(
+                "WebApp",
+                "/x",
+                null,
+                "Alpha",
+                ResponseLimits.DefaultMaxChars,
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WhenJsonEnvelopeStreamPathNeedsEscaping_StillParsesCorrectly()
+    {
+        const string path = "C:\\repo\"file.txt";
+        using var stream = new JsonEnvelopeStream(path, 10);
+        using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            path,
+            null,
+            "Alpha",
+            ResponseLimits.DefaultMaxChars,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(path, file.Path);
+        Assert.Equal(new string('x', 10), file.Content);
+    }
+
+    [Fact]
     public async Task GetRepositoryItemsAsync_WhenMoreThanMaxItems_TruncatesList()
     {
         var entries = string.Join(',', Enumerable.Range(1, 10).Select(i => $"{{ \"path\": \"/file{i}.cs\" }}"));

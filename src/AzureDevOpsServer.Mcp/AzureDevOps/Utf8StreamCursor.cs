@@ -184,20 +184,24 @@ internal sealed class Utf8StreamCursor
 
         int extraBytes;
         int codepoint;
+        int minCodepoint;
         if ((first & 0b1110_0000) == 0b1100_0000)
         {
             extraBytes = 1;
             codepoint = first & 0b0001_1111;
+            minCodepoint = 0x80;
         }
         else if ((first & 0b1111_0000) == 0b1110_0000)
         {
             extraBytes = 2;
             codepoint = first & 0b0000_1111;
+            minCodepoint = 0x800;
         }
         else if ((first & 0b1111_1000) == 0b1111_0000)
         {
             extraBytes = 3;
             codepoint = first & 0b0000_0111;
+            minCodepoint = 0x10000;
         }
         else
         {
@@ -218,6 +222,13 @@ internal sealed class Utf8StreamCursor
             }
 
             codepoint = (codepoint << 6) | (next & 0b0011_1111);
+        }
+
+        // Rejects overlong encodings (codepoint below the shortest valid form), UTF-16 surrogate
+        // code points (never legal in UTF-8), and anything above the maximum Unicode code point.
+        if (codepoint < minCodepoint || codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF))
+        {
+            throw new AzureDevOpsClientException("The item response could not be parsed: invalid UTF-8 code point.");
         }
 
         if (codepoint <= 0xFFFF)
