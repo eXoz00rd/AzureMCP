@@ -236,16 +236,26 @@ public sealed class WorkItemTools
     }
 
     [McpServerTool(Name = "add_work_item_comment", Destructive = false, UseStructuredContent = true)]
-    [Description("Adds a comment to the discussion of a work item.")]
-    public Task<WorkItem> AddWorkItemCommentAsync(
+    [Description("Adds a comment to the discussion of a work item and returns the created comment, including its id.")]
+    public Task<WorkItemComment> AddWorkItemCommentAsync(
         [Description("Work item id.")] int id,
         [Description("Comment text.")] string comment,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project = null,
         CancellationToken cancellationToken = default)
     {
-        var fields = new Dictionary<string, string>
-        {
-            ["System.History"] = comment
-        };
-        return _client.UpdateWorkItemAsync(id, fields, cancellationToken);
+        return _client.AddWorkItemCommentAsync(id, EffectiveProject(project), comment, cancellationToken);
+    }
+
+    [McpServerTool(Name = "get_work_item_comment", ReadOnly = true, UseStructuredContent = true)]
+    [Description("Gets a single discussion comment of a work item by its comment id.")]
+    public Task<WorkItemComment> GetWorkItemCommentAsync(
+        [Description("Work item id.")] int id,
+        [Description("Comment id.")] int commentId,
+        [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
+        string? project = null,
+        CancellationToken cancellationToken = default)
+    {
+        return _client.GetWorkItemCommentAsync(id, commentId, EffectiveProject(project), cancellationToken);
     }
 }
