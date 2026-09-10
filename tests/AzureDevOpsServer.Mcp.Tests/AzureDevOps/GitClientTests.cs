@@ -599,7 +599,7 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
     [Fact]
     public async Task GetFileContentAsync_WhenCancelledMidStream_StopsReading()
     {
-        using var cancellation = new CancellationTokenSource();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         using var stream = new JsonEnvelopeStream("/big.bin", 50_000_000, cancelSource: cancellation, cancelAfterReads: 3);
         using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
         var client = CreateClient(out _, response);
@@ -619,7 +619,7 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
     [Fact]
     public async Task GetFileContentAsync_WithJsonEnvelopeStreamCancelSourceButNoCancelAfterReads_DoesNotCancelImmediately()
     {
-        using var cancellation = new CancellationTokenSource();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         using var stream = new JsonEnvelopeStream("/small.txt", 5, cancelSource: cancellation);
         using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
         var client = CreateClient(out _, response);
