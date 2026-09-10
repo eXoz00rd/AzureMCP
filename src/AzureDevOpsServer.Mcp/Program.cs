@@ -38,7 +38,7 @@ var clientBuilder = builder.Services.AddHttpClient<AzureDevOpsClient>((servicePr
     }
 );
 
-clientBuilder.AddStandardResilienceHandler();
+clientBuilder.AddAzureDevOpsResilience();
 clientBuilder.AddHttpMessageHandler<TlsDiagnosticsHandler>();
 
 var startupOptions = new AzureDevOpsServerOptions();
