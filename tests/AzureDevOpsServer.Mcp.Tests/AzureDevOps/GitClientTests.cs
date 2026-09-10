@@ -637,6 +637,28 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
     }
 
     [Fact]
+    public async Task GetFileContentAsync_WithUnescapedControlCharacterInContent_ThrowsParseException()
+    {
+        var body = Encoding.UTF8.GetBytes("{ \"path\": \"/x\", \"content\": \"line1")
+                            .Concat(new byte[] { 0x0A })
+                            .Concat(Encoding.UTF8.GetBytes("line2\" }"))
+                            .ToArray();
+        using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) };
+        var client = CreateClient(out _, response);
+
+        await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetFileContentAsync(
+                "WebApp",
+                "/x",
+                null,
+                "Alpha",
+                ResponseLimits.DefaultMaxChars,
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    [Fact]
     public async Task GetFileContentAsync_WithOverlongUtf8Sequence_ThrowsParseException()
     {
         var body = Encoding.UTF8.GetBytes("{ \"path\": \"/x\", \"content\": \"")

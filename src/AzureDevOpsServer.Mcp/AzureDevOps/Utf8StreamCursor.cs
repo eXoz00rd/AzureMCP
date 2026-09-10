@@ -68,7 +68,7 @@ internal sealed class Utf8StreamCursor
     {
         var captureLimit = Math.Max(Math.Max(maxKeepChars, sampleChars), 0);
         var builder = captureLimit == 0 ? null : new StringBuilder(Math.Min(captureLimit, 4096));
-        var total = 0;
+        var total = 0L;
 
         while (true)
         {
@@ -78,6 +78,13 @@ internal sealed class Utf8StreamCursor
             if (b == (byte)'"')
             {
                 break;
+            }
+
+            if (b < 0x20)
+            {
+                throw new AzureDevOpsClientException(
+                    "The item response could not be parsed: unescaped control character in string."
+                );
             }
 
             if (b == (byte)'\\')
@@ -145,7 +152,12 @@ internal sealed class Utf8StreamCursor
         }
 
         var text = builder?.ToString() ?? string.Empty;
-        return new DecodedJsonString(Truncate(text, maxKeepChars), Truncate(text, sampleChars), total, total > maxKeepChars);
+        return new DecodedJsonString(
+            Truncate(text, maxKeepChars),
+            Truncate(text, sampleChars),
+            (int)Math.Min(total, int.MaxValue),
+            total > maxKeepChars
+        );
     }
 
     // Skips a single JSON value of any type, assuming any leading whitespace was already consumed.
