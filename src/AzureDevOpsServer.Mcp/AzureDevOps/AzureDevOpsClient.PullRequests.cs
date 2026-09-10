@@ -1,5 +1,6 @@
 using AzureDevOpsServer.Mcp.AzureDevOps.Models;
 using AzureDevOpsServer.Mcp.Configuration;
+using System.Net;
 using System.Net.Http.Json;
 
 namespace AzureDevOpsServer.Mcp.AzureDevOps;
@@ -222,10 +223,14 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         var userId = await GetAuthenticatedUserIdAsync(cancellationToken);
+        var reviewerPath =
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/reviewers/{userId}";
+
+        var isRequired = await GetPullRequestReviewerIsRequiredAsync(reviewerPath, cancellationToken);
 
         using var response = await _httpClient.PutAsJsonAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullRequests/{pullRequestId}/reviewers/{userId}?api-version={ApiVersion(ApiArea.Git)}",
-            new { vote },
+            $"{reviewerPath}?api-version={ApiVersion(ApiArea.Git)}",
+            new { vote, isRequired },
             cancellationToken
         );
 
@@ -234,6 +239,27 @@ public sealed partial class AzureDevOpsClient
         var reviewer = await response.Content.ReadFromJsonAsync<PullRequestReviewer>(cancellationToken);
         return reviewer ??
             throw new AzureDevOpsClientException("The vote response could not be parsed.");
+    }
+
+    private async Task<bool> GetPullRequestReviewerIsRequiredAsync(
+        string reviewerPath,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{reviewerPath}?api-version={ApiVersion(ApiArea.Git)}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var reviewer = await response.Content.ReadFromJsonAsync<PullRequestReviewer>(cancellationToken);
+        return reviewer?.IsRequired ?? false;
     }
 
     public async Task<GitPullRequest> UpdatePullRequestStatusAsync(

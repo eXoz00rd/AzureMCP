@@ -835,11 +835,14 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
     {
         const string connectionDataJson =
             """{ "authenticatedUser": { "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", "providerDisplayName": "Sebastian" } }""";
+        const string existingReviewerJson =
+            """{ "displayName": "Sebastian", "uniqueName": "sebastian@example.local", "vote": 0, "isRequired": true }""";
         const string reviewerJson =
-            """{ "displayName": "Sebastian", "uniqueName": "sebastian@example.local", "vote": 10 }""";
+            """{ "displayName": "Sebastian", "uniqueName": "sebastian@example.local", "vote": 10, "isRequired": true }""";
         using var connectionData = JsonResponse(connectionDataJson);
+        using var existingReviewer = JsonResponse(existingReviewerJson);
         using var reviewer = JsonResponse(reviewerJson);
-        var client = CreateClient(out var handler, connectionData, reviewer);
+        var client = CreateClient(out var handler, connectionData, existingReviewer, reviewer);
 
         var result = await client.SetPullRequestVoteAsync(
             "WebApp",
@@ -850,15 +853,45 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         );
 
         Assert.Equal(10, result.Vote);
-        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(3, handler.Requests.Count);
         Assert.EndsWith("/DefaultCollection/_apis/connectionData", handler.Requests[0].RequestUri!.AbsoluteUri);
-        Assert.Equal(HttpMethod.Put, handler.Requests[1].Method);
+        Assert.Equal(HttpMethod.Get, handler.Requests[1].Method);
         Assert.EndsWith(
             "Alpha/_apis/git/repositories/WebApp/pullRequests/7/reviewers/0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb?api-version=7.0",
             handler.Requests[1].RequestUri!.AbsoluteUri
         );
+        Assert.Equal(HttpMethod.Put, handler.Requests[2].Method);
+        Assert.EndsWith(
+            "Alpha/_apis/git/repositories/WebApp/pullRequests/7/reviewers/0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb?api-version=7.0",
+            handler.Requests[2].RequestUri!.AbsoluteUri
+        );
         using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
         Assert.Equal(10, body.RootElement.GetProperty("vote").GetInt32());
+        Assert.True(body.RootElement.GetProperty("isRequired").GetBoolean());
+    }
+
+    [Fact]
+    public async Task SetPullRequestVoteAsync_ReviewerNotYetAdded_DoesNotSetIsRequired()
+    {
+        const string connectionDataJson =
+            """{ "authenticatedUser": { "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", "providerDisplayName": "Sebastian" } }""";
+        const string reviewerJson =
+            """{ "displayName": "Sebastian", "uniqueName": "sebastian@example.local", "vote": 10 }""";
+        using var connectionData = JsonResponse(connectionDataJson);
+        using var notFound = new HttpResponseMessage(HttpStatusCode.NotFound);
+        using var reviewer = JsonResponse(reviewerJson);
+        var client = CreateClient(out var handler, connectionData, notFound, reviewer);
+
+        await client.SetPullRequestVoteAsync(
+            "WebApp",
+            7,
+            10,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.False(body.RootElement.GetProperty("isRequired").GetBoolean());
     }
 
     [Fact]
