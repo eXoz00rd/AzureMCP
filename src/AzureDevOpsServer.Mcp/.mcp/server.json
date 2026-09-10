@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "io.github.exoz00rd/azuremcp",
   "description": "MCP server for Azure DevOps Server (on-premises) with PAT authentication.",
-  "version": "0.1.0-preview.1",
+  "version": "0.0.0-managed-by-build",
   "repository": {
     "url": "https://github.com/eXoz00rd/AzureMCP",
     "source": "github"
@@ -11,7 +11,7 @@
     {
       "registryType": "nuget",
       "identifier": "AzureDevOpsServer.Mcp",
-      "version": "0.1.0-preview.1",
+      "version": "0.0.0-managed-by-build",
       "transport": {
         "type": "stdio"
       },

@@ -18,17 +18,25 @@ jobs:
           dotnet-version: 10.0.x
       - name: Set version from tag
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-      - name: Sync server.json version
-        run: |
-          tmp=$(mktemp)
-          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' src/AzureDevOpsServer.Mcp/.mcp/server.json > "$tmp"
-          mv "$tmp" src/AzureDevOpsServer.Mcp/.mcp/server.json
       - name: Build
         run: dotnet build AzureDevOpsServer.Mcp.slnx --configuration Release -p:Version=${{ env.VERSION }}
       - name: Test
         run: dotnet run --project tests/AzureDevOpsServer.Mcp.Tests --configuration Release --no-build
       - name: Pack
         run: dotnet pack src/AzureDevOpsServer.Mcp --configuration Release --no-build --output artifacts -p:Version=${{ env.VERSION }}
+      - name: Verify packaged manifest version
+        run: |
+          package=$(ls artifacts/*.nupkg)
+          expected=$(basename "$package" .nupkg)
+          expected=${expected#AzureDevOpsServer.Mcp.}
+          unzip -p "$package" .mcp/server.json > packed-server.json
+          manifest=$(jq -r '.version' packed-server.json)
+          entry=$(jq -r '.packages[0].version' packed-server.json)
+          if [ "$manifest" != "$expected" ] || [ "$entry" != "$expected" ]; then
+            echo "::error::Version mismatch: package=$expected manifest=$manifest packages[0]=$entry"
+            exit 1
+          fi
+          echo "Packaged manifest matches the package version: $expected"
       - name: NuGet login
         id: nuget-login
         uses: NuGet/login@v1

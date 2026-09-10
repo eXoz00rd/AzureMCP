@@ -31,6 +31,19 @@ jobs:
           path: coverage.cobertura.xml
       - name: Pack
         run: dotnet pack src/AzureDevOpsServer.Mcp --configuration Release --no-build --output artifacts
+      - name: Verify packaged manifest version
+        run: |
+          package=$(ls artifacts/*.nupkg)
+          expected=$(basename "$package" .nupkg)
+          expected=${expected#AzureDevOpsServer.Mcp.}
+          unzip -p "$package" .mcp/server.json > packed-server.json
+          manifest=$(jq -r '.version' packed-server.json)
+          entry=$(jq -r '.packages[0].version' packed-server.json)
+          if [ "$manifest" != "$expected" ] || [ "$entry" != "$expected" ]; then
+            echo "::error::Version mismatch: package=$expected manifest=$manifest packages[0]=$entry"
+            exit 1
+          fi
+          echo "Packaged manifest matches the package version: $expected"
       - name: Upload package artifact
         uses: actions/upload-artifact@v7
         with:
