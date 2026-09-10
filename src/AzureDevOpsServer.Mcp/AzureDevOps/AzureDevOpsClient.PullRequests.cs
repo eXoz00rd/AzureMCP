@@ -1,7 +1,7 @@
-using AzureDevOpsServer.Mcp.AzureDevOps.Models;
-using AzureDevOpsServer.Mcp.Configuration;
 using System.Net;
 using System.Net.Http.Json;
+using AzureDevOpsServer.Mcp.AzureDevOps.Models;
+using AzureDevOpsServer.Mcp.Configuration;
 
 namespace AzureDevOpsServer.Mcp.AzureDevOps;
 

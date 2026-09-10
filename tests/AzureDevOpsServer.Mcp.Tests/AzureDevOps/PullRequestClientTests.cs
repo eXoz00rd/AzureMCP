@@ -871,7 +871,7 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
     }
 
     [Fact]
-    public async Task SetPullRequestVoteAsync_ReviewerNotYetAdded_DoesNotSetIsRequired()
+    public async Task SetPullRequestVoteAsync_ReviewerNotYetAdded_SendsIsRequiredFalse()
     {
         const string connectionDataJson =
             """{ "authenticatedUser": { "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", "providerDisplayName": "Sebastian" } }""";
