@@ -37,8 +37,8 @@ public sealed class ResponseLimitsTests
     }
 
     [Theory]
-    [InlineData(ResponseLimits.MinMaxChars)]
-    [InlineData(ResponseLimits.MaxMaxChars)]
+    [InlineData(ResponseLimits.MinChars)]
+    [InlineData(ResponseLimits.MaxChars)]
     public void ResolveMaxChars_WithinRange_ReturnsValue(int value)
     {
         Assert.Equal(value, ResponseLimits.ResolveMaxChars(value));
@@ -47,7 +47,7 @@ public sealed class ResponseLimitsTests
     [Theory]
     [InlineData(0)]
     [InlineData(-5)]
-    [InlineData(ResponseLimits.MaxMaxChars + 1)]
+    [InlineData(ResponseLimits.MaxChars + 1)]
     public void ResolveMaxChars_OutOfRange_Throws(int value)
     {
         var exception = Assert.Throws<AzureDevOpsClientException>(() => ResponseLimits.ResolveMaxChars(value));
@@ -62,8 +62,8 @@ public sealed class ResponseLimitsTests
     }
 
     [Theory]
-    [InlineData(ResponseLimits.MinMaxItems)]
-    [InlineData(ResponseLimits.MaxMaxItems)]
+    [InlineData(ResponseLimits.MinItems)]
+    [InlineData(ResponseLimits.MaxItems)]
     public void ResolveMaxItems_WithinRange_ReturnsValue(int value)
     {
         Assert.Equal(value, ResponseLimits.ResolveMaxItems(value));
@@ -71,7 +71,7 @@ public sealed class ResponseLimitsTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(ResponseLimits.MaxMaxItems + 1)]
+    [InlineData(ResponseLimits.MaxItems + 1)]
     public void ResolveMaxItems_OutOfRange_Throws(int value)
     {
         var exception = Assert.Throws<AzureDevOpsClientException>(() => ResponseLimits.ResolveMaxItems(value));

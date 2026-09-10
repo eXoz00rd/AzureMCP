@@ -13,10 +13,10 @@ public static class ResponseLimits
 
     public const int MinTop = 1;
     public const int MaxTop = 1_000;
-    public const int MinMaxChars = 1;
-    public const int MaxMaxChars = 1_000_000;
-    public const int MinMaxItems = 1;
-    public const int MaxMaxItems = 10_000;
+    public const int MinChars = 1;
+    public const int MaxChars = 1_000_000;
+    public const int MinItems = 1;
+    public const int MaxItems = 10_000;
     public const int MinDepth = 0;
     public const int MaxDepth = 10;
 
@@ -32,12 +32,12 @@ public static class ResponseLimits
 
     public static int ResolveMaxChars(int? value, int defaultValue = DefaultMaxChars)
     {
-        return Resolve(value, defaultValue, MinMaxChars, MaxMaxChars, "maxChars");
+        return Resolve(value, defaultValue, MinChars, MaxChars, "maxChars");
     }
 
     public static int ResolveMaxItems(int? value, int defaultValue = DefaultMaxItems)
     {
-        return Resolve(value, defaultValue, MinMaxItems, MaxMaxItems, "maxItems");
+        return Resolve(value, defaultValue, MinItems, MaxItems, "maxItems");
     }
 
     public static int ResolveDepth(int? value, int defaultValue)

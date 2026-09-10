@@ -24,7 +24,7 @@ public sealed class LimitValidationTests : ToolTestsBase
 
     [Theory]
     [InlineData(0)]
-    [InlineData(ResponseLimits.MaxMaxChars + 1)]
+    [InlineData(ResponseLimits.MaxChars + 1)]
     public async Task GetFileContentAsync_WithInvalidMaxChars_FailsBeforeSendingRequest(int maxChars)
     {
         var harness = CreateHarness("FallbackProject");
@@ -46,7 +46,7 @@ public sealed class LimitValidationTests : ToolTestsBase
 
     [Theory]
     [InlineData(0)]
-    [InlineData(ResponseLimits.MaxMaxItems + 1)]
+    [InlineData(ResponseLimits.MaxItems + 1)]
     public async Task ListRepositoryItemsAsync_WithInvalidMaxItems_FailsBeforeSendingRequest(int maxItems)
     {
         var harness = CreateHarness("FallbackProject");

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AzureDevOpsServer.Mcp.Configuration;
 using AzureDevOpsServer.Mcp.Tools;
 using ModelContextProtocol.Server;
@@ -8,7 +9,7 @@ using Xunit;
 
 namespace AzureDevOpsServer.Mcp.Tests.Tools;
 
-public sealed class ToolSchemaTests
+public sealed partial class ToolSchemaTests
 {
     [Fact]
     public void NullableParameters_AreOptionalInSchema()
@@ -80,8 +81,8 @@ public sealed class ToolSchemaTests
                     method.GetParameters()
                           .Where(parameter => limitNames.Contains(parameter.Name))
                           .Where(parameter =>
-                              parameter.GetCustomAttribute<DescriptionAttribute>()
-                                  ?.Description.Contains("alid range", StringComparison.Ordinal) != true
+                              parameter.GetCustomAttribute<DescriptionAttribute>() is not { } description ||
+                              !ValidRangePattern().IsMatch(description.Description)
                           )
                           .Select(parameter => $"{tool}.{parameter.Name}")
                 );
@@ -105,4 +106,7 @@ public sealed class ToolSchemaTests
             [.. required.EnumerateArray().Select(entry => entry.GetString()!)] :
             [];
     }
+
+    [GeneratedRegex(@"\bvalid range\b", RegexOptions.IgnoreCase)]
+    private static partial Regex ValidRangePattern();
 }
