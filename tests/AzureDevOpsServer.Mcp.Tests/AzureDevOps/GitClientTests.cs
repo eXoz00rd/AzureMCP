@@ -350,6 +350,165 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
     }
 
     [Fact]
+    public async Task GetFileContentAsync_WithJsonEscapes_DecodesThemCorrectly()
+    {
+        const string json =
+            """
+            { "path": "/notes.txt", "content": "line1\nline2\ttab\t\"quoted\"\\backslash\/slash" }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/notes.txt",
+            null,
+            "Alpha",
+            ResponseLimits.DefaultMaxChars,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("line1\nline2\ttab\t\"quoted\"\\backslash/slash", file.Content);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WithMultiByteUtf8Content_CountsCharsNotBytes()
+    {
+        // Written directly (not via \u escapes) so the wire bytes are raw multi-byte UTF-8.
+        var text = string.Concat(Enumerable.Repeat("ąćęłń", 20));
+        var json = $$"""{ "path": "/diacritics.txt", "content": "{{text}}" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/diacritics.txt",
+            null,
+            "Alpha",
+            40,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(text[..40], file.Content);
+        Assert.Equal(text.Length, file.TotalChars);
+        Assert.True(file.Truncated);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WithSurrogatePairContent_KeepsPairIntact()
+    {
+        // Written directly (not via \u escapes) so the wire bytes are a raw 4-byte UTF-8 sequence.
+        const string emoji = "\U0001F600";
+        var json = $$"""{ "path": "/emoji.txt", "content": "hi{{emoji}}bye" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/emoji.txt",
+            null,
+            "Alpha",
+            ResponseLimits.DefaultMaxChars,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal($"hi{emoji}bye", file.Content);
+        Assert.Equal(7, file.TotalChars);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WithEscapedSurrogatePair_KeepsPairIntact()
+    {
+        const string json = """{ "path": "/emoji.txt", "content": "hi\ud83d\ude00bye" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/emoji.txt",
+            null,
+            "Alpha",
+            ResponseLimits.DefaultMaxChars,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("hi\U0001F600bye", file.Content);
+        Assert.Equal(7, file.TotalChars);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WhenPathAppearsAfterContent_StillParsesPath()
+    {
+        const string json =
+            """
+            {
+              "objectId": "a1b2c3d4",
+              "contentMetadata": { "encoding": 65001, "extension": ".md" },
+              "content": "# Hello",
+              "path": "/README.md",
+              "url": "https://devops.example.local/_apis/git/repositories/WebApp/items/README.md"
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/README.md",
+            null,
+            "Alpha",
+            ResponseLimits.DefaultMaxChars,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("/README.md", file.Path);
+        Assert.Equal("# Hello", file.Content);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WhenContentStreamIsFarLargerThanLimit_ReportsFullSizeWithoutBufferingIt()
+    {
+        const long fillLength = 5_000_000;
+        using var stream = new JsonEnvelopeStream("/big.bin", fillLength);
+        using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/big.bin",
+            null,
+            "Alpha",
+            1_000,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(1_000, file.Content!.Length);
+        Assert.Equal(fillLength, file.TotalChars);
+        Assert.True(file.Truncated);
+        Assert.False(file.IsBinary);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WhenCancelledMidStream_StopsReading()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var stream = new JsonEnvelopeStream("/big.bin", 50_000_000, cancelSource: cancellation, cancelAfterReads: 3);
+        using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+        var client = CreateClient(out _, response);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.GetFileContentAsync(
+                "WebApp",
+                "/big.bin",
+                null,
+                "Alpha",
+                ResponseLimits.MaxChars,
+                cancellation.Token
+            )
+        );
+    }
+
+    [Fact]
     public async Task GetRepositoryItemsAsync_WhenMoreThanMaxItems_TruncatesList()
     {
         var entries = string.Join(',', Enumerable.Range(1, 10).Select(i => $"{{ \"path\": \"/file{i}.cs\" }}"));
