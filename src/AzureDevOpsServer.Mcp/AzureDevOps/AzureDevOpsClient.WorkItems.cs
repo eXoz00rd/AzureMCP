@@ -412,22 +412,54 @@ public sealed partial class AzureDevOpsClient
     public async Task<WorkItem> UpdateWorkItemAsync(
         int id,
         IReadOnlyDictionary<string, string> fields,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? expectedRevision = null)
     {
+        if (expectedRevision is <= 0)
+        {
+            throw new AzureDevOpsClientException("expectedRevision must be a positive revision number.");
+        }
+
         using var request = new HttpRequestMessage(
             HttpMethod.Patch,
             $"_apis/wit/workitems/{id}?api-version={ApiVersion(ApiArea.WorkItems)}"
         )
         {
-            Content = CreateJsonPatchContent(fields)
+            Content = CreateJsonPatchContent(fields, expectedRevision)
         };
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        if (expectedRevision is not null &&
+            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed)
+        {
+            var currentRevision = await TryGetCurrentRevisionAsync(id, cancellationToken);
+            if (currentRevision is not null && currentRevision != expectedRevision)
+            {
+                throw new AzureDevOpsClientException(
+                    $"Update rejected: work item {id} has changed since revision {expectedRevision}; current revision is {currentRevision}. Read the work item again, reconcile the changes, and retry with its current revision."
+                );
+            }
+        }
 
         await EnsureSuccessAsync(response, cancellationToken);
 
         var workItem = await response.Content.ReadFromJsonAsync<WorkItem>(cancellationToken);
         return workItem ??
             throw new AzureDevOpsClientException($"The update response for work item {id} could not be parsed.");
+    }
+
+    private async Task<int?> TryGetCurrentRevisionAsync(int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var current = await GetWorkItemAsync(id, ["System.Id"], false, cancellationToken);
+            return current.Rev;
+        }
+        catch (Exception exception) when (
+            exception is AzureDevOpsClientException or HttpRequestException or JsonException)
+        {
+            return null;
+        }
     }
 }

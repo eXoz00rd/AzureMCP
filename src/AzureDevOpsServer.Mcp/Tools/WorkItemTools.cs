@@ -231,14 +231,16 @@ public sealed class WorkItemTools
     }
 
     [McpServerTool(Name = "update_work_item", Destructive = true, UseStructuredContent = true)]
-    [Description("Updates fields of an existing work item.")]
+    [Description("Updates fields of an existing work item. Supply expectedRevision from the last read to reject concurrent changes atomically; omit it for an unconditional update.")]
     public Task<WorkItem> UpdateWorkItemAsync(
         [Description("Work item id.")] int id,
         [Description("Fields to set as reference name to value pairs, for example System.State or System.AssignedTo.")]
         Dictionary<string, string> fields,
+        [Description("Revision from the last read. When supplied, the update fails if the work item has changed. Must be positive.")]
+        int? expectedRevision = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.UpdateWorkItemAsync(id, fields, cancellationToken);
+        return _client.UpdateWorkItemAsync(id, fields, cancellationToken, expectedRevision);
     }
 
     [McpServerTool(Name = "add_work_item_comment", Destructive = false, UseStructuredContent = true)]

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 
 namespace AzureDevOpsServer.Mcp.Tests.Infrastructure;
 
@@ -94,7 +95,26 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
             var isKnownProjectsRequest = context.Request.HttpMethod == "GET" &&
                 path.EndsWith("_apis/projects", StringComparison.Ordinal);
             context.Response.StatusCode = isKnownProjectsRequest ? (int)HttpStatusCode.OK : (int)HttpStatusCode.NotFound;
-            var body = Encoding.UTF8.GetBytes(isKnownProjectsRequest ? _projectsResponse : "{}");
+            var responseText = isKnownProjectsRequest ? _projectsResponse : "{}";
+            if (path.EndsWith("_apis/wit/workitems/42", StringComparison.Ordinal))
+            {
+                responseText = """{"id":42,"rev":4,"fields":{"System.State":"Resolved"},"url":"https://example.test/42"}""";
+                context.Response.StatusCode = (int)HttpStatusCode.OK;
+                if (context.Request.HttpMethod == "PATCH")
+                {
+                    using var document = await JsonDocument.ParseAsync(context.Request.InputStream);
+                    var first = document.RootElement[0];
+                    if (!first.GetProperty("op").ValueEquals("test") ||
+                        !first.GetProperty("path").ValueEquals("/rev") ||
+                        first.GetProperty("value").GetInt32() != 3)
+                    {
+                        context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                        responseText = """{"message":"Revision test failed"}""";
+                    }
+                }
+            }
+
+            var body = Encoding.UTF8.GetBytes(responseText);
             context.Response.ContentType = "application/json";
             context.Response.ContentLength64 = body.Length;
             await context.Response.OutputStream.WriteAsync(body).ConfigureAwait(false);
