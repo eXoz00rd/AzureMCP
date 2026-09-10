@@ -34,10 +34,11 @@ public sealed partial class AzureDevOpsClient
     public async Task<WorkItem> GetWorkItemAsync(
         int id,
         IReadOnlyList<string>? fields,
+        bool includeRelations,
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"_apis/wit/workitems/{id}?{FieldsOrRelations(fields)}&api-version={ApiVersion(ApiArea.WorkItems)}",
+            $"_apis/wit/workitems/{id}?{FieldsOrRelations(fields, includeRelations)}&api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -45,13 +46,15 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var workItem = await response.Content.ReadFromJsonAsync<WorkItem>(cancellationToken);
-        return workItem ??
-            throw new AzureDevOpsClientException($"The response for work item {id} could not be parsed.");
+        return workItem is null ?
+            throw new AzureDevOpsClientException($"The response for work item {id} could not be parsed.") :
+            ApplyFieldFilter(workItem, fields);
     }
 
     public async Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
         IReadOnlyList<int> ids,
         IReadOnlyList<string>? fields,
+        bool includeRelations,
         CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
@@ -60,7 +63,7 @@ public sealed partial class AzureDevOpsClient
         }
 
         using var response = await _httpClient.GetAsync(
-            $"_apis/wit/workitems?ids={string.Join(',', ids)}&{FieldsOrRelations(fields)}&api-version={ApiVersion(ApiArea.WorkItems)}",
+            $"_apis/wit/workitems?ids={string.Join(',', ids)}&{FieldsOrRelations(fields, includeRelations)}&api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -68,7 +71,25 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<WorkItem>>(cancellationToken);
-        return result?.Value ?? [];
+        return result?.Value is null ?
+            [] :
+            result.Value.Select(workItem => ApplyFieldFilter(workItem, fields)).ToList();
+    }
+
+    // $expand=relations returns every field regardless of the fields list, so a narrowed
+    // field list combined with includeRelations is applied client-side after the fetch.
+    private static WorkItem ApplyFieldFilter(WorkItem workItem, IReadOnlyList<string>? fields)
+    {
+        if (fields is null || fields.Count == 0)
+        {
+            return workItem;
+        }
+
+        var filteredFields = workItem.Fields
+            .Where(field => fields.Contains(field.Key))
+            .ToDictionary(field => field.Key, field => field.Value);
+
+        return workItem with { Fields = filteredFields };
     }
 
     public async Task<WorkItemCommentList> GetWorkItemCommentsAsync(

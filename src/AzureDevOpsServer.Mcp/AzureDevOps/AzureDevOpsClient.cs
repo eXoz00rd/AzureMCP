@@ -174,9 +174,9 @@ public sealed partial class AzureDevOpsClient
             value[..MaxErrorBodyLength];
     }
 
-    private static string FieldsOrRelations(IReadOnlyList<string>? fields)
+    private static string FieldsOrRelations(IReadOnlyList<string>? fields, bool includeRelations)
     {
-        return fields is null || fields.Count == 0 ?
+        return includeRelations || fields is null || fields.Count == 0 ?
             "$expand=relations" :
             $"fields={Uri.EscapeDataString(string.Join(',', fields))}";
     }
