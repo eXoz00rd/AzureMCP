@@ -76,9 +76,9 @@ Definition of Done items must be objectively checkable. Avoid statements such as
 
 Tasks that change Azure DevOps integration must state whether verification against a real Azure DevOps Server is required. Green tests using a stubbed `HttpMessageHandler` are not evidence of compatibility with a real server.
 
-Tasks that change MCP hosting or transport must verify the actual server boundary where practical, including stdio output separation and protocol initialization.
+Tasks that change MCP hosting or transport must verify the actual server boundary where practical, including stdio output separation and protocol initialization. `StdioServerSmokeTests` (`tests/AzureDevOpsServer.Mcp.Tests/EndToEnd/StdioServerSmokeTests.cs`) already does this: it runs the packaged MCP server as a real stdio process against `StubAzureDevOpsServer`, an in-process loopback HTTP server standing in for an Azure DevOps Server collection. This proves the MCP process boundary and protocol wiring (stdio framing, initialization, `tools/list`, `tools/call`) — it does not prove REST API compatibility with a real server, so it never substitutes for the real-server verification called out above when request/response shapes or on-prem-specific behavior are in scope.
 
-Tasks that add or change an MCP tool must include end-to-end reachability in the Definition of Done: registered, visible through `tools/list`, and callable through `tools/call`.
+Tasks that add or change an MCP tool must include end-to-end reachability in the Definition of Done: registered, visible through `tools/list`, and callable through `tools/call`. The `StdioServerSmokeTests`/`StubAzureDevOpsServer` pair satisfies this mechanically for common cases; state in the task when a change needs additional stub coverage or real-server verification beyond it, so "manual testing needed?" has a clear answer instead of being re-litigated per task.
 
 ## Board workflow
 
