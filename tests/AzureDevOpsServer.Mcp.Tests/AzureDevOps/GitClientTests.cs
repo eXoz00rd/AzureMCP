@@ -504,6 +504,76 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
     }
 
     [Fact]
+    public async Task GetFileContentAsync_WhenSurrogatePairStraddlesTruncationLimit_DoesNotEndWithUnpairedSurrogate()
+    {
+        const string emoji = "\U0001F600";
+        var prefix = new string('a', 49);
+        var content = $"{prefix}{emoji}{new string('b', 20)}";
+        var json = $$"""{ "path": "/x.txt", "content": "{{content}}" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/x.txt",
+            null,
+            "Alpha",
+            50,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(prefix, file.Content);
+        Assert.True(file.Truncated);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WhenSurrogatePairStraddlesCaptureLimit_DoesNotEndWithUnpairedSurrogate()
+    {
+        const string emoji = "\U0001F600";
+        var prefix = new string('a', 8001);
+        var content = $"{prefix}{emoji}{new string('b', 10)}";
+        var json = $$"""{ "path": "/x.txt", "content": "{{content}}" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/x.txt",
+            null,
+            "Alpha",
+            8002,
+            TestContext.Current.CancellationToken
+        );
+
+        // The dropped pair frees one slot for the next character, so the capture ends with a
+        // trailing 'b' rather than the emoji - the key assertion is that it never ends with a lone
+        // high surrogate.
+        Assert.Equal(prefix + "b", file.Content);
+        Assert.False(char.IsSurrogate(file.Content![^1]));
+        Assert.True(file.Truncated);
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WithPathLongerThanMaxSupportedLength_ThrowsParseException()
+    {
+        var longPath = "/" + new string('p', 5000);
+        var json = $$"""{ "path": "{{longPath}}", "content": "hi" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetFileContentAsync(
+                "WebApp",
+                longPath,
+                null,
+                "Alpha",
+                ResponseLimits.DefaultMaxChars,
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    [Fact]
     public async Task GetFileContentAsync_WhenContentStreamIsFarLargerThanLimit_ReportsFullSizeWithoutBufferingIt()
     {
         const long fillLength = 5_000_000;

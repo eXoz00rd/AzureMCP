@@ -9,6 +9,7 @@ internal static class GitItemContentReader
 {
     private const int BinarySampleChars = 8000;
     private const int MaxPropertyNameChars = 256;
+    private const int MaxPathChars = 4096;
     private const int BufferSize = 8192;
 
     public static async Task<GitItemContentReadResult> ReadAsync(
@@ -53,8 +54,15 @@ internal static class GitItemContentReader
                 {
                     await cursor.ExpectAsync((byte)'"', cancellationToken).ConfigureAwait(false);
                     var decoded = await cursor
-                                        .ReadStringAsync(int.MaxValue, 0, cancellationToken)
+                                        .ReadStringAsync(MaxPathChars, 0, cancellationToken)
                                         .ConfigureAwait(false);
+                    if (decoded.Truncated)
+                    {
+                        throw new AzureDevOpsClientException(
+                            $"The item response could not be parsed: 'path' exceeds the maximum supported length of {MaxPathChars} characters."
+                        );
+                    }
+
                     path = decoded.Kept;
                 }
                 else
