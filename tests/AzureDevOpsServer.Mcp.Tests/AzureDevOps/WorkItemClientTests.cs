@@ -90,6 +90,7 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
 
         Assert.Equal(7, comment.Id);
         Assert.False(comment.IsDeleted);
+        Assert.Equal(42, comment.WorkItemId);
         Assert.Contains("Alpha/_apis/wit/workItems/42/comments/7", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
     }
 
@@ -104,6 +105,19 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
         );
 
         Assert.Contains("could not be parsed", exception.Message);
+    }
+
+    [Fact]
+    public async Task GetWorkItemCommentAsync_WithoutIdOrCommentId_Throws()
+    {
+        using var response = JsonResponse("""{ "text": "Looks good" }""");
+        var client = CreateClient(out _, response);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+            => client.GetWorkItemCommentAsync(42, 7, "Alpha", TestContext.Current.CancellationToken)
+        );
+
+        Assert.Contains("did not include an id", exception.Message);
     }
 
     [Fact]

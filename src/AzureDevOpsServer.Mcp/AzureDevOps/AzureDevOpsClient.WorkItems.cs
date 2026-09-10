@@ -149,15 +149,19 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException($"The comment response for work item {workItemId} could not be parsed.");
         }
 
-        if (comment.Id != 0)
+        if (comment.Id == 0)
         {
-            return comment;
+            using var document = JsonDocument.Parse(json);
+            comment = document.RootElement.TryGetProperty("commentId", out var commentIdElement) &&
+                commentIdElement.TryGetInt32(out var commentId) ?
+                comment with { Id = commentId } :
+                throw new AzureDevOpsClientException(
+                    $"The comment response for work item {workItemId} did not include an id."
+                );
         }
 
-        using var document = JsonDocument.Parse(json);
-        return document.RootElement.TryGetProperty("commentId", out var commentIdElement) &&
-            commentIdElement.TryGetInt32(out var commentId) ?
-            comment with { Id = commentId } :
+        return comment.WorkItemId is null ?
+            comment with { WorkItemId = workItemId } :
             comment;
     }
 
