@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AzureDevOpsServer.Mcp.Configuration;
 using AzureDevOpsServer.Mcp.Tools;
 using ModelContextProtocol.Server;
@@ -7,7 +9,7 @@ using Xunit;
 
 namespace AzureDevOpsServer.Mcp.Tests.Tools;
 
-public sealed class ToolSchemaTests
+public sealed partial class ToolSchemaTests
 {
     [Fact]
     public void NullableParameters_AreOptionalInSchema()
@@ -64,6 +66,32 @@ public sealed class ToolSchemaTests
         Assert.Equal(new[] { "pullRequestId", "repository", "workItemId" }, required);
     }
 
+    [Fact]
+    public void LimitParameters_DocumentTheirValidRange()
+    {
+        string[] limitNames = ["top", "maxChars", "maxItems", "depth"];
+        var offenders = new List<string>();
+
+        foreach (var toolType in Toolsets.Resolve(null))
+        {
+            foreach (var method in ToolMethods(toolType))
+            {
+                var tool = method.GetCustomAttribute<McpServerToolAttribute>()!.Name;
+                offenders.AddRange(
+                    method.GetParameters()
+                          .Where(parameter => limitNames.Contains(parameter.Name))
+                          .Where(parameter =>
+                              parameter.GetCustomAttribute<DescriptionAttribute>() is not { } description ||
+                              !ValidRangePattern().IsMatch(description.Description)
+                          )
+                          .Select(parameter => $"{tool}.{parameter.Name}")
+                );
+            }
+        }
+
+        Assert.Empty(offenders);
+    }
+
     private static IEnumerable<MethodInfo> ToolMethods(Type toolType)
     {
         return toolType
@@ -78,4 +106,7 @@ public sealed class ToolSchemaTests
             [.. required.EnumerateArray().Select(entry => entry.GetString()!)] :
             [];
     }
+
+    [GeneratedRegex(@"\bvalid range\b", RegexOptions.IgnoreCase)]
+    private static partial Regex ValidRangePattern();
 }
