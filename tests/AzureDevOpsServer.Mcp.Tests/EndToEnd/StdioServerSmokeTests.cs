@@ -53,7 +53,9 @@ public sealed class StdioServerSmokeTests
 
         var result = await client.CallToolAsync("list_projects", cancellationToken: cancellationToken);
 
-        Assert.NotEqual(true, result.IsError);
+        // CallToolResult.IsError is nullable: a successful call leaves it null rather than false,
+        // so the assertion has to accept both instead of requiring an exact `false`.
+        Assert.True(result.IsError is null or false, $"Expected a successful tool call, but IsError was {result.IsError}.");
         Assert.NotNull(result.StructuredContent);
         Assert.Contains("Alpha", result.StructuredContent.ToString());
         Assert.Contains(azureDevOps.RequestPaths, path => path.Contains("_apis/projects", StringComparison.Ordinal));

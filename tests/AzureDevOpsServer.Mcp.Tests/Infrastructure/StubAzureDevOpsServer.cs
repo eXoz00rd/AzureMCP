@@ -98,7 +98,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
             context.Response.ContentType = "application/json";
             context.Response.ContentLength64 = body.Length;
             await context.Response.OutputStream.WriteAsync(body).ConfigureAwait(false);
-            context.Response.OutputStream.Close();
+            context.Response.Close();
         }
     }
 
@@ -121,6 +121,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            // Expected: GetContextAsync().WaitAsync(_stopping.Token) throws this on shutdown.
         }
 
         _listener.Close();
