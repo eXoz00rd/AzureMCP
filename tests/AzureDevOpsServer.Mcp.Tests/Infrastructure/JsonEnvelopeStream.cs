@@ -89,7 +89,7 @@ public sealed class JsonEnvelopeStream : Stream
     public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
         _reads++;
-        if (_cancelSource is not null && _reads >= _cancelAfterReads)
+        if (_cancelSource is not null && _cancelAfterReads > 0 && _reads >= _cancelAfterReads)
         {
             _cancelSource.Cancel();
         }

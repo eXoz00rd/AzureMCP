@@ -437,6 +437,44 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
     }
 
     [Fact]
+    public async Task GetFileContentAsync_WithUnpairedHighSurrogateEscape_ThrowsParseException()
+    {
+        const string json = """{ "path": "/emoji.txt", "content": "hi\ud83dbye" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetFileContentAsync(
+                "WebApp",
+                "/emoji.txt",
+                null,
+                "Alpha",
+                ResponseLimits.DefaultMaxChars,
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WithUnpairedLowSurrogateEscape_ThrowsParseException()
+    {
+        const string json = """{ "path": "/emoji.txt", "content": "hi\ude00bye" }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetFileContentAsync(
+                "WebApp",
+                "/emoji.txt",
+                null,
+                "Alpha",
+                ResponseLimits.DefaultMaxChars,
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    [Fact]
     public async Task GetFileContentAsync_WhenPathAppearsAfterContent_StillParsesPath()
     {
         const string json =
@@ -506,6 +544,26 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
                 cancellation.Token
             )
         );
+    }
+
+    [Fact]
+    public async Task GetFileContentAsync_WithJsonEnvelopeStreamCancelSourceButNoCancelAfterReads_DoesNotCancelImmediately()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var stream = new JsonEnvelopeStream("/small.txt", 5, cancelSource: cancellation);
+        using var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+        var client = CreateClient(out _, response);
+
+        var file = await client.GetFileContentAsync(
+            "WebApp",
+            "/small.txt",
+            null,
+            "Alpha",
+            ResponseLimits.DefaultMaxChars,
+            cancellation.Token
+        );
+
+        Assert.Equal("xxxxx", file.Content);
     }
 
     [Fact]

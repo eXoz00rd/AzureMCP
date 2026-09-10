@@ -87,6 +87,32 @@ internal sealed class Utf8StreamCursor
                         "The item response could not be parsed: unterminated escape sequence."
                     );
 
+                if (escape == (byte)'u')
+                {
+                    var unit = (char)await ReadHex4Async(cancellationToken).ConfigureAwait(false);
+                    if (char.IsHighSurrogate(unit))
+                    {
+                        var low = await ReadLowSurrogateEscapeAsync(cancellationToken).ConfigureAwait(false);
+                        Append(builder, captureLimit, unit);
+                        total++;
+                        Append(builder, captureLimit, low);
+                        total++;
+                    }
+                    else if (char.IsLowSurrogate(unit))
+                    {
+                        throw new AzureDevOpsClientException(
+                            "The item response could not be parsed: unpaired low surrogate in unicode escape."
+                        );
+                    }
+                    else
+                    {
+                        Append(builder, captureLimit, unit);
+                        total++;
+                    }
+
+                    continue;
+                }
+
                 var decoded = escape switch
                 {
                     (byte)'"' => '"',
@@ -97,7 +123,6 @@ internal sealed class Utf8StreamCursor
                     (byte)'n' => '\n',
                     (byte)'r' => '\r',
                     (byte)'t' => '\t',
-                    (byte)'u' => (char)await ReadHex4Async(cancellationToken).ConfigureAwait(false),
                     _ => throw new AzureDevOpsClientException(
                         $"The item response could not be parsed: invalid escape '\\{(char)escape}'."
                     )
@@ -240,6 +265,33 @@ internal sealed class Utf8StreamCursor
         var high = (char)(0xD800 + (codepoint >> 10));
         var low = (char)(0xDC00 + (codepoint & 0x3FF));
         return (high, low);
+    }
+
+    // A high surrogate escape must be immediately followed by a second \u escape decoding to a low
+    // surrogate; anything else (no second escape, or one that isn't a low surrogate) is rejected
+    // rather than left as an unpaired surrogate in the decoded string.
+    private async ValueTask<char> ReadLowSurrogateEscapeAsync(CancellationToken cancellationToken)
+    {
+        var backslash = await ReadByteAsync(cancellationToken).ConfigureAwait(false);
+        var escape = backslash == (byte)'\\' ?
+            await ReadByteAsync(cancellationToken).ConfigureAwait(false) :
+            null;
+        if (backslash != (byte)'\\' || escape != (byte)'u')
+        {
+            throw new AzureDevOpsClientException(
+                "The item response could not be parsed: high surrogate not followed by a low surrogate escape."
+            );
+        }
+
+        var unit = (char)await ReadHex4Async(cancellationToken).ConfigureAwait(false);
+        if (!char.IsLowSurrogate(unit))
+        {
+            throw new AzureDevOpsClientException(
+                "The item response could not be parsed: high surrogate not followed by a low surrogate escape."
+            );
+        }
+
+        return unit;
     }
 
     private async ValueTask<int> ReadHex4Async(CancellationToken cancellationToken)
