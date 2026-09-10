@@ -36,14 +36,16 @@ jobs:
           thresholds: '88 92'
           fail_below_min: true
       - name: Add coverage summary to job summary
-        if: always()
+        if: always() && hashFiles('code-coverage-results.md') != ''
         run: cat code-coverage-results.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage
-          path: coverage.cobertura.xml
+          path: |
+            coverage.cobertura.xml
+            code-coverage-results.md
       - name: Pack
         run: dotnet pack src/AzureDevOpsServer.Mcp --configuration Release --no-build --output artifacts
       - name: Verify packaged manifest version
