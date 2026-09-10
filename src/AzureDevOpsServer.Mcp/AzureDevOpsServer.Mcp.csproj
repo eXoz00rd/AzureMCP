@@ -31,14 +31,18 @@
   </PropertyGroup>
 
   <!-- The checked-in manifest carries a placeholder version. The packed copy is generated from
-       PackageVersion so the package and its manifest can never disagree. -->
-  <Target Name="GenerateMcpManifest" BeforeTargets="Build;_GetPackageFiles">
+       PackageVersion so the package and its manifest can never disagree.
+       A plain `dotnet pack` runs both Build and _GetPackageFiles in one session, so the target
+       is guarded by _McpManifestPrepared to avoid generating the file and appending the pack
+       item twice. -->
+  <Target Name="GenerateMcpManifest" BeforeTargets="Build;_GetPackageFiles" Condition="'$(_McpManifestPrepared)' != 'true'">
     <PropertyGroup>
       <!-- IntermediateOutputPath is only set once the SDK targets are imported, so it cannot be
            resolved in a file-level PropertyGroup. -->
       <McpManifestGenerated>$(IntermediateOutputPath)mcp/server.json</McpManifestGenerated>
       <_McpManifestRaw>$([System.IO.File]::ReadAllText('$(McpManifestSource)'))</_McpManifestRaw>
       <_McpManifestContent>$(_McpManifestRaw.Replace('$(McpManifestVersionToken)', '$(PackageVersion)'))</_McpManifestContent>
+      <_McpManifestPrepared>true</_McpManifestPrepared>
     </PropertyGroup>
     <MakeDir Directories="$(IntermediateOutputPath)mcp" />
     <WriteLinesToFile File="$(McpManifestGenerated)" Lines="$(_McpManifestContent)" Overwrite="true" WriteOnlyWhenDifferent="true" />

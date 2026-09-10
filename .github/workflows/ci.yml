@@ -33,7 +33,12 @@ jobs:
         run: dotnet pack src/AzureDevOpsServer.Mcp --configuration Release --no-build --output artifacts
       - name: Verify packaged manifest version
         run: |
-          package=$(ls artifacts/*.nupkg)
+          packages=(artifacts/*.nupkg)
+          if [ "${#packages[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one .nupkg in artifacts/, found ${#packages[@]}"
+            exit 1
+          fi
+          package="${packages[0]}"
           expected=$(basename "$package" .nupkg)
           expected=${expected#AzureDevOpsServer.Mcp.}
           unzip -p "$package" .mcp/server.json > packed-server.json
