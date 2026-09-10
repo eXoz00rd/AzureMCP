@@ -69,27 +69,34 @@ public sealed partial class AzureDevOpsClient
 
         await EnsureSuccessAsync(response, cancellationToken);
 
-        var item = await response.Content.ReadFromJsonAsync<GitItem>(cancellationToken) ??
-            throw new AzureDevOpsClientException($"The response for item '{path}' could not be parsed.");
+        GitItemContentReadResult item;
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using (stream.ConfigureAwait(false))
+        {
+            item = await GitItemContentReader.ReadAsync(stream, maxChars, cancellationToken);
+        }
 
-        var content = item.Content ?? string.Empty;
-        if (IsBinaryContent(content))
+        if (item.Path is null)
+        {
+            throw new AzureDevOpsClientException($"The response for item '{path}' could not be parsed.");
+        }
+
+        if (IsBinaryContent(item.BinarySample))
         {
             return new GitFileContent(
                 item.Path,
                 null,
-                content.Length,
+                item.TotalChars,
                 false,
                 true
             );
         }
 
-        var (text, truncated) = Limit(content, maxChars);
         return new GitFileContent(
             item.Path,
-            text,
-            content.Length,
-            truncated,
+            item.Content,
+            item.TotalChars,
+            item.Truncated,
             false
         );
     }

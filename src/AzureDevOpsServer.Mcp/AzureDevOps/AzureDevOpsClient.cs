@@ -181,13 +181,6 @@ public sealed partial class AzureDevOpsClient
             $"fields={Uri.EscapeDataString(string.Join(',', fields))}";
     }
 
-    private static (string Text, bool Truncated) Limit(string value, int maxChars)
-    {
-        return value.Length <= maxChars ?
-            (value, false) :
-            (value[..maxChars], true);
-    }
-
     private static bool IsBinaryContent(string content)
     {
         var sampleLength = Math.Min(content.Length, 8000);
