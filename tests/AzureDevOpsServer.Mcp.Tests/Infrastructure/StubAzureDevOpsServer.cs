@@ -6,30 +6,16 @@ namespace AzureDevOpsServer.Mcp.Tests.Infrastructure;
 
 /// <summary>
 /// A minimal loopback HTTP server standing in for an Azure DevOps Server collection, used to
-/// exercise the packaged MCP server end to end without contacting a real instance.
+/// exercise the MCP server end to end without contacting a real instance.
 /// </summary>
 public sealed class StubAzureDevOpsServer : IAsyncDisposable
 {
-    private const string ProjectsResponse =
-        """
-        {
-          "count": 1,
-          "value": [
-            {
-              "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb",
-              "name": "Alpha",
-              "state": "wellFormed",
-              "url": "http://127.0.0.1/DefaultCollection/_apis/projects/0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb"
-            }
-          ]
-        }
-        """;
-
     private readonly HttpListener _listener;
     private readonly CancellationTokenSource _stopping = new();
     private readonly Task _acceptLoop;
     private readonly object _requestsGate = new();
     private readonly List<string> _requestPaths = [];
+    private readonly string _projectsResponse;
 
     public StubAzureDevOpsServer()
     {
@@ -55,6 +41,20 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
             }
         }
 
+        _projectsResponse =
+            $$"""
+            {
+              "count": 1,
+              "value": [
+                {
+                  "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb",
+                  "name": "Alpha",
+                  "state": "wellFormed",
+                  "url": "{{CollectionUrl}}/_apis/projects/0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb"
+                }
+              ]
+            }
+            """;
         _acceptLoop = Task.Run(AcceptLoopAsync);
     }
 
@@ -94,7 +94,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
             var isKnownProjectsRequest = context.Request.HttpMethod == "GET" &&
                 path.EndsWith("_apis/projects", StringComparison.Ordinal);
             context.Response.StatusCode = isKnownProjectsRequest ? (int)HttpStatusCode.OK : (int)HttpStatusCode.NotFound;
-            var body = Encoding.UTF8.GetBytes(isKnownProjectsRequest ? ProjectsResponse : "{}");
+            var body = Encoding.UTF8.GetBytes(isKnownProjectsRequest ? _projectsResponse : "{}");
             context.Response.ContentType = "application/json";
             context.Response.ContentLength64 = body.Length;
             await context.Response.OutputStream.WriteAsync(body).ConfigureAwait(false);

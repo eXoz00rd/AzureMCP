@@ -7,11 +7,13 @@ using Xunit;
 namespace AzureDevOpsServer.Mcp.Tests.EndToEnd;
 
 /// <summary>
-/// Starts the packaged server as a real child process talking MCP over stdio, the same way an
-/// external client such as Claude Code or Copilot would. In-process tests exercise tools,
-/// clients, and configuration, but none of them start the executable or cross the stdio boundary,
-/// so a regression in startup, protocol initialization, or stdout/stderr separation could still
-/// pass the rest of the suite.
+/// Starts the built server assembly (<c>dotnet AzureDevOpsServer.Mcp.dll</c>) as a real child
+/// process talking MCP over stdio, the same transport an external client such as Claude Code or
+/// Copilot uses. This does not cover the installed dotnet-tool shim the NuGet package ships;
+/// that packaging path is verified separately in CI. In-process tests exercise tools, clients,
+/// and configuration, but none of them start the executable or cross the stdio boundary, so a
+/// regression in startup, protocol initialization, or stdout/stderr separation could still pass
+/// the rest of the suite.
 /// </summary>
 public sealed class StdioServerSmokeTests
 {
