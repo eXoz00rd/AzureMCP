@@ -50,23 +50,29 @@ public sealed class WorkItemTools
     public Task<WorkItem> GetWorkItemAsync(
         [Description("Work item id.")] int id,
         [Description(
-            "Optional field reference names to return, for example System.Title and System.State. Relations are only returned when this is omitted."
+            "Optional field reference names to return, for example System.Title and System.State. Relations are only returned when this is omitted, or when includeRelations is set."
         )]
         string[]? fields = null,
+        [Description("When true, also returns relations even when a field list is given.")]
+        bool includeRelations = false,
         CancellationToken cancellationToken = default)
     {
-        return _client.GetWorkItemAsync(id, fields, cancellationToken);
+        return _client.GetWorkItemAsync(id, fields, includeRelations, cancellationToken);
     }
 
     [McpServerTool(Name = "get_work_items", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets multiple work items by their ids in one call. Prefer a field list when fetching many items.")]
     public Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
         [Description("Work item ids.")] int[] ids,
-        [Description("Optional field reference names to return. Relations are only returned when this is omitted.")]
+        [Description(
+            "Optional field reference names to return. Relations are only returned when this is omitted, or when includeRelations is set."
+        )]
         string[]? fields = null,
+        [Description("When true, also returns relations even when a field list is given.")]
+        bool includeRelations = false,
         CancellationToken cancellationToken = default)
     {
-        return _client.GetWorkItemsAsync(ids, fields, cancellationToken);
+        return _client.GetWorkItemsAsync(ids, fields, includeRelations, cancellationToken);
     }
 
     [McpServerTool(Name = "list_work_item_comments", ReadOnly = true, UseStructuredContent = true)]

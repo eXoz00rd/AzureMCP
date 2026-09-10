@@ -324,7 +324,7 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
         using var response = JsonResponse(json);
         var client = CreateClient(out var handler, response);
 
-        var workItem = await client.GetWorkItemAsync(42, null, TestContext.Current.CancellationToken);
+        var workItem = await client.GetWorkItemAsync(42, null, false, TestContext.Current.CancellationToken);
 
         Assert.Equal(42, workItem.Id);
         Assert.Equal(3, workItem.Rev);
@@ -450,7 +450,7 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
         using var response = JsonResponse(json);
         var client = CreateClient(out var handler, response);
 
-        var workItems = await client.GetWorkItemsAsync([1, 2], null, TestContext.Current.CancellationToken);
+        var workItems = await client.GetWorkItemsAsync([1, 2], null, false, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, workItems.Count);
         Assert.True(workItems[1].Fields["System.Title"].ValueEquals("Second"));
@@ -465,7 +465,7 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
         var client = CreateClient(out var handler);
 
         var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
-            => client.GetWorkItemsAsync([], null, TestContext.Current.CancellationToken)
+            => client.GetWorkItemsAsync([], null, false, TestContext.Current.CancellationToken)
         );
 
         Assert.Contains("At least one work item id", exception.Message);
@@ -481,10 +481,125 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
         using var response = JsonResponse(json);
         var client = CreateClient(out var handler, response);
 
-        await client.GetWorkItemAsync(42, ["System.Title", "System.State"], TestContext.Current.CancellationToken);
+        await client.GetWorkItemAsync(42, ["System.Title", "System.State"], false, TestContext.Current.CancellationToken);
 
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("fields=System.Title%2CSystem.State", requestUri);
         Assert.DoesNotContain("$expand", requestUri);
+    }
+
+    [Fact]
+    public async Task GetWorkItemAsync_WithIncludeRelationsOnly_RequestsExpandRelations()
+    {
+        const string json =
+            """
+            {
+              "id": 42,
+              "rev": 3,
+              "fields": { "System.Title": "Fix login bug", "System.State": "Active" },
+              "url": "https://devops.example.local/_apis/wit/workItems/42",
+              "relations": [
+                {
+                  "rel": "System.LinkTypes.Hierarchy-Reverse",
+                  "url": "https://devops.example.local/DefaultCollection/_apis/wit/workItems/40",
+                  "attributes": { "name": "Parent" }
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var workItem = await client.GetWorkItemAsync(42, null, true, TestContext.Current.CancellationToken);
+
+        Assert.True(workItem.Fields["System.Title"].ValueEquals("Fix login bug"));
+        Assert.Equal("Parent", Assert.Single(workItem.Relations!).Attributes!.Name);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("$expand=relations", requestUri);
+    }
+
+    [Fact]
+    public async Task GetWorkItemAsync_WithFieldsAndIncludeRelations_RequestsExpandAndFiltersFields()
+    {
+        const string json =
+            """
+            {
+              "id": 42,
+              "rev": 3,
+              "fields": {
+                "System.Title": "Fix login bug",
+                "System.State": "Active",
+                "Microsoft.VSTS.Scheduling.StoryPoints": 5
+              },
+              "url": "https://devops.example.local/_apis/wit/workItems/42",
+              "relations": [
+                {
+                  "rel": "System.LinkTypes.Hierarchy-Reverse",
+                  "url": "https://devops.example.local/DefaultCollection/_apis/wit/workItems/40",
+                  "attributes": { "name": "Parent" }
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var workItem = await client.GetWorkItemAsync(
+            42,
+            ["System.Title"],
+            true,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.True(workItem.Fields["System.Title"].ValueEquals("Fix login bug"));
+        Assert.False(workItem.Fields.ContainsKey("System.State"));
+        Assert.False(workItem.Fields.ContainsKey("Microsoft.VSTS.Scheduling.StoryPoints"));
+        Assert.Equal("Parent", Assert.Single(workItem.Relations!).Attributes!.Name);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("$expand=relations", requestUri);
+        Assert.DoesNotContain("fields=", requestUri);
+    }
+
+    [Fact]
+    public async Task GetWorkItemsAsync_WithFieldsAndIncludeRelations_FiltersEachItem()
+    {
+        const string json =
+            """
+            {
+              "count": 2,
+              "value": [
+                {
+                  "id": 1,
+                  "rev": 1,
+                  "fields": { "System.Title": "First", "System.State": "New" },
+                  "url": "https://devops.example.local/_apis/wit/workItems/1",
+                  "relations": [
+                    { "rel": "System.LinkTypes.Related", "url": "https://devops.example.local/_apis/wit/workItems/9" }
+                  ]
+                },
+                {
+                  "id": 2,
+                  "rev": 4,
+                  "fields": { "System.Title": "Second", "System.State": "Active" },
+                  "url": "https://devops.example.local/_apis/wit/workItems/2"
+                }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var workItems = await client.GetWorkItemsAsync(
+            [1, 2],
+            ["System.Title"],
+            true,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.All(workItems, workItem => Assert.False(workItem.Fields.ContainsKey("System.State")));
+        Assert.True(workItems[0].Fields["System.Title"].ValueEquals("First"));
+        Assert.Single(workItems[0].Relations!);
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("$expand=relations", requestUri);
     }
 }
