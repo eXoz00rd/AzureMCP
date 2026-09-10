@@ -2,7 +2,6 @@ using System.Net;
 using AzureDevOpsServer.Mcp.Configuration;
 using AzureDevOpsServer.Mcp.Tests.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Http.Resilience;
 using Xunit;
 
 namespace AzureDevOpsServer.Mcp.Tests.Configuration;
