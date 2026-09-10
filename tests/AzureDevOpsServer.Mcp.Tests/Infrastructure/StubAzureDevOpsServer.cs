@@ -85,12 +85,16 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
                 return;
             }
 
+            var path = context.Request.Url!.AbsolutePath;
             lock (_requestsGate)
             {
-                _requestPaths.Add(context.Request.Url!.AbsolutePath);
+                _requestPaths.Add(path);
             }
 
-            var body = Encoding.UTF8.GetBytes(ProjectsResponse);
+            var isKnownProjectsRequest = context.Request.HttpMethod == "GET" &&
+                path.EndsWith("_apis/projects", StringComparison.Ordinal);
+            context.Response.StatusCode = isKnownProjectsRequest ? (int)HttpStatusCode.OK : (int)HttpStatusCode.NotFound;
+            var body = Encoding.UTF8.GetBytes(isKnownProjectsRequest ? ProjectsResponse : "{}");
             context.Response.ContentType = "application/json";
             context.Response.ContentLength64 = body.Length;
             await context.Response.OutputStream.WriteAsync(body).ConfigureAwait(false);

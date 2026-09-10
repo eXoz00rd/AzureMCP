@@ -35,6 +35,7 @@ public sealed class StdioServerSmokeTests
                 {
                     [AzureDevOpsServerOptions.CollectionUrlVariable] = azureDevOps.CollectionUrl,
                     [AzureDevOpsServerOptions.PersonalAccessTokenVariable] = "smoke-test-pat",
+                    [AzureDevOpsServerOptions.LogLevelVariable] = "Information",
                 },
                 StandardErrorLines = line => stderrLines.Enqueue(line),
             }
@@ -56,5 +57,10 @@ public sealed class StdioServerSmokeTests
         Assert.NotNull(result.StructuredContent);
         Assert.Contains("Alpha", result.StructuredContent.ToString());
         Assert.Contains(azureDevOps.RequestPaths, path => path.Contains("_apis/projects", StringComparison.Ordinal));
+
+        // ADOS_LOG_LEVEL=Information guarantees the host lifetime messages are emitted, so a
+        // non-empty capture here proves diagnostics actually reach stderr rather than merely
+        // being absent from stdout because nothing was logged.
+        Assert.NotEmpty(stderrLines);
     }
 }
