@@ -23,6 +23,8 @@ public sealed class ToolRegistrationTests
         Assert.Contains(tools, tool => tool.ProtocolTool.Name == "query_work_items");
         Assert.Contains(tools, tool => tool.ProtocolTool.Name == "update_work_item");
         Assert.Contains(tools, tool => tool.ProtocolTool.Name == "create_or_update_wiki_page");
+        Assert.Contains(tools, tool => tool.ProtocolTool.Name == "add_work_item_comment");
+        Assert.Contains(tools, tool => tool.ProtocolTool.Name == "get_work_item_comment");
     }
 
     [Fact]
@@ -39,6 +41,8 @@ public sealed class ToolRegistrationTests
         Assert.DoesNotContain(tools, tool => tool.ProtocolTool.Name == "update_work_item");
         Assert.DoesNotContain(tools, tool => tool.ProtocolTool.Name == "create_or_update_wiki_page");
         Assert.Contains(tools, tool => tool.ProtocolTool.Name == "get_work_item");
+        Assert.Contains(tools, tool => tool.ProtocolTool.Name == "get_work_item_comment");
+        Assert.DoesNotContain(tools, tool => tool.ProtocolTool.Name == "add_work_item_comment");
     }
 
     [Fact]

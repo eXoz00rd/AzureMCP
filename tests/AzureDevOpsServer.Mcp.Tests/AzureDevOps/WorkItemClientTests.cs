@@ -41,6 +41,72 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
     }
 
     [Fact]
+    public async Task AddWorkItemCommentAsync_ReadsIdFromCommentIdWhenIdIsAbsent()
+    {
+        const string json =
+            """
+            {
+              "commentId": 7,
+              "text": "Looks good",
+              "version": 1,
+              "workItemId": 42,
+              "createdBy": { "displayName": "Sebastian", "uniqueName": "sebastian@example.local" },
+              "createdDate": "2026-08-11T10:00:00Z"
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var comment = await client.AddWorkItemCommentAsync(
+            42,
+            "Alpha",
+            "Looks good",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(7, comment.Id);
+        Assert.Equal(1, comment.Version);
+        Assert.Equal(42, comment.WorkItemId);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Contains("Alpha/_apis/wit/workItems/42/comments", request.RequestUri!.AbsoluteUri);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.True(body.RootElement.GetProperty("text").ValueEquals("Looks good"));
+    }
+
+    [Fact]
+    public async Task GetWorkItemCommentAsync_ReadsIdFromIdField()
+    {
+        const string json = """{ "id": 7, "text": "Looks good", "isDeleted": false }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out var handler, response);
+
+        var comment = await client.GetWorkItemCommentAsync(
+            42,
+            7,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(7, comment.Id);
+        Assert.False(comment.IsDeleted);
+        Assert.Contains("Alpha/_apis/wit/workItems/42/comments/7", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task GetWorkItemCommentAsync_WithUnparsableResponse_Throws()
+    {
+        using var response = JsonResponse("not json");
+        var client = CreateClient(out _, response);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+            => client.GetWorkItemCommentAsync(42, 7, "Alpha", TestContext.Current.CancellationToken)
+        );
+
+        Assert.Contains("could not be parsed", exception.Message);
+    }
+
+    [Fact]
     public async Task GetWorkItemRevisionsAsync_ReturnsRevisions()
     {
         const string json =

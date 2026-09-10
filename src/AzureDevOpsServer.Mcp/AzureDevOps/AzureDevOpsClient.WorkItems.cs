@@ -10,6 +10,8 @@ namespace AzureDevOpsServer.Mcp.AzureDevOps;
 
 public sealed partial class AzureDevOpsClient
 {
+    private static readonly JsonSerializerOptions CommentJsonOptions = new(JsonSerializerDefaults.Web);
+
     public async Task<WiqlQueryResult> QueryWorkItemsAsync(
         string wiql,
         string? project,
@@ -86,6 +88,77 @@ public sealed partial class AzureDevOpsClient
         var comments = await response.Content.ReadFromJsonAsync<WorkItemCommentList>(cancellationToken);
         return comments ??
             throw new AzureDevOpsClientException($"The comments response for work item {id} could not be parsed.");
+    }
+
+    public async Task<WorkItemComment> GetWorkItemCommentAsync(
+        int id,
+        int commentId,
+        string? project,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"{Scope(RequireProject(project))}_apis/wit/workItems/{id}/comments/{commentId}?api-version={_options.Value.WorkItemCommentsApiVersion}",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        return await ReadCommentAsync(response, id, cancellationToken);
+    }
+
+    public async Task<WorkItemComment> AddWorkItemCommentAsync(
+        int id,
+        string? project,
+        string text,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"{Scope(RequireProject(project))}_apis/wit/workItems/{id}/comments?api-version={_options.Value.WorkItemCommentsApiVersion}",
+            new { text },
+            cancellationToken
+        );
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        return await ReadCommentAsync(response, id, cancellationToken);
+    }
+
+    // The comments API returns the identifier as "id" on list and get responses, but as
+    // "commentId" (with no "id" member) on add and update responses. A model bound to "id"
+    // alone would report 0 for those, so an id of 0 falls back to reading "commentId" directly.
+    private static async Task<WorkItemComment> ReadCommentAsync(
+        HttpResponseMessage response,
+        int workItemId,
+        CancellationToken cancellationToken)
+    {
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        WorkItemComment? comment;
+        try
+        {
+            comment = JsonSerializer.Deserialize<WorkItemComment>(json, CommentJsonOptions);
+        }
+        catch (JsonException)
+        {
+            comment = null;
+        }
+
+        if (comment is null)
+        {
+            throw new AzureDevOpsClientException($"The comment response for work item {workItemId} could not be parsed.");
+        }
+
+        if (comment.Id != 0)
+        {
+            return comment;
+        }
+
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty("commentId", out var commentIdElement) &&
+            commentIdElement.TryGetInt32(out var commentId) ?
+            comment with { Id = commentId } :
+            comment;
     }
 
     public async Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(

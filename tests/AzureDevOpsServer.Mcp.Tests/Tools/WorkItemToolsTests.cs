@@ -36,18 +36,43 @@ public sealed class WorkItemToolsTests : ToolTestsBase
     }
 
     [Fact]
-    public async Task AddWorkItemCommentAsync_WritesSystemHistory()
+    public async Task AddWorkItemCommentAsync_PostsToCommentsEndpointAndReturnsId()
     {
-        using var response = JsonResponse(WorkItemJson);
+        const string commentJson = """{ "commentId": 7, "text": "Looks good" }""";
+        using var response = JsonResponse(commentJson);
+        var harness = CreateHarness("FallbackProject", response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var comment = await tools.AddWorkItemCommentAsync(
+            42,
+            "Looks good",
+            null,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(7, comment.Id);
+        Assert.Contains("FallbackProject/_apis/wit/workItems/42/comments", harness.RequestUri);
+        using var body = JsonDocument.Parse(harness.Handler.RequestBodies[0]);
+        Assert.True(body.RootElement.GetProperty("text").ValueEquals("Looks good"));
+    }
+
+    [Fact]
+    public async Task GetWorkItemCommentAsync_ReadsCommentById()
+    {
+        const string commentJson = """{ "id": 7, "text": "Looks good" }""";
+        using var response = JsonResponse(commentJson);
         var harness = CreateHarness(null, response);
         var tools = new WorkItemTools(harness.Client, harness.Options);
 
-        await tools.AddWorkItemCommentAsync(42, "Looks good", TestContext.Current.CancellationToken);
+        var comment = await tools.GetWorkItemCommentAsync(
+            42,
+            7,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
 
-        using var body = JsonDocument.Parse(harness.Handler.RequestBodies[0]);
-        var operation = Assert.Single(body.RootElement.EnumerateArray());
-        Assert.True(operation.GetProperty("path").ValueEquals("/fields/System.History"));
-        Assert.True(operation.GetProperty("value").ValueEquals("Looks good"));
+        Assert.Equal(7, comment.Id);
+        Assert.Contains("Alpha/_apis/wit/workItems/42/comments/7", harness.RequestUri);
     }
 
     [Fact]
