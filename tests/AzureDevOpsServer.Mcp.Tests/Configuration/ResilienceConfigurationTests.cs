@@ -9,7 +9,7 @@ namespace AzureDevOpsServer.Mcp.Tests.Configuration;
 
 public sealed class ResilienceConfigurationTests
 {
-    private static HttpClient CreateClient(StubHttpMessageHandler stub)
+    private static ServiceProvider CreateProvider(StubHttpMessageHandler stub)
     {
         var services = new ServiceCollection();
         services
@@ -22,8 +22,7 @@ public sealed class ResilienceConfigurationTests
                 options.Retry.UseJitter = false;
             });
 
-        var provider = services.BuildServiceProvider();
-        return provider.GetRequiredService<IHttpClientFactory>().CreateClient("test");
+        return services.BuildServiceProvider();
     }
 
     [Fact]
@@ -34,7 +33,8 @@ public sealed class ResilienceConfigurationTests
             new HttpResponseMessage(HttpStatusCode.ServiceUnavailable),
             new HttpResponseMessage(HttpStatusCode.OK)
         ]);
-        using var client = CreateClient(stub);
+        using var provider = CreateProvider(stub);
+        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("test");
 
         using var response = await client.GetAsync(
             "https://devops.example.local/_apis/projects",
@@ -53,7 +53,8 @@ public sealed class ResilienceConfigurationTests
     public async Task SendAsync_UnsafeMethodWithTransientFailure_IsNotRetried(string method)
     {
         var stub = new StubHttpMessageHandler([new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)]);
-        using var client = CreateClient(stub);
+        using var provider = CreateProvider(stub);
+        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("test");
         using var request = new HttpRequestMessage(
             new HttpMethod(method),
             "https://devops.example.local/_apis/projects"
