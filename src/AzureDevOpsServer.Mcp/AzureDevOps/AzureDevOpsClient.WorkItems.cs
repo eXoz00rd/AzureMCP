@@ -73,7 +73,9 @@ public sealed partial class AzureDevOpsClient
         var result = await response.Content.ReadFromJsonAsync<ListResult<WorkItem>>(cancellationToken);
         return result?.Value is null ?
             [] :
-            includeRelations ? result.Value.Select(workItem => ApplyFieldFilter(workItem, fields)).ToList() : result.Value;
+            includeRelations && fields is { Count: > 0 } ?
+                result.Value.Select(workItem => ApplyFieldFilter(workItem, fields)).ToList() :
+                result.Value;
     }
 
     // $expand=relations returns every field regardless of the fields list, so a narrowed field
