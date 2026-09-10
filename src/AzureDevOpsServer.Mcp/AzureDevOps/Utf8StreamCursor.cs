@@ -100,8 +100,10 @@ internal sealed class Utf8StreamCursor
                     if (char.IsHighSurrogate(unit))
                     {
                         var low = await ReadLowSurrogateEscapeAsync(cancellationToken).ConfigureAwait(false);
-                        AppendPair(builder, captureLimit, unit, low);
-                        total += 2;
+                        Append(builder, captureLimit, unit);
+                        total++;
+                        Append(builder, captureLimit, low);
+                        total++;
                     }
                     else if (char.IsLowSurrogate(unit))
                     {
@@ -139,15 +141,12 @@ internal sealed class Utf8StreamCursor
             }
 
             var (first, second) = await DecodeUtf8CharAsync(b, cancellationToken).ConfigureAwait(false);
-            if (second is null)
+            Append(builder, captureLimit, first);
+            total++;
+            if (second is not null)
             {
-                Append(builder, captureLimit, first);
+                Append(builder, captureLimit, second.Value);
                 total++;
-            }
-            else
-            {
-                AppendPair(builder, captureLimit, first, second.Value);
-                total += 2;
             }
         }
 
@@ -343,32 +342,20 @@ internal sealed class Utf8StreamCursor
         }
     }
 
-    // Appends a surrogate pair as a single unit: if there is room for only one of the two code
-    // units, neither is appended, so the capture never ends on an unpaired high surrogate.
-    private static void AppendPair(StringBuilder? builder, int captureLimit, char high, char low)
-    {
-        if (builder is not null && builder.Length + 2 <= captureLimit)
-        {
-            builder.Append(high).Append(low);
-        }
-    }
-
     // Slices at maxChars, backing off by one character if that would otherwise cut a surrogate pair
-    // in half and leave an unpaired high surrogate at the end of the result.
+    // in half and leave an unpaired high surrogate at the end of the result. The check applies even
+    // when maxChars does not force a real cut, because Append can itself have stopped capturing mid
+    // pair once captureLimit was reached; keeping this unconditional ensures the returned text is
+    // always both a strict prefix of the decoded string and valid UTF-16.
     private static string Truncate(string text, int maxChars)
     {
-        if (text.Length <= maxChars)
-        {
-            return text;
-        }
-
-        var cut = Math.Max(maxChars, 0);
+        var cut = Math.Min(text.Length, Math.Max(maxChars, 0));
         if (cut > 0 && char.IsHighSurrogate(text[cut - 1]))
         {
             cut--;
         }
 
-        return text[..cut];
+        return cut == text.Length ? text : text[..cut];
     }
 
     private static bool IsWhitespace(byte b)

@@ -545,11 +545,10 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
             TestContext.Current.CancellationToken
         );
 
-        // The dropped pair frees one slot for the next character, so the capture ends with a
-        // trailing 'b' rather than the emoji - the key assertion is that it never ends with a lone
-        // high surrogate.
-        Assert.Equal(prefix + "b", file.Content);
-        Assert.False(char.IsSurrogate(file.Content![^1]));
+        // The lone high surrogate that would otherwise be captured at the boundary is trimmed, so
+        // the result stays a strict prefix of the original content instead of skipping ahead to the
+        // 'b' that follows the emoji.
+        Assert.Equal(prefix, file.Content);
         Assert.True(file.Truncated);
     }
 
