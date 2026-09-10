@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AzureDevOpsServer.Mcp.Configuration;
 using AzureDevOpsServer.Mcp.Tests.Infrastructure;
 using ModelContextProtocol.Client;
@@ -22,7 +23,7 @@ public sealed class StdioServerSmokeTests
         var cancellationToken = cancellation.Token;
 
         await using var azureDevOps = new StubAzureDevOpsServer();
-        var stderrLines = new List<string>();
+        var stderrLines = new ConcurrentQueue<string>();
 
         var transport = new StdioClientTransport(
             new StdioClientTransportOptions
@@ -35,7 +36,7 @@ public sealed class StdioServerSmokeTests
                     [AzureDevOpsServerOptions.CollectionUrlVariable] = azureDevOps.CollectionUrl,
                     [AzureDevOpsServerOptions.PersonalAccessTokenVariable] = "smoke-test-pat",
                 },
-                StandardErrorLines = line => stderrLines.Add(line),
+                StandardErrorLines = line => stderrLines.Enqueue(line),
             }
         );
 

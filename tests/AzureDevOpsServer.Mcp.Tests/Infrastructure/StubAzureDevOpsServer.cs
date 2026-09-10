@@ -33,12 +33,28 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
 
     public StubAzureDevOpsServer()
     {
-        var port = ReserveLoopbackPort();
-        CollectionUrl = $"http://127.0.0.1:{port}/DefaultCollection";
+        const int maxAttempts = 5;
 
-        _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-        _listener.Start();
+        for (var attempt = 1; ; attempt++)
+        {
+            var port = ReserveLoopbackPort();
+            var listener = new HttpListener();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+
+            try
+            {
+                listener.Start();
+                _listener = listener;
+                CollectionUrl = $"http://127.0.0.1:{port}/DefaultCollection";
+                break;
+            }
+            catch (HttpListenerException) when (attempt < maxAttempts)
+            {
+                // Another process claimed the port between ReserveLoopbackPort() and Start(); retry with a new one.
+                listener.Close();
+            }
+        }
+
         _acceptLoop = Task.Run(AcceptLoopAsync);
     }
 
