@@ -15,7 +15,7 @@ dotnet run --project tests/AzureDevOpsServer.Mcp.Tests
 
 ## Workflow
 
-1. Create a branch from `main`, such as `feat/short-description` or `fix/short-description`.
+1. Create a branch from `main`, such as `feat/short-description` or `fix/short-description`. Name its worktree the same as the branch.
 2. Make and verify one focused change.
 3. Open a pull request to `main` ready for review. Never create a draft.
 4. Merge by squashing and delete the branch.
