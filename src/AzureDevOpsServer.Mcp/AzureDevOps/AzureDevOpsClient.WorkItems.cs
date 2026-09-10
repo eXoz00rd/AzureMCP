@@ -48,7 +48,7 @@ public sealed partial class AzureDevOpsClient
         var workItem = await response.Content.ReadFromJsonAsync<WorkItem>(cancellationToken);
         return workItem is null ?
             throw new AzureDevOpsClientException($"The response for work item {id} could not be parsed.") :
-            ApplyFieldFilter(workItem, fields);
+            includeRelations ? ApplyFieldFilter(workItem, fields) : workItem;
     }
 
     public async Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
@@ -73,11 +73,12 @@ public sealed partial class AzureDevOpsClient
         var result = await response.Content.ReadFromJsonAsync<ListResult<WorkItem>>(cancellationToken);
         return result?.Value is null ?
             [] :
-            result.Value.Select(workItem => ApplyFieldFilter(workItem, fields)).ToList();
+            includeRelations ? result.Value.Select(workItem => ApplyFieldFilter(workItem, fields)).ToList() : result.Value;
     }
 
-    // $expand=relations returns every field regardless of the fields list, so a narrowed
-    // field list combined with includeRelations is applied client-side after the fetch.
+    // $expand=relations returns every field regardless of the fields list, so a narrowed field
+    // list combined with includeRelations is applied client-side after the fetch. Not called when
+    // includeRelations is false: the server's own fields= query already narrows that response.
     private static WorkItem ApplyFieldFilter(WorkItem workItem, IReadOnlyList<string>? fields)
     {
         if (fields is null || fields.Count == 0)
@@ -85,9 +86,14 @@ public sealed partial class AzureDevOpsClient
             return workItem;
         }
 
-        var filteredFields = workItem.Fields
-            .Where(field => fields.Contains(field.Key))
-            .ToDictionary(field => field.Key, field => field.Value);
+        var filteredFields = new Dictionary<string, JsonElement>(fields.Count);
+        foreach (var field in fields)
+        {
+            if (workItem.Fields.TryGetValue(field, out var value))
+            {
+                filteredFields[field] = value;
+            }
+        }
 
         return workItem with { Fields = filteredFields };
     }
