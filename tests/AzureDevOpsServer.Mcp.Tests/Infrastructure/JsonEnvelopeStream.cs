@@ -35,6 +35,11 @@ public sealed class JsonEnvelopeStream : Stream
             );
         }
 
+        if (fillLength < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(fillLength), fillLength, "Fill length must not be negative.");
+        }
+
         _prefix = Encoding.UTF8.GetBytes($"{{\"path\":{JsonSerializer.Serialize(path)},\"content\":\"");
         _suffix = "\"}"u8.ToArray();
         _fillLength = fillLength;
@@ -88,10 +93,15 @@ public sealed class JsonEnvelopeStream : Stream
 
     public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
-        _reads++;
-        if (_cancelSource is not null && _cancelAfterReads > 0 && _reads >= _cancelAfterReads)
+        // Only count reads that would actually produce data, so a zero-length or post-EOF read
+        // from a particular stream consumer doesn't shift when cancelAfterReads fires.
+        if (!buffer.IsEmpty && _position < Length)
         {
-            _cancelSource.Cancel();
+            _reads++;
+            if (_cancelSource is not null && _cancelAfterReads > 0 && _reads >= _cancelAfterReads)
+            {
+                _cancelSource.Cancel();
+            }
         }
 
         cancellationToken.ThrowIfCancellationRequested();

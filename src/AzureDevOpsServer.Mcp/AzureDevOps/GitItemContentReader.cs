@@ -93,7 +93,7 @@ internal static class GitItemContentReader
 
 internal readonly record struct GitItemContentReadResult(
     string? Path,
-    string? Content,
+    string Content,
     int TotalChars,
     bool Truncated,
     string BinarySample);
