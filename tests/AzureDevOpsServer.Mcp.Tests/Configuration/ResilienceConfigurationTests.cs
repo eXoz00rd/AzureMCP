@@ -16,9 +16,11 @@ public sealed class ResilienceConfigurationTests
             .ConfigurePrimaryHttpMessageHandler(() => stub)
             .AddAzureDevOpsResilience(options =>
             {
-                // Keep the test fast; the predicate under test is unaffected by timing.
+                // Keep the test fast and pin the retry count so it doesn't drift with the
+                // library's default; the predicate under test is unaffected by either setting.
                 options.Retry.Delay = TimeSpan.Zero;
                 options.Retry.UseJitter = false;
+                options.Retry.MaxRetryAttempts = 2;
             });
 
         return services.BuildServiceProvider();
