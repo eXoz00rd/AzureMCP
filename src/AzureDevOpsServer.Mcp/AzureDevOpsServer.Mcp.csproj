@@ -23,8 +23,33 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
-    <None Include=".mcp\server.json" Pack="true" PackagePath=".mcp/" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <McpManifestSource>$(MSBuildProjectDirectory)/.mcp/server.json</McpManifestSource>
+    <McpManifestVersionToken>0.0.0-managed-by-build</McpManifestVersionToken>
+  </PropertyGroup>
+
+  <!-- The checked-in manifest carries a placeholder version. The packed copy is generated from
+       PackageVersion so the package and its manifest can never disagree.
+       A plain `dotnet pack` runs both Build and _GetPackageFiles in one session, so the target
+       is guarded by _McpManifestPrepared to avoid generating the file and appending the pack
+       item twice. -->
+  <Target Name="GenerateMcpManifest" BeforeTargets="Build;_GetPackageFiles" Condition="'$(_McpManifestPrepared)' != 'true'">
+    <PropertyGroup>
+      <!-- IntermediateOutputPath is only set once the SDK targets are imported, so it cannot be
+           resolved in a file-level PropertyGroup. -->
+      <McpManifestGenerated>$(IntermediateOutputPath)mcp/server.json</McpManifestGenerated>
+      <_McpManifestRaw>$([System.IO.File]::ReadAllText('$(McpManifestSource)'))</_McpManifestRaw>
+      <_McpManifestContent>$(_McpManifestRaw.Replace('$(McpManifestVersionToken)', '$(PackageVersion)'))</_McpManifestContent>
+      <_McpManifestPrepared>true</_McpManifestPrepared>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)mcp" />
+    <WriteLinesToFile File="$(McpManifestGenerated)" Lines="$(_McpManifestContent)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <None Include="$(McpManifestGenerated)" Pack="true" PackagePath=".mcp/" Visible="false" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
