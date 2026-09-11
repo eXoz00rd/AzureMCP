@@ -102,4 +102,46 @@ public sealed class HtmlTextTests
 
         Assert.Equal("the doc (https://example.com/doc)", text);
     }
+
+    [Fact]
+    public void ToPlainText_SeparatesTableCellsInsteadOfConcatenatingThem()
+    {
+        var text = HtmlText.ToPlainText("<table><tr><td>Owner</td><td>Value</td></tr></table>");
+
+        Assert.Equal("Owner\tValue", text);
+    }
+
+    [Fact]
+    public void ToPlainText_SeparatesMultipleTableRows()
+    {
+        var text = HtmlText.ToPlainText(
+            "<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>"
+        );
+
+        Assert.Equal("A\tB\nC\tD", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithComparisonTextInsideRealHtml_PreservesTheComparisonText()
+    {
+        var text = HtmlText.ToPlainText("<p>if (x &lt; 5 and y &gt; 3)</p>");
+
+        Assert.Equal("if (x < 5 and y > 3)", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithUnescapedAngleBracketsInsideRealHtml_TreatsThemAsLiteralText()
+    {
+        var text = HtmlText.ToPlainText("<p>if (x < 5 and y > 3)</p>");
+
+        Assert.Equal("if (x < 5 and y > 3)", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithGenericTypeTextInsideRealHtml_KeepsTheGenericTypeText()
+    {
+        var text = HtmlText.ToPlainText("<p>Returns a <b>List<Item></b> result.</p>");
+
+        Assert.Equal("Returns a List<Item> result.", text);
+    }
 }

@@ -15,6 +15,22 @@ public sealed class WorkItemTools
     private const string DescriptionFormatHtml = "html";
     private const string DescriptionFormatText = "text";
 
+    // Whether a field is HTML is a property of the field itself, not something safely inferable
+    // from its value: a plain field can legitimately contain tag-shaped text (for example a title
+    // "Fix <span> rendering"). Restricting conversion to the known HTML field reference names used
+    // across the built-in Azure DevOps process templates keeps the "plain fields are returned
+    // exactly as sent" guarantee unconditional instead of heuristic.
+    private static readonly HashSet<string> RichTextFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "System.Description",
+        "Microsoft.VSTS.TCM.ReproSteps",
+        "Microsoft.VSTS.TCM.SystemInfo",
+        "Microsoft.VSTS.Common.AcceptanceCriteria",
+        "Microsoft.VSTS.CMMI.Justification",
+        "Microsoft.VSTS.CMMI.Symptom",
+        "Microsoft.VSTS.CMMI.RootCause"
+    };
+
     private readonly AzureDevOpsClient _client;
     private readonly IOptions<AzureDevOpsServerOptions> _options;
 
@@ -68,8 +84,9 @@ public sealed class WorkItemTools
         );
     }
 
-    // Only string field values that look like HTML are converted, so plain fields (titles,
-    // states, identities) are returned exactly as the server sent them.
+    // Only known rich-text fields are converted, so plain fields (titles, states, identities,
+    // and any field outside the allowlist) are returned exactly as the server sent them, even
+    // when their value happens to contain tag-shaped text.
     private static WorkItem ApplyDescriptionFormat(WorkItem workItem, string descriptionFormat)
     {
         if (descriptionFormat != DescriptionFormatText)
@@ -80,7 +97,8 @@ public sealed class WorkItemTools
         var converted = new Dictionary<string, JsonElement>(workItem.Fields.Count);
         foreach (var (name, value) in workItem.Fields)
         {
-            converted[name] = value.ValueKind == JsonValueKind.String &&
+            converted[name] = RichTextFields.Contains(name) &&
+                value.ValueKind == JsonValueKind.String &&
                 HtmlText.LooksLikeHtml(value.GetString() ?? string.Empty) ?
                 JsonSerializer.SerializeToElement(HtmlText.ToPlainText(value.GetString()!)) :
                 value;
@@ -102,7 +120,7 @@ public sealed class WorkItemTools
         [Description("When true, also returns relations even when a field list is given.")]
         bool includeRelations = false,
         [Description(
-            "Format for rich-text fields such as System.Description: 'html' (default, unchanged) or 'text' (tags stripped, entities decoded)."
+            "Format for known rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom/Root Cause fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). Other fields are always returned as sent."
         )]
         string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
@@ -123,7 +141,7 @@ public sealed class WorkItemTools
         [Description("When true, also returns relations even when a field list is given.")]
         bool includeRelations = false,
         [Description(
-            "Format for rich-text fields such as System.Description: 'html' (default, unchanged) or 'text' (tags stripped, entities decoded)."
+            "Format for known rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom/Root Cause fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). Other fields are always returned as sent."
         )]
         string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
@@ -158,7 +176,7 @@ public sealed class WorkItemTools
         [Description("Maximum number of revisions to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
         [Description(
-            "Format for rich-text fields such as System.Description: 'html' (default, unchanged) or 'text' (tags stripped, entities decoded)."
+            "Format for known rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom/Root Cause fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). Other fields are always returned as sent."
         )]
         string? descriptionFormat = null,
         CancellationToken cancellationToken = default)

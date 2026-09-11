@@ -62,6 +62,30 @@ public sealed class StdioServerSmokeTests
         Assert.Contains("Alpha", result.StructuredContent.ToString());
         Assert.Contains(azureDevOps.RequestPaths, path => path.Contains("_apis/projects", StringComparison.Ordinal));
 
+        // Exercises descriptionFormat over the real MCP argument-binding and response-serialization
+        // path, not just direct C# calls into WorkItemTools, so a regression in how the registered
+        // tool wires the parameter through to the converter would fail here.
+        var workItemResult = await client.CallToolAsync(
+            "get_work_item",
+            new Dictionary<string, object?> { ["id"] = 1, ["descriptionFormat"] = "text" },
+            cancellationToken: cancellationToken
+        );
+
+        Assert.True(
+            workItemResult.IsError is null or false,
+            $"Expected a successful tool call, but IsError was {workItemResult.IsError}."
+        );
+        Assert.NotNull(workItemResult.StructuredContent);
+        var description = workItemResult.StructuredContent.ToString();
+        Assert.Contains("Steps to reproduce:", description);
+        Assert.Contains("- Open the app", description);
+        Assert.DoesNotContain("<p>", description);
+        Assert.DoesNotContain("<li>", description);
+        Assert.Contains(
+            azureDevOps.RequestPaths,
+            path => path.Contains("_apis/wit/workitems/1", StringComparison.Ordinal)
+        );
+
         // ADOS_LOG_LEVEL=Information guarantees the host lifetime messages are emitted, so a
         // non-empty capture here proves diagnostics actually reach stderr rather than merely
         // being absent from stdout because nothing was logged.

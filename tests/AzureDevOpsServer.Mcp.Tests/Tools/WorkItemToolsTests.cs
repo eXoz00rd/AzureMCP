@@ -80,6 +80,21 @@ public sealed class WorkItemToolsTests : ToolTestsBase
     }
 
     [Fact]
+    public async Task GetWorkItemAsync_TextFormat_LeavesNonAllowlistedFieldWithLiteralTagTextUntouched()
+    {
+        const string json =
+            """{ "id": 1, "rev": 1, "fields": { "System.Title": "Fix <span> rendering", "System.Description": "<p>Hello <b>world</b></p>" }, "url": "https://devops.example.local/_apis/wit/workItems/1" }""";
+        using var response = JsonResponse(json);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var workItem = await tools.GetWorkItemAsync(1, null, false, "text", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Fix <span> rendering", workItem.Fields["System.Title"].GetString());
+        Assert.Equal("Hello world", workItem.Fields["System.Description"].GetString());
+    }
+
+    [Fact]
     public async Task GetWorkItemsAsync_TextFormat_ConvertsEachItem()
     {
         const string json =

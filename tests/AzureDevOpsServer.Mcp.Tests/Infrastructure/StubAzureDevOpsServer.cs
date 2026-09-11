@@ -16,6 +16,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
     private readonly object _requestsGate = new();
     private readonly List<string> _requestPaths = [];
     private readonly string _projectsResponse;
+    private readonly string _workItemResponse;
 
     public StubAzureDevOpsServer()
     {
@@ -53,6 +54,18 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
                   "url": "{{CollectionUrl}}/_apis/projects/0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb"
                 }
               ]
+            }
+            """;
+        _workItemResponse =
+            $$"""
+            {
+              "id": 1,
+              "rev": 3,
+              "fields": {
+                "System.Title": "Sample bug",
+                "System.Description": "<p>Steps to <b>reproduce</b>:</p><ul><li>Open the app</li><li>Click submit</li></ul>"
+              },
+              "url": "{{CollectionUrl}}/_apis/wit/workitems/1"
             }
             """;
         _acceptLoop = Task.Run(AcceptLoopAsync);
@@ -93,8 +106,15 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
 
             var isKnownProjectsRequest = context.Request.HttpMethod == "GET" &&
                 path.EndsWith("_apis/projects", StringComparison.Ordinal);
-            context.Response.StatusCode = isKnownProjectsRequest ? (int)HttpStatusCode.OK : (int)HttpStatusCode.NotFound;
-            var body = Encoding.UTF8.GetBytes(isKnownProjectsRequest ? _projectsResponse : "{}");
+            var isKnownWorkItemRequest = context.Request.HttpMethod == "GET" &&
+                path.Contains("_apis/wit/workitems/", StringComparison.OrdinalIgnoreCase);
+            var responseBody = isKnownProjectsRequest ? _projectsResponse :
+                isKnownWorkItemRequest ? _workItemResponse :
+                "{}";
+            context.Response.StatusCode = isKnownProjectsRequest || isKnownWorkItemRequest ?
+                (int)HttpStatusCode.OK :
+                (int)HttpStatusCode.NotFound;
+            var body = Encoding.UTF8.GetBytes(responseBody);
             context.Response.ContentType = "application/json";
             context.Response.ContentLength64 = body.Length;
             await context.Response.OutputStream.WriteAsync(body).ConfigureAwait(false);

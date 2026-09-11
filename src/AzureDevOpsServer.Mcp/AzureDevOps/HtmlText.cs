@@ -19,8 +19,8 @@ internal static partial class HtmlText
 
     // A value is only treated as HTML when it contains at least one recognizable tag, so a plain
     // value that happens to contain "<" or ">" (a title like "List<Item>") is left untouched
-    // instead of being misread as markup. Uses the same quote-aware tag scan as ToPlainText, so a
-    // ">" inside an attribute value does not hide a real tag from detection.
+    // instead of being misread as markup. Uses the same tag scan as ToPlainText, so detection and
+    // conversion always agree on what counts as a real tag.
     public static bool LooksLikeHtml(string value)
     {
         var index = 0;
@@ -32,19 +32,12 @@ internal static partial class HtmlText
                 return false;
             }
 
-            var tagEnd = FindTagEnd(value, tagStart);
-            if (tagEnd < 0)
-            {
-                return false;
-            }
-
-            var tag = value[(tagStart + 1)..tagEnd];
-            if (KnownTags.Contains(ExtractTagName(tag, tag.StartsWith('/'))))
+            if (TryReadKnownTag(value, tagStart, out _, out _, out _))
             {
                 return true;
             }
 
-            index = tagEnd + 1;
+            index = tagStart + 1;
         }
 
         return false;
@@ -65,20 +58,62 @@ internal static partial class HtmlText
                 break;
             }
 
-            builder.Append(html, index, tagStart - index);
-
-            var tagEnd = FindTagEnd(html, tagStart);
-            if (tagEnd < 0)
+            // Only a span that is both syntactically a tag and names a tag this converter knows
+            // about is treated as markup. Anything else — a bare comparison like "x < 5", or a
+            // generic type like "List<Item>" — is literal text, including its angle brackets, so
+            // it is preserved rather than silently swallowed as an unrecognized tag.
+            if (!TryReadKnownTag(html, tagStart, out var tagEnd, out var tag, out _))
             {
-                builder.Append(html, tagStart, html.Length - tagStart);
-                break;
+                builder.Append(html, index, tagStart - index + 1);
+                index = tagStart + 1;
+                continue;
             }
 
-            AppendTagReplacement(builder, html[(tagStart + 1)..tagEnd], anchorHrefs);
+            builder.Append(html, index, tagStart - index);
+            AppendTagReplacement(builder, tag, anchorHrefs);
             index = tagEnd + 1;
         }
 
         return CollapseWhitespace(WebUtility.HtmlDecode(builder.ToString()));
+    }
+
+    // Reads the tag starting at "<" (tagStart) and reports whether it is both a syntactically
+    // valid, quote-aware tag and one of the known tag names this converter understands. A span
+    // that merely looks tag-shaped ("<Item>" inside "List<Item>") is rejected here rather than
+    // silently consumed, so its text survives in the output.
+    private static bool TryReadKnownTag(string html, int tagStart, out int tagEnd, out string tag, out bool closing)
+    {
+        tagEnd = -1;
+        tag = string.Empty;
+        closing = false;
+
+        var nameStart = tagStart + 1;
+        if (nameStart < html.Length && html[nameStart] == '/')
+        {
+            closing = true;
+            nameStart++;
+        }
+
+        if (nameStart >= html.Length || !char.IsAsciiLetter(html[nameStart]))
+        {
+            return false;
+        }
+
+        var end = FindTagEnd(html, tagStart);
+        if (end < 0)
+        {
+            return false;
+        }
+
+        var content = html[(tagStart + 1)..end];
+        if (!KnownTags.Contains(ExtractTagName(content, closing)))
+        {
+            return false;
+        }
+
+        tagEnd = end;
+        tag = content;
+        return true;
     }
 
     // Tag boundaries are quote-aware so a ">" inside an attribute value (for example
@@ -140,6 +175,13 @@ internal static partial class HtmlText
                 if (closing)
                 {
                     builder.Append('\n');
+                }
+
+                break;
+            case "td" or "th":
+                if (closing)
+                {
+                    builder.Append('\t');
                 }
 
                 break;
