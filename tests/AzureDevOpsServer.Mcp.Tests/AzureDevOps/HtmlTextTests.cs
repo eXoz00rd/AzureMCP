@@ -172,4 +172,60 @@ public sealed class HtmlTextTests
         Assert.StartsWith("Before", text);
         Assert.EndsWith("After", text);
     }
+
+    [Fact]
+    public void ToPlainText_SeparatesCodeBlockFromFollowingContent()
+    {
+        var text = HtmlText.ToPlainText("<pre>code</pre><p>After</p>");
+
+        Assert.Equal("code\nAfter", text);
+    }
+
+    [Fact]
+    public void ToPlainText_SeparatesPrecedingInlineContentFromCodeBlock()
+    {
+        var text = HtmlText.ToPlainText("<b>Note:</b><pre>code</pre>");
+
+        Assert.Equal("Note:\ncode", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithCustomElementName_DoesNotMisreadItAsAKnownTag()
+    {
+        var text = HtmlText.ToPlainText("<p-custom>Note</p-custom>");
+
+        Assert.Equal("<p-custom>Note</p-custom>", text);
+    }
+
+    [Fact]
+    public void LooksLikeHtml_WithCustomElementName_ReturnsFalse()
+    {
+        Assert.False(HtmlText.LooksLikeHtml("<p-custom>Note</p-custom>"));
+    }
+
+    [Fact]
+    public void ToPlainText_WithHrefLookingTextInsideAnotherAttribute_UsesTheRealHrefValue()
+    {
+        var text = HtmlText.ToPlainText(
+            """<a title="tooltip href='fake'" href="https://example.com">the doc</a>"""
+        );
+
+        Assert.Equal("the doc (https://example.com)", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithBlockTagInsideTableCell_StillSeparatesCells()
+    {
+        var text = HtmlText.ToPlainText("<table><tr><td><p>Owner</p></td><td>Value</td></tr></table>");
+
+        Assert.Equal("Owner\tValue", text);
+    }
+
+    [Fact]
+    public void ToPlainText_SeparatesListFromFollowingContent()
+    {
+        var text = HtmlText.ToPlainText("<ul><li>One</li></ul><p>After</p>");
+
+        Assert.Equal("- One\nAfter", text);
+    }
 }

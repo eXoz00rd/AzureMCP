@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace AzureDevOpsServer.Mcp.AzureDevOps;
 
@@ -8,7 +7,7 @@ namespace AzureDevOpsServer.Mcp.AzureDevOps;
 // stored and returned as HTML. This converts a field value to plain text without pulling in a
 // full HTML parser dependency for what is, in practice, a small set of tags emitted by the
 // Azure DevOps Server rich text editor.
-internal static partial class HtmlText
+internal static class HtmlText
 {
     // A Private Use Area character standing in for a newline that must survive
     // CollapseWhitespace's per-line trimming untouched, because it falls inside a <pre>/<code>
@@ -54,6 +53,7 @@ internal static partial class HtmlText
         var anchorHrefs = new Stack<string?>();
         var index = 0;
         var preserveDepth = 0;
+        var cellDepth = 0;
 
         while (index < html.Length)
         {
@@ -77,15 +77,34 @@ internal static partial class HtmlText
 
             AppendLiteral(builder, html, index, tagStart - index, preserveDepth > 0);
 
-            // <pre>/<code> content is whitespace-significant, so its newlines and indentation
-            // must survive CollapseWhitespace's per-line trimming below untouched.
-            if (ExtractTagName(tag, closing) is "pre" or "code")
+            var name = ExtractTagName(tag, closing);
+            if (name is "pre" or "code")
             {
+                // <pre>/<code> content is whitespace-significant, so its newlines and indentation
+                // must survive CollapseWhitespace's per-line trimming below untouched. A real
+                // boundary newline on both sides keeps adjacent content from joining onto the
+                // block when there is no other separator around it.
                 preserveDepth = closing ? Math.Max(0, preserveDepth - 1) : preserveDepth + 1;
+                builder.Append('\n');
+            }
+            else if (name is "td" or "th")
+            {
+                // Tracked here (rather than left to AppendTagReplacement) so nested block tags
+                // inside a cell (case below) can be told to stay silent instead of breaking the
+                // cell across lines, which would otherwise strip the tab as leading whitespace.
+                if (closing)
+                {
+                    cellDepth = Math.Max(0, cellDepth - 1);
+                    builder.Append('\t');
+                }
+                else
+                {
+                    cellDepth++;
+                }
             }
             else
             {
-                AppendTagReplacement(builder, tag, anchorHrefs, preserveDepth > 0);
+                AppendTagReplacement(builder, tag, anchorHrefs, preserveDepth > 0, cellDepth > 0);
             }
 
             index = tagEnd + 1;
@@ -193,7 +212,12 @@ internal static partial class HtmlText
         return -1;
     }
 
-    private static void AppendTagReplacement(StringBuilder builder, string tag, Stack<string?> anchorHrefs, bool preserving)
+    private static void AppendTagReplacement(
+        StringBuilder builder,
+        string tag,
+        Stack<string?> anchorHrefs,
+        bool preserving,
+        bool insideTableCell)
     {
         var closing = tag.StartsWith('/');
         var name = ExtractTagName(tag, closing);
@@ -204,15 +228,25 @@ internal static partial class HtmlText
             case "br":
                 builder.Append(newline);
                 break;
+            // The bullet prefix is emitted on open and the line break on close (rather than a
+            // leading break on open), so consecutive items are separated without an extra blank
+            // line, and content that follows the list still gets a break after the last item.
             case "li":
-                if (!closing)
+                if (closing)
                 {
-                    builder.Append(newline).Append("- ");
+                    builder.Append(newline);
+                }
+                else
+                {
+                    builder.Append("- ");
                 }
 
                 break;
             case "p" or "div" or "blockquote" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6":
-                if (closing)
+                // A block tag nested inside a table cell would otherwise split the cell across
+                // lines, stranding the closing td/th's tab as leading whitespace that
+                // CollapseWhitespace then trims away.
+                if (closing && !insideTableCell)
                 {
                     builder.Append(newline).Append(newline);
                 }
@@ -222,13 +256,6 @@ internal static partial class HtmlText
                 if (closing)
                 {
                     builder.Append(newline);
-                }
-
-                break;
-            case "td" or "th":
-                if (closing)
-                {
-                    builder.Append('\t');
                 }
 
                 break;
@@ -242,14 +269,85 @@ internal static partial class HtmlText
                 }
                 else
                 {
-                    var match = HrefRegex().Match(tag);
-                    anchorHrefs.Push(match.Success ? match.Groups[1].Value : null);
+                    anchorHrefs.Push(FindHrefValue(tag));
                 }
 
                 break;
         }
     }
 
+    // Quote-aware search for an "href" attribute: a candidate at a proper attribute-name
+    // boundary (start of the tag content, or after whitespace) that is not inside another
+    // attribute's quoted value. This keeps "data-href" from matching and keeps an "href"-shaped
+    // substring inside another attribute's value (for example title="… href='fake'") from being
+    // read as the real link target.
+    private static string? FindHrefValue(string tag)
+    {
+        var inQuote = '\0';
+
+        for (var i = 0; i < tag.Length; i++)
+        {
+            var c = tag[i];
+            if (inQuote != '\0')
+            {
+                if (c == inQuote)
+                {
+                    inQuote = '\0';
+                }
+
+                continue;
+            }
+
+            if (c is '"' or '\'')
+            {
+                inQuote = c;
+                continue;
+            }
+
+            var atBoundary = i == 0 || char.IsWhiteSpace(tag[i - 1]);
+            if (!atBoundary || i + 4 > tag.Length ||
+                string.Compare(tag, i, "href", 0, 4, StringComparison.OrdinalIgnoreCase) != 0)
+            {
+                continue;
+            }
+
+            var j = i + 4;
+            while (j < tag.Length && char.IsWhiteSpace(tag[j]))
+            {
+                j++;
+            }
+
+            if (j >= tag.Length || tag[j] != '=')
+            {
+                continue;
+            }
+
+            j++;
+            while (j < tag.Length && char.IsWhiteSpace(tag[j]))
+            {
+                j++;
+            }
+
+            if (j >= tag.Length || tag[j] is not ('"' or '\''))
+            {
+                continue;
+            }
+
+            var quote = tag[j];
+            var valueStart = j + 1;
+            var valueEnd = tag.IndexOf(quote, valueStart);
+            if (valueEnd >= 0)
+            {
+                return tag[valueStart..valueEnd];
+            }
+        }
+
+        return null;
+    }
+
+    // A name must be followed by whitespace, the self-closing "/", or the end of the tag
+    // content to be accepted; otherwise it is a prefix of a longer, unrecognized name (for
+    // example "p-custom" must not be read as the known tag "p").
     private static string ExtractTagName(string tag, bool closing)
     {
         var start = closing ? 1 : 0;
@@ -257,6 +355,11 @@ internal static partial class HtmlText
         while (end < tag.Length && char.IsLetterOrDigit(tag[end]))
         {
             end++;
+        }
+
+        if (end < tag.Length && tag[end] != '/' && !char.IsWhiteSpace(tag[end]))
+        {
+            return string.Empty;
         }
 
         return tag[start..end].ToLowerInvariant();
@@ -290,9 +393,4 @@ internal static partial class HtmlText
 
         return builder.ToString();
     }
-
-    // Requires "href" to start at the beginning of the tag content or after whitespace, so
-    // "data-href" is not misread as the "href" attribute.
-    [GeneratedRegex("(?:^|\\s)href\\s*=\\s*[\"']([^\"']*)[\"']", RegexOptions.IgnoreCase)]
-    private static partial Regex HrefRegex();
 }

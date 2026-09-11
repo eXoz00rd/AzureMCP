@@ -106,8 +106,11 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
 
             var isKnownProjectsRequest = context.Request.HttpMethod == "GET" &&
                 path.EndsWith("_apis/projects", StringComparison.Ordinal);
+            // Matches only the single-work-item route this fixture actually models; a broader
+            // Contains check would also (incorrectly) answer requests for revisions, comments,
+            // or other work item subroutes with this same canned response.
             var isKnownWorkItemRequest = context.Request.HttpMethod == "GET" &&
-                path.Contains("_apis/wit/workitems/", StringComparison.OrdinalIgnoreCase);
+                path.EndsWith("_apis/wit/workitems/1", StringComparison.OrdinalIgnoreCase);
             var responseBody = isKnownProjectsRequest ? _projectsResponse :
                 isKnownWorkItemRequest ? _workItemResponse :
                 "{}";
