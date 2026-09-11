@@ -12,6 +12,71 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
     private const string RevisionError = """{"message":"Original rejection","typeKey":"WorkItemRevisionMismatchException"}""";
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LegacySignature_RemainsCallableWithoutRevision(bool tool)
+    {
+        using var response = JsonResponse(WorkItemJson);
+        var client = CreateClient(out var handler, response);
+        object target = tool ? new AzureDevOpsServer.Mcp.Tools.WorkItemTools(client, CreateOptions(null)) : client;
+        var fieldType = tool ? typeof(Dictionary<string, string>) : typeof(IReadOnlyDictionary<string, string>);
+        var method = target.GetType().GetMethod("UpdateWorkItemAsync", [typeof(int), fieldType, typeof(CancellationToken)]);
+        Assert.NotNull(method);
+        var call = Assert.IsAssignableFrom<Task>(method.Invoke(target, [42, Fields, TestContext.Current.CancellationToken]));
+        await call;
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.Equal("add", Assert.Single(body.RootElement.EnumerateArray()).GetProperty("op").GetString());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ErrorBody_IsStreamedOnceAndReportsTruncation(bool oversized)
+    {
+        var payload = oversized ? new string('x', ResponseLimits.DefaultMaxChars + 1) : """{"message":"Invalid field"}""";
+        using var content = new StreamingErrorContent(payload);
+        using var rejected = new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = content };
+        var client = CreateClient(out var handler, rejected);
+        var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
+            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+        Assert.Single(handler.Requests);
+        Assert.Equal(1, content.StreamReads);
+        Assert.Equal(oversized, error.Message.Contains("Error response truncated.", StringComparison.Ordinal));
+        Assert.True(error.Message.Length < 1000);
+        if (!oversized)
+        {
+            Assert.Contains("Invalid field", error.Message);
+        }
+    }
+
+    private sealed class StreamingErrorContent : HttpContent
+    {
+        private readonly string _payload;
+
+        public StreamingErrorContent(string payload)
+        {
+            _payload = payload;
+        }
+
+        public int StreamReads { get; private set; }
+
+        protected override Task<Stream> CreateContentReadStreamAsync()
+        {
+            StreamReads++;
+            return Task.FromResult<Stream>(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(_payload)));
+        }
+
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+            => throw new InvalidOperationException("Error responses must not be buffered or read twice.");
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
+    [Theory]
     [InlineData("""{"id":42,"fields":{}}""")]
     [InlineData("""{"id":42,"rev":0,"fields":{}}""")]
     [InlineData("""{"id":42,"rev":-1,"fields":{}}""")]

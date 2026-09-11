@@ -18,7 +18,7 @@ namespace AzureDevOpsServer.Mcp.Tests.EndToEnd;
 public sealed class StdioServerSmokeTests
 {
     [Fact]
-    public async Task Server_OverStdio_InitializesListsToolsAndPromptsAndCallsAReadOnlyTool()
+    public async Task Server_OverStdio_InitializesListsToolsAndPromptsAndCallsReadAndWriteTools()
     {
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         cancellation.CancelAfter(TimeSpan.FromSeconds(30));

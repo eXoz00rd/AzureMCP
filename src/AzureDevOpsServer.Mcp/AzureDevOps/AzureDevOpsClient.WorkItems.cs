@@ -409,11 +409,19 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException("The create work item response could not be parsed.");
     }
 
+    public Task<WorkItem> UpdateWorkItemAsync(
+        int id,
+        IReadOnlyDictionary<string, string> fields,
+        CancellationToken cancellationToken)
+    {
+        return UpdateWorkItemAsync(id, fields, cancellationToken, null);
+    }
+
     public async Task<WorkItem> UpdateWorkItemAsync(
         int id,
         IReadOnlyDictionary<string, string> fields,
         CancellationToken cancellationToken,
-        int? expectedRevision = null)
+        int? expectedRevision)
     {
         if (expectedRevision is <= 0)
         {
@@ -428,19 +436,27 @@ public sealed partial class AzureDevOpsClient
             Content = CreateJsonPatchContent(fields, expectedRevision)
         };
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (expectedRevision is not null &&
-            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed &&
-            await IsRevisionMismatchAsync(response, cancellationToken))
+            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed)
         {
-            var currentRevision = await TryGetCurrentRevisionAsync(id, cancellationToken);
-            if (currentRevision is not null && currentRevision != expectedRevision)
+            var body = await BoundedText.ReadAsync(response.Content, ResponseLimits.DefaultMaxChars, cancellationToken);
+            if (!body.Truncated && IsRevisionMismatch(body.Text))
             {
-                throw new AzureDevOpsClientException(
-                    $"Update rejected: work item {id} has changed since revision {expectedRevision}; current revision is {currentRevision}. Read the work item again, reconcile the changes, and retry with its current revision."
-                );
+                var currentRevision = await TryGetCurrentRevisionAsync(id, cancellationToken);
+                if (currentRevision is not null && currentRevision != expectedRevision)
+                {
+                    throw new AzureDevOpsClientException(
+                        $"Update rejected: work item {id} has changed since revision {expectedRevision}; current revision is {currentRevision}. Read the work item again, reconcile the changes, and retry with its current revision."
+                    );
+                }
             }
+
+            var truncation = body.Truncated ? " Error response truncated." : string.Empty;
+            throw new AzureDevOpsClientException(
+                $"Azure DevOps Server request failed with status {(int)response.StatusCode} ({response.StatusCode}). {ExtractErrorMessage(body.Text)}{truncation}"
+            );
         }
 
         await EnsureSuccessAsync(response, cancellationToken);
@@ -450,9 +466,8 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException($"The update response for work item {id} could not be parsed.");
     }
 
-    private static async Task<bool> IsRevisionMismatchAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    private static bool IsRevisionMismatch(string body)
     {
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
         try
         {
             using var document = JsonDocument.Parse(body);

@@ -230,6 +230,14 @@ public sealed class WorkItemTools
         return _client.CreateWorkItemAsync(effectiveProject, type, allFields, cancellationToken);
     }
 
+    public Task<WorkItem> UpdateWorkItemAsync(
+        int id,
+        Dictionary<string, string> fields,
+        CancellationToken cancellationToken)
+    {
+        return UpdateWorkItemAsync(id, fields, null, cancellationToken);
+    }
+
     [McpServerTool(Name = "update_work_item", Destructive = true, UseStructuredContent = true)]
     [Description("Updates fields of an existing work item. Supply expectedRevision from the last read to reject concurrent changes atomically; omit it for an unconditional update.")]
     public Task<WorkItem> UpdateWorkItemAsync(
