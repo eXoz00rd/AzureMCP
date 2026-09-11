@@ -66,6 +66,21 @@ public sealed partial class ToolSchemaTests
         Assert.Equal(new[] { "pullRequestId", "repository", "workItemId" }, required);
     }
 
+    [Theory]
+    [InlineData("get_work_item")]
+    [InlineData("get_work_items")]
+    [InlineData("get_work_item_revisions")]
+    public void WorkItemReadTools_DescriptionFormatIsOptionalInSchema(string toolName)
+    {
+        var method = ToolMethods(typeof(WorkItemTools))
+            .Single(candidate => candidate.GetCustomAttribute<McpServerToolAttribute>()!.Name == toolName);
+
+        var schema = McpServerTool.Create(method, _ => null!).ProtocolTool.InputSchema;
+
+        Assert.True(schema.GetProperty("properties").TryGetProperty("descriptionFormat", out _));
+        Assert.DoesNotContain("descriptionFormat", RequiredNames(method));
+    }
+
     [Fact]
     public void LimitParameters_DocumentTheirValidRange()
     {
