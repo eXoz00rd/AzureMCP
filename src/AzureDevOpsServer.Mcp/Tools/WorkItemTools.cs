@@ -94,8 +94,10 @@ public sealed class WorkItemTools
     }
 
     [McpServerTool(Name = "get_work_item_revisions", ReadOnly = true, UseStructuredContent = true)]
-    [Description("Gets the revision history of a work item so field changes over time can be compared.")]
-    public Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(
+    [Description(
+        "Gets the revision history of a work item so field changes over time can be compared. The result reports whether it was truncated, so raise the limit when it was."
+    )]
+    public Task<LimitedList<WorkItem>> GetWorkItemRevisionsAsync(
         [Description("Work item id.")] int id,
         [Description("Maximum number of revisions to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,

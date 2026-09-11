@@ -30,9 +30,9 @@ public sealed class ReleaseTools
 
     [McpServerTool(Name = "list_releases", ReadOnly = true, UseStructuredContent = true)]
     [Description(
-        "Lists recent releases of a project, optionally filtered by release definition. Requires a project name or ADOS_DEFAULT_PROJECT."
+        "Lists recent releases of a project, optionally filtered by release definition. Requires a project name or ADOS_DEFAULT_PROJECT. The result reports whether it was truncated, so raise the limit when it was."
     )]
-    public Task<IReadOnlyList<Release>> ListReleasesAsync(
+    public Task<LimitedList<Release>> ListReleasesAsync(
         [Description("Optional release definition id to filter by.")] int? definitionId = null,
         [Description("Maximum number of releases to return. Defaults to 20. Valid range 1-1000.")]
         int? top = null,
@@ -74,9 +74,9 @@ public sealed class ReleaseTools
 
     [McpServerTool(Name = "list_release_approvals", ReadOnly = true, UseStructuredContent = true)]
     [Description(
-        "Lists pending deployment approvals of a project, optionally for a single release. Shows which gate is blocking a deployment."
+        "Lists pending deployment approvals of a project, optionally for a single release. Shows which gate is blocking a deployment. The result reports whether it was truncated, so raise the limit when it was."
     )]
-    public Task<IReadOnlyList<ReleaseApproval>> ListReleaseApprovalsAsync(
+    public Task<LimitedList<ReleaseApproval>> ListReleaseApprovalsAsync(
         [Description("Optional release id to filter by.")] int? releaseId = null,
         [Description("Maximum number of approvals to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,

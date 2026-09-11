@@ -16,7 +16,7 @@ public sealed class BuildToolsTests : ToolTestsBase
         await tools.ListBuildsAsync(null, null, null, TestContext.Current.CancellationToken);
 
         Assert.Contains("/FallbackProject/_apis/build/builds", harness.RequestUri);
-        Assert.Contains("$top=20", harness.RequestUri);
+        Assert.Contains("$top=21", harness.RequestUri);
         Assert.DoesNotContain("definitions=", harness.RequestUri);
     }
 

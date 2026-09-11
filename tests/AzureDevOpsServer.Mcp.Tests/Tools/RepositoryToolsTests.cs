@@ -15,7 +15,7 @@ public sealed class RepositoryToolsTests : ToolTestsBase
         await tools.ListBranchesAsync("WebApp", null, null, TestContext.Current.CancellationToken);
 
         Assert.Contains("/FallbackProject/_apis/git/repositories/WebApp/refs", harness.RequestUri);
-        Assert.Contains("$top=100", harness.RequestUri);
+        Assert.Contains("$top=101", harness.RequestUri);
     }
 
     [Fact]
@@ -27,7 +27,7 @@ public sealed class RepositoryToolsTests : ToolTestsBase
 
         await tools.ListCommitsAsync("WebApp", null, null, null, null, TestContext.Current.CancellationToken);
 
-        Assert.Contains("searchCriteria.$top=20", harness.RequestUri);
+        Assert.Contains("searchCriteria.$top=21", harness.RequestUri);
     }
 
     [Fact]

@@ -87,6 +87,16 @@ public sealed partial class AzureDevOpsClient
             project;
     }
 
+    // Trims to top and reports whether more items came back than that. Most callers request
+    // top + 1 from the server, so a full page means there is more beyond it; GetRepositoryItemsAsync
+    // instead fetches the whole unbounded result and relies on this to cap it after the fact.
+    private static LimitedList<T> LimitTo<T>(IReadOnlyList<T> items, int top)
+    {
+        return items.Count <= top ?
+            new LimitedList<T>(items, false) :
+            new LimitedList<T>(items.Take(top).ToList(), true);
+    }
+
     private static string ToRefName(string branch)
     {
         return branch.StartsWith("refs/", StringComparison.Ordinal) ?

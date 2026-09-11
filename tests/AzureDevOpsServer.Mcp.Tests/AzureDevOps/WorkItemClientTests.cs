@@ -138,9 +138,28 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
 
         var revisions = await client.GetWorkItemRevisionsAsync(42, 100, TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, revisions.Count);
-        Assert.True(revisions[1].Fields["System.State"].ValueEquals("Active"));
-        Assert.Contains("_apis/wit/workItems/42/revisions", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
+        Assert.Equal(2, revisions.Items.Count);
+        Assert.False(revisions.Truncated);
+        Assert.True(revisions.Items[1].Fields["System.State"].ValueEquals("Active"));
+        var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
+        Assert.Contains("_apis/wit/workItems/42/revisions", requestUri);
+        Assert.Contains("$top=101", requestUri);
+    }
+
+    [Fact]
+    public async Task GetWorkItemRevisionsAsync_WhenServerReturnsMoreThanTop_ReportsTruncated()
+    {
+        var entries = string.Join(
+            ',',
+            Enumerable.Range(1, 3).Select(i => $"{{ \"id\": 42, \"rev\": {i}, \"fields\": {{ \"System.State\": \"New\" }}, \"url\": \"https://devops.example.local/_apis/wit/workItems/42\" }}")
+        );
+        using var response = JsonResponse($"{{ \"count\": 3, \"value\": [{entries}] }}");
+        var client = CreateClient(out _, response);
+
+        var revisions = await client.GetWorkItemRevisionsAsync(42, 2, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, revisions.Items.Count);
+        Assert.True(revisions.Truncated);
     }
 
     [Fact]

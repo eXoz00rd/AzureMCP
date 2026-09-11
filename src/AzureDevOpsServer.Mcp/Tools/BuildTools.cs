@@ -30,9 +30,9 @@ public sealed class BuildTools
 
     [McpServerTool(Name = "list_builds", ReadOnly = true, UseStructuredContent = true)]
     [Description(
-        "Lists recent builds of a project, optionally filtered by build definition. Requires a project name or ADOS_DEFAULT_PROJECT."
+        "Lists recent builds of a project, optionally filtered by build definition. Requires a project name or ADOS_DEFAULT_PROJECT. The result reports whether it was truncated, so raise the limit when it was."
     )]
-    public Task<IReadOnlyList<Build>> ListBuildsAsync(
+    public Task<LimitedList<Build>> ListBuildsAsync(
         [Description("Optional build definition id to filter by.")] int? definitionId = null,
         [Description("Maximum number of builds to return. Defaults to 20. Valid range 1-1000.")]
         int? top = null,

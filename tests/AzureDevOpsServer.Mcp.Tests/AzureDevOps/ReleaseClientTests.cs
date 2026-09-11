@@ -33,7 +33,8 @@ public sealed class ReleaseClientTests : AzureDevOpsClientTestsBase
 
         var approvals = await client.GetReleaseApprovalsAsync("Alpha", 42, 100, TestContext.Current.CancellationToken);
 
-        var approval = Assert.Single(approvals);
+        var approval = Assert.Single(approvals.Items);
+        Assert.False(approvals.Truncated);
         Assert.Equal("pending", approval.Status);
         Assert.Equal("Production", approval.ReleaseEnvironment!.Name);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
@@ -142,11 +143,12 @@ public sealed class ReleaseClientTests : AzureDevOpsClientTestsBase
 
         var releases = await client.GetReleasesAsync("Alpha", 3, 20, TestContext.Current.CancellationToken);
 
-        var release = Assert.Single(releases);
+        var release = Assert.Single(releases.Items);
+        Assert.False(releases.Truncated);
         Assert.Equal("Release-15", release.Name);
         Assert.Equal(3, release.ReleaseDefinition!.Id);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
-        Assert.Contains("$top=20", requestUri);
+        Assert.Contains("$top=21", requestUri);
         Assert.Contains("definitionId=3", requestUri);
         Assert.Contains("Alpha/_apis/release/releases", requestUri);
     }
@@ -205,6 +207,38 @@ public sealed class ReleaseClientTests : AzureDevOpsClientTestsBase
         using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
         Assert.Equal(3, body.RootElement.GetProperty("definitionId").GetInt32());
         Assert.True(body.RootElement.GetProperty("description").ValueEquals("Hotfix deployment"));
+    }
+
+    [Fact]
+    public async Task GetReleasesAsync_WhenServerReturnsMoreThanTop_ReportsTruncated()
+    {
+        var entries = string.Join(
+            ',',
+            Enumerable.Range(1, 3).Select(i => $"{{ \"id\": {i}, \"name\": \"Release-{i}\", \"status\": \"active\" }}")
+        );
+        using var response = JsonResponse($"{{ \"count\": 3, \"value\": [{entries}] }}");
+        var client = CreateClient(out _, response);
+
+        var releases = await client.GetReleasesAsync("Alpha", null, 2, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, releases.Items.Count);
+        Assert.True(releases.Truncated);
+    }
+
+    [Fact]
+    public async Task GetReleaseApprovalsAsync_WhenServerReturnsMoreThanTop_ReportsTruncated()
+    {
+        var entries = string.Join(
+            ',',
+            Enumerable.Range(1, 3).Select(i => $"{{ \"id\": {i}, \"status\": \"pending\", \"approvalType\": \"preDeploy\" }}")
+        );
+        using var response = JsonResponse($"{{ \"count\": 3, \"value\": [{entries}] }}");
+        var client = CreateClient(out _, response);
+
+        var approvals = await client.GetReleaseApprovalsAsync("Alpha", null, 2, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, approvals.Items.Count);
+        Assert.True(approvals.Truncated);
     }
 
 }
