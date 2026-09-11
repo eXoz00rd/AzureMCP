@@ -251,7 +251,7 @@ public sealed class WorkItemTools
         int? expectedRevision = null,
         CancellationToken cancellationToken = default)
     {
-        var workItem = await _client.UpdateWorkItemAsync(id, fields, cancellationToken, expectedRevision);
+        var workItem = await _client.UpdateWorkItemAsync(id, fields, expectedRevision, cancellationToken);
         return new WorkItemWriteResult(workItem.Id, workItem.Rev, fields.Keys.ToList(), true);
     }
 

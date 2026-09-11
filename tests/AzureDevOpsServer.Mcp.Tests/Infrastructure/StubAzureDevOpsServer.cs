@@ -104,9 +104,9 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
                 {
                     using var document = await JsonDocument.ParseAsync(context.Request.InputStream);
                     var first = document.RootElement[0];
-                    if (!first.GetProperty("op").ValueEquals("test") ||
-                        !first.GetProperty("path").ValueEquals("/rev") ||
-                        first.GetProperty("value").GetInt32() != 3)
+                    if (first.GetProperty("op").ValueEquals("test") &&
+                        (!first.GetProperty("path").ValueEquals("/rev") ||
+                        first.GetProperty("value").GetInt32() != 3))
                     {
                         context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
                         responseText = """{"message":"Revision test failed","typeKey":"WorkItemRevisionMismatchException"}""";

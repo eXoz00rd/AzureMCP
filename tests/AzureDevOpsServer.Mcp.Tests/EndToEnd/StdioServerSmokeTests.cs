@@ -73,6 +73,12 @@ public sealed class StdioServerSmokeTests
         Assert.True(conflict.IsError);
         Assert.Contains("current revision is 4", System.Text.Json.JsonSerializer.Serialize(conflict));
 
+        updateArguments.Remove("expectedRevision");
+        var unconditional = await client.CallToolAsync("update_work_item", updateArguments, cancellationToken: cancellationToken);
+        Assert.True(unconditional.IsError is null or false);
+        Assert.NotNull(unconditional.StructuredContent);
+        Assert.Contains("System.State", unconditional.StructuredContent.ToString());
+
         var prompts = await client.ListPromptsAsync(cancellationToken: cancellationToken);
         Assert.Contains(prompts, prompt => prompt.Name == "review_pull_request");
         Assert.Contains(prompts, prompt => prompt.Name == "diagnose_build_failure");

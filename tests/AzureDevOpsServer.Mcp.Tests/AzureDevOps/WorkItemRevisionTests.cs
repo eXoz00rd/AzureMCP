@@ -21,7 +21,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         using var httpClient = new HttpClient(handler) { BaseAddress = new Uri($"{CollectionUrl}/") };
         var client = new AzureDevOpsClient(httpClient, CreateOptions(null));
         var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
-            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+            client.UpdateWorkItemAsync(42, Fields, 3, TestContext.Current.CancellationToken));
         Assert.Contains("Original rejection", error.Message);
         Assert.Equal(new[] { HttpMethod.Patch, HttpMethod.Get }, handler.Methods);
     }
@@ -38,7 +38,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         using var diagnostic = new HttpResponseMessage(status) { Content = content };
         var client = CreateClient(out var handler, rejected, diagnostic);
         var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
-            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+            client.UpdateWorkItemAsync(42, Fields, 3, TestContext.Current.CancellationToken));
         Assert.Contains("Original rejection", error.Message);
         Assert.Equal(status == HttpStatusCode.OK ? 1 : 0, content.StreamReads);
         Assert.Equal(2, handler.Requests.Count);
@@ -71,7 +71,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         using var rejected = new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = content };
         var client = CreateClient(out var handler, rejected);
         var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
-            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+            client.UpdateWorkItemAsync(42, Fields, 3, TestContext.Current.CancellationToken));
         Assert.Single(handler.Requests);
         Assert.Equal(1, content.StreamReads);
         Assert.Equal(oversized, error.Message.Contains("Error response truncated.", StringComparison.Ordinal));
@@ -123,7 +123,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         using var current = JsonResponse(json);
         var client = CreateClient(out var handler, rejected, current);
         var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
-            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+            client.UpdateWorkItemAsync(42, Fields, 3, TestContext.Current.CancellationToken));
         Assert.Contains("Original rejection", error.Message);
         Assert.DoesNotContain("current revision", error.Message);
         Assert.Equal(2, handler.Requests.Count);
@@ -141,7 +141,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         using var current = JsonResponse(WorkItemJson);
         var client = CreateClient(out var handler, rejected, current);
         var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
-            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+            client.UpdateWorkItemAsync(42, Fields, 3, TestContext.Current.CancellationToken));
         Assert.Contains(AzureDevOpsClient.ExtractErrorMessage(json), error.Message);
         Assert.DoesNotContain("changed since", error.Message);
         Assert.Single(handler.Requests);
@@ -171,13 +171,13 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         if (cancelCaller)
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                client.UpdateWorkItemAsync(42, Fields, cancellation.Token, 3));
+                client.UpdateWorkItemAsync(42, Fields, 3, cancellation.Token));
             Assert.True(cancellation.IsCancellationRequested);
         }
         else
         {
             var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
-                client.UpdateWorkItemAsync(42, Fields, cancellation.Token, 3));
+                client.UpdateWorkItemAsync(42, Fields, 3, cancellation.Token));
             Assert.Contains("Original rejection", error.Message);
             Assert.False(cancellation.IsCancellationRequested);
         }
@@ -213,7 +213,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         using var response = JsonResponse(WorkItemJson);
         var client = CreateClient(out var handler, response);
 
-        var result = await client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3);
+        var result = await client.UpdateWorkItemAsync(42, Fields, 3, TestContext.Current.CancellationToken);
 
         Assert.Equal(4, result.Rev);
         Assert.Single(handler.Requests);
@@ -240,7 +240,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         var client = CreateClient(out var handler, rejected, current);
 
         var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
-            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+            client.UpdateWorkItemAsync(42, Fields, 3, TestContext.Current.CancellationToken));
 
         Assert.Contains("changed since revision 3; current revision is 4", error.Message);
         Assert.Contains("reconcile", error.Message);
@@ -264,7 +264,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         var client = CreateClient(out var handler, rejected, current);
 
         var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
-            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, revision));
+            client.UpdateWorkItemAsync(42, Fields, revision, TestContext.Current.CancellationToken));
 
         Assert.DoesNotContain("changed since", error.Message);
         Assert.Contains(status is HttpStatusCode.Unauthorized or HttpStatusCode.NonAuthoritativeInformation
@@ -282,7 +282,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         var client = CreateClient(out var handler, rejected, current);
 
         var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
-            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+            client.UpdateWorkItemAsync(42, Fields, 3, TestContext.Current.CancellationToken));
 
         Assert.Contains("Original rejection", error.Message);
         Assert.Equal(2, handler.Requests.Count);
@@ -296,7 +296,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         var client = CreateClient(out var handler);
 
         var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
-            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, revision));
+            client.UpdateWorkItemAsync(42, Fields, revision, TestContext.Current.CancellationToken));
 
         Assert.Contains("positive", error.Message);
         Assert.Empty(handler.Requests);

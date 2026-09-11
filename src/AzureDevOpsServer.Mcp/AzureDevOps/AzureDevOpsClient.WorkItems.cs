@@ -414,14 +414,14 @@ public sealed partial class AzureDevOpsClient
         IReadOnlyDictionary<string, string> fields,
         CancellationToken cancellationToken)
     {
-        return UpdateWorkItemAsync(id, fields, cancellationToken, null);
+        return UpdateWorkItemAsync(id, fields, null, cancellationToken);
     }
 
     public async Task<WorkItem> UpdateWorkItemAsync(
         int id,
         IReadOnlyDictionary<string, string> fields,
-        CancellationToken cancellationToken,
-        int? expectedRevision)
+        int? expectedRevision,
+        CancellationToken cancellationToken)
     {
         if (expectedRevision is <= 0)
         {
