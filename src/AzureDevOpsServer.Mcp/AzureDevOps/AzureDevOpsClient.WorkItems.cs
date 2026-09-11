@@ -431,7 +431,8 @@ public sealed partial class AzureDevOpsClient
         using var response = await _httpClient.SendAsync(request, cancellationToken);
 
         if (expectedRevision is not null &&
-            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed)
+            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed &&
+            await IsRevisionMismatchAsync(response, cancellationToken))
         {
             var currentRevision = await TryGetCurrentRevisionAsync(id, cancellationToken);
             if (currentRevision is not null && currentRevision != expectedRevision)
@@ -449,12 +450,29 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException($"The update response for work item {id} could not be parsed.");
     }
 
+    private static async Task<bool> IsRevisionMismatchAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty("typeKey", out var typeKey) &&
+                typeKey.ValueKind == JsonValueKind.String &&
+                typeKey.ValueEquals("WorkItemRevisionMismatchException");
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     private async Task<int?> TryGetCurrentRevisionAsync(int id, CancellationToken cancellationToken)
     {
         try
         {
             var current = await GetWorkItemAsync(id, ["System.Id"], false, cancellationToken);
-            return current.Rev;
+            return current.Rev > 0 ? current.Rev : null;
         }
         catch (Exception exception) when (
             exception is AzureDevOpsClientException or HttpRequestException or JsonException)

@@ -109,7 +109,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
                         first.GetProperty("value").GetInt32() != 3)
                     {
                         context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                        responseText = """{"message":"Revision test failed"}""";
+                        responseText = """{"message":"Revision test failed","typeKey":"WorkItemRevisionMismatchException"}""";
                     }
                 }
             }

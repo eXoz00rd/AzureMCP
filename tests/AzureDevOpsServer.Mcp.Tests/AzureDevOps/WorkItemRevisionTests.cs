@@ -9,6 +9,41 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
 {
     private const string WorkItemJson = """{"id":42,"rev":4,"fields":{},"url":"https://example.test/42"}""";
     private static readonly Dictionary<string, string> Fields = new() { ["System.State"] = "Resolved" };
+    private const string RevisionError = """{"message":"Original rejection","typeKey":"WorkItemRevisionMismatchException"}""";
+
+    [Theory]
+    [InlineData("""{"id":42,"fields":{}}""")]
+    [InlineData("""{"id":42,"rev":0,"fields":{}}""")]
+    [InlineData("""{"id":42,"rev":-1,"fields":{}}""")]
+    public async Task InvalidDiagnosticRevision_PreservesOriginalError(string json)
+    {
+        using var rejected = JsonResponse(RevisionError, HttpStatusCode.BadRequest);
+        using var current = JsonResponse(json);
+        var client = CreateClient(out var handler, rejected, current);
+        var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
+            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+        Assert.Contains("Original rejection", error.Message);
+        Assert.DoesNotContain("current revision", error.Message);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Theory]
+    [InlineData("""{"message":"Invalid field","typeKey":"ValidationException"}""")]
+    [InlineData("""{"message":"Invalid field"}""")]
+    [InlineData("""{"message":"Invalid field","typeKey":42}""")]
+    [InlineData("Invalid field")]
+    [InlineData("[]")]
+    public async Task UnrecognizedPatchError_DoesNotDiagnoseConcurrentChanges(string json)
+    {
+        using var rejected = JsonResponse(json, HttpStatusCode.BadRequest);
+        using var current = JsonResponse(WorkItemJson);
+        var client = CreateClient(out var handler, rejected, current);
+        var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
+            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+        Assert.Contains(AzureDevOpsClient.ExtractErrorMessage(json), error.Message);
+        Assert.DoesNotContain("changed since", error.Message);
+        Assert.Single(handler.Requests);
+    }
 
     [Theory]
     [InlineData(false, false)]
@@ -65,7 +100,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         {
             Methods.Add(request.Method);
             return request.Method == HttpMethod.Patch ?
-                Task.FromResult(JsonResponse("""{"message":"Original rejection"}""", HttpStatusCode.BadRequest)) :
+                Task.FromResult(JsonResponse(RevisionError, HttpStatusCode.BadRequest)) :
                 Task.FromException<HttpResponseMessage>(_diagnosticException());
         }
     }
@@ -97,7 +132,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
     [InlineData(HttpStatusCode.PreconditionFailed)]
     public async Task RejectedUpdate_WithChangedRevision_ReportsConflictWithoutRetry(HttpStatusCode status)
     {
-        using var rejected = JsonResponse("""{"message":"Patch rejected"}""");
+        using var rejected = JsonResponse(RevisionError);
         rejected.StatusCode = status;
         using var current = JsonResponse(WorkItemJson);
         var client = CreateClient(out var handler, rejected, current);
@@ -113,6 +148,9 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
 
     [Theory]
     [InlineData(HttpStatusCode.BadRequest, 4)]
+    [InlineData(HttpStatusCode.BadRequest, 3)]
+    [InlineData(HttpStatusCode.Conflict, 3)]
+    [InlineData(HttpStatusCode.PreconditionFailed, 3)]
     [InlineData(HttpStatusCode.Forbidden, 3)]
     [InlineData(HttpStatusCode.Unauthorized, 3)]
     [InlineData(HttpStatusCode.NonAuthoritativeInformation, 3)]
@@ -129,13 +167,13 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
         Assert.DoesNotContain("changed since", error.Message);
         Assert.Contains(status is HttpStatusCode.Unauthorized or HttpStatusCode.NonAuthoritativeInformation
             ? "Authentication" : "Original rejection", error.Message);
-        Assert.Equal(status == HttpStatusCode.BadRequest ? 2 : 1, handler.Requests.Count);
+        Assert.Single(handler.Requests);
     }
 
     [Fact]
     public async Task FailedRevisionRead_PreservesOriginalUpdateError()
     {
-        using var rejected = JsonResponse("""{"message":"Original rejection"}""");
+        using var rejected = JsonResponse(RevisionError);
         rejected.StatusCode = HttpStatusCode.BadRequest;
         using var current = JsonResponse("""{"message":"Not readable"}""");
         current.StatusCode = HttpStatusCode.Forbidden;
