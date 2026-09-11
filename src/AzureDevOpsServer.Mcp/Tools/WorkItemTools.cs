@@ -17,9 +17,13 @@ public sealed class WorkItemTools
 
     // Whether a field is HTML is a property of the field itself, not something safely inferable
     // from its value: a plain field can legitimately contain tag-shaped text (for example a title
-    // "Fix <span> rendering"). Restricting conversion to the known HTML field reference names used
-    // across the built-in Azure DevOps process templates keeps the "plain fields are returned
-    // exactly as sent" guarantee unconditional instead of heuristic.
+    // "Fix <span> rendering"), and an HTML field can legitimately hold a value with no tags at
+    // all (for example a freshly created item whose description is still plain text). Neither a
+    // per-value heuristic nor a "does this field's value look like HTML" check can therefore
+    // decide this correctly in general, so the contract is deliberately narrowed to a fixed,
+    // documented set of built-in field reference names instead: descriptionFormat converts only
+    // these fields, and a custom process template's own HTML field outside this list is always
+    // returned as sent, even when descriptionFormat is 'text'.
     private static readonly HashSet<string> RichTextFields = new(StringComparer.OrdinalIgnoreCase)
     {
         "System.Description",
@@ -121,7 +125,7 @@ public sealed class WorkItemTools
         [Description("When true, also returns relations even when a field list is given.")]
         bool includeRelations = false,
         [Description(
-            "Format for known rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom/Root Cause fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). Other fields are always returned as sent."
+            "Format for a fixed set of built-in rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom/Root Cause fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
         )]
         string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
@@ -142,7 +146,7 @@ public sealed class WorkItemTools
         [Description("When true, also returns relations even when a field list is given.")]
         bool includeRelations = false,
         [Description(
-            "Format for known rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom/Root Cause fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). Other fields are always returned as sent."
+            "Format for a fixed set of built-in rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom/Root Cause fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
         )]
         string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
@@ -177,7 +181,7 @@ public sealed class WorkItemTools
         [Description("Maximum number of revisions to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
         [Description(
-            "Format for known rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom/Root Cause fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). Other fields are always returned as sent."
+            "Format for a fixed set of built-in rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom/Root Cause fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
         )]
         string? descriptionFormat = null,
         CancellationToken cancellationToken = default)

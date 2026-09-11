@@ -5,24 +5,6 @@ namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;
 
 public sealed class HtmlTextTests
 {
-    [Theory]
-    [InlineData("<p>Plain paragraph.</p>")]
-    [InlineData("Has a <br> line break")]
-    [InlineData("<div><b>bold</b></div>")]
-    public void LooksLikeHtml_WithKnownTag_ReturnsTrue(string value)
-    {
-        Assert.True(HtmlText.LooksLikeHtml(value));
-    }
-
-    [Theory]
-    [InlineData("List<Item> without a real tag")]
-    [InlineData("if (x < 5 and y > 3)")]
-    [InlineData("Plain text with no markup")]
-    public void LooksLikeHtml_WithoutKnownTag_ReturnsFalse(string value)
-    {
-        Assert.False(HtmlText.LooksLikeHtml(value));
-    }
-
     [Fact]
     public void ToPlainText_StripsNestedTagsAndKeepsInnerText()
     {
@@ -37,6 +19,14 @@ public sealed class HtmlTextTests
         var text = HtmlText.ToPlainText("<ul><li>First</li><li>Second</li></ul>");
 
         Assert.Equal("- First\n- Second", text);
+    }
+
+    [Fact]
+    public void ToPlainText_ConvertsOrderedListItemsToNumbers()
+    {
+        var text = HtmlText.ToPlainText("<ol><li>First</li><li>Second</li></ol>");
+
+        Assert.Equal("1. First\n2. Second", text);
     }
 
     [Fact]
@@ -80,12 +70,6 @@ public sealed class HtmlTextTests
     }
 
     [Fact]
-    public void LooksLikeHtml_WithAngleBracketInsideQuotedAttribute_StillDetectsTheTag()
-    {
-        Assert.True(HtmlText.LooksLikeHtml("""<br title="1 > 0">After"""));
-    }
-
-    [Fact]
     public void ToPlainText_WithDataHrefAttribute_DoesNotFabricateLinkUrl()
     {
         var text = HtmlText.ToPlainText("""<p>See <a data-href="https://tracking.example.com">the doc</a>.</p>""");
@@ -104,6 +88,16 @@ public sealed class HtmlTextTests
     }
 
     [Fact]
+    public void ToPlainText_WithHrefLookingTextInsideAnotherAttribute_UsesTheRealHrefValue()
+    {
+        var text = HtmlText.ToPlainText(
+            """<a title="tooltip href='fake'" href="https://example.com">the doc</a>"""
+        );
+
+        Assert.Equal("the doc (https://example.com)", text);
+    }
+
+    [Fact]
     public void ToPlainText_SeparatesTableCellsInsteadOfConcatenatingThem()
     {
         var text = HtmlText.ToPlainText("<table><tr><td>Owner</td><td>Value</td></tr></table>");
@@ -119,6 +113,14 @@ public sealed class HtmlTextTests
         );
 
         Assert.Equal("A\tB\nC\tD", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithBlockTagInsideTableCell_StillSeparatesCells()
+    {
+        var text = HtmlText.ToPlainText("<table><tr><td><p>Owner</p></td><td>Value</td></tr></table>");
+
+        Assert.Equal("Owner\tValue", text);
     }
 
     [Fact]
@@ -146,6 +148,22 @@ public sealed class HtmlTextTests
     }
 
     [Fact]
+    public void ToPlainText_WithCustomElementName_DoesNotMisreadItAsAKnownTag()
+    {
+        var text = HtmlText.ToPlainText("<p-custom>Note</p-custom>");
+
+        Assert.Equal("<p-custom>Note</p-custom>", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithKnownTagInsideUnknownTagsQuotedAttribute_DoesNotStripIt()
+    {
+        var text = HtmlText.ToPlainText("""<custom data="<b>">x</custom>""");
+
+        Assert.Equal("""<custom data="<b>">x</custom>""", text);
+    }
+
+    [Fact]
     public void ToPlainText_WithoutAnyTags_StillDecodesEntities()
     {
         var text = HtmlText.ToPlainText("Fish &amp; Chips");
@@ -158,7 +176,15 @@ public sealed class HtmlTextTests
     {
         var text = HtmlText.ToPlainText("<pre>\n    first line\n    second line\n</pre>");
 
-        Assert.Equal("\n    first line\n    second line\n", text);
+        Assert.Equal("\n\n    first line\n    second line\n\n", text);
+    }
+
+    [Fact]
+    public void ToPlainText_PreservesLeadingSpacesInsidePreBlockWithNoNewline()
+    {
+        var text = HtmlText.ToPlainText("<pre>    code</pre>");
+
+        Assert.Equal("\n    code\n", text);
     }
 
     [Fact]
@@ -178,7 +204,7 @@ public sealed class HtmlTextTests
     {
         var text = HtmlText.ToPlainText("<pre>code</pre><p>After</p>");
 
-        Assert.Equal("code\nAfter", text);
+        Assert.Equal("\ncode\nAfter", text);
     }
 
     [Fact]
@@ -186,39 +212,7 @@ public sealed class HtmlTextTests
     {
         var text = HtmlText.ToPlainText("<b>Note:</b><pre>code</pre>");
 
-        Assert.Equal("Note:\ncode", text);
-    }
-
-    [Fact]
-    public void ToPlainText_WithCustomElementName_DoesNotMisreadItAsAKnownTag()
-    {
-        var text = HtmlText.ToPlainText("<p-custom>Note</p-custom>");
-
-        Assert.Equal("<p-custom>Note</p-custom>", text);
-    }
-
-    [Fact]
-    public void LooksLikeHtml_WithCustomElementName_ReturnsFalse()
-    {
-        Assert.False(HtmlText.LooksLikeHtml("<p-custom>Note</p-custom>"));
-    }
-
-    [Fact]
-    public void ToPlainText_WithHrefLookingTextInsideAnotherAttribute_UsesTheRealHrefValue()
-    {
-        var text = HtmlText.ToPlainText(
-            """<a title="tooltip href='fake'" href="https://example.com">the doc</a>"""
-        );
-
-        Assert.Equal("the doc (https://example.com)", text);
-    }
-
-    [Fact]
-    public void ToPlainText_WithBlockTagInsideTableCell_StillSeparatesCells()
-    {
-        var text = HtmlText.ToPlainText("<table><tr><td><p>Owner</p></td><td>Value</td></tr></table>");
-
-        Assert.Equal("Owner\tValue", text);
+        Assert.Equal("Note:\ncode\n", text);
     }
 
     [Fact]
@@ -227,5 +221,21 @@ public sealed class HtmlTextTests
         var text = HtmlText.ToPlainText("<ul><li>One</li></ul><p>After</p>");
 
         Assert.Equal("- One\nAfter", text);
+    }
+
+    [Fact]
+    public void ToPlainText_SeparatesInlineContentFromFollowingBlock()
+    {
+        var text = HtmlText.ToPlainText("<b>Note:</b><p>Block</p>");
+
+        Assert.Equal("Note:\n\nBlock", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithPrettyPrintedWhitespaceBetweenListItems_ProducesTheSameResultAsMinifiedSource()
+    {
+        var text = HtmlText.ToPlainText("<ul>\n<li>One</li>\n<li>Two</li>\n</ul>");
+
+        Assert.Equal("- One\n- Two", text);
     }
 }

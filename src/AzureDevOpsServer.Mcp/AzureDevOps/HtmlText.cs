@@ -6,12 +6,14 @@ namespace AzureDevOpsServer.Mcp.AzureDevOps;
 // Azure DevOps rich-text fields (System.Description, Repro Steps, Acceptance Criteria, ...) are
 // stored and returned as HTML. This converts a field value to plain text without pulling in a
 // full HTML parser dependency for what is, in practice, a small set of tags emitted by the
-// Azure DevOps Server rich text editor.
+// Azure DevOps Server rich text editor. Only WorkItemTools.RichTextFields decides which fields
+// are ever passed through here; this converter has no opinion on that.
 internal static class HtmlText
 {
     // A Private Use Area character standing in for a newline that must survive
-    // CollapseWhitespace's per-line trimming untouched, because it falls inside a <pre>/<code>
-    // block where whitespace is significant. Restored to a real '\n' once collapsing is done.
+    // CollapseWhitespace's per-line trimming untouched, because it falls inside (or bounds) a
+    // <pre>/<code> block where whitespace is significant. Restored to a real '\n' once
+    // collapsing is done.
     private const char PreservedNewline = (char)0xE000;
 
     private static readonly HashSet<string> KnownTags = new(StringComparer.OrdinalIgnoreCase)
@@ -21,36 +23,11 @@ internal static class HtmlText
         "blockquote", "pre", "code", "img", "hr"
     };
 
-    // A value is only treated as HTML when it contains at least one recognizable tag, so a plain
-    // value that happens to contain "<" or ">" (a title like "List<Item>") is left untouched
-    // instead of being misread as markup. Uses the same tag scan as ToPlainText, so detection and
-    // conversion always agree on what counts as a real tag.
-    public static bool LooksLikeHtml(string value)
-    {
-        var index = 0;
-        while (index < value.Length)
-        {
-            var tagStart = value.IndexOf('<', index);
-            if (tagStart < 0)
-            {
-                return false;
-            }
-
-            if (TryReadKnownTag(value, tagStart, out _, out _, out _))
-            {
-                return true;
-            }
-
-            index = tagStart + 1;
-        }
-
-        return false;
-    }
-
     public static string ToPlainText(string html)
     {
         var builder = new StringBuilder(html.Length);
         var anchorHrefs = new Stack<string?>();
+        var listCounters = new Stack<int>();
         var index = 0;
         var preserveDepth = 0;
         var cellDepth = 0;
@@ -65,13 +42,18 @@ internal static class HtmlText
             }
 
             // Only a span that is both syntactically a tag and names a tag this converter knows
-            // about is treated as markup. Anything else — a bare comparison like "x < 5", or a
-            // generic type like "List<Item>" — is literal text, including its angle brackets, so
-            // it is preserved rather than silently swallowed as an unrecognized tag.
+            // about is treated as markup. A syntactically valid but unrecognized tag (for
+            // example a custom element) is preserved verbatim as one unit, quote-aware, so a
+            // "<" inside one of its own quoted attribute values is never mistaken for a nested
+            // tag of its own. Anything that is not tag-shaped at all — a bare comparison like
+            // "x < 5", or a generic type like "List<Item>" — is literal text one character at a
+            // time, including its angle brackets.
             if (!TryReadKnownTag(html, tagStart, out var tagEnd, out var tag, out var closing))
             {
-                AppendLiteral(builder, html, index, tagStart - index + 1, preserveDepth > 0);
-                index = tagStart + 1;
+                var unknownTagEnd = IsTagStart(html, tagStart) ? FindTagEnd(html, tagStart) : -1;
+                var skipLength = unknownTagEnd >= 0 ? unknownTagEnd - tagStart + 1 : 1;
+                AppendLiteral(builder, html, index, tagStart - index + skipLength, preserveDepth > 0);
+                index = tagStart + skipLength;
                 continue;
             }
 
@@ -80,12 +62,14 @@ internal static class HtmlText
             var name = ExtractTagName(tag, closing);
             if (name is "pre" or "code")
             {
-                // <pre>/<code> content is whitespace-significant, so its newlines and indentation
-                // must survive CollapseWhitespace's per-line trimming below untouched. A real
-                // boundary newline on both sides keeps adjacent content from joining onto the
-                // block when there is no other separator around it.
+                // <pre>/<code> content is whitespace-significant end to end, including leading
+                // or trailing spaces with no adjacent newline, so a sentinel boundary is emitted
+                // unconditionally on both sides: it shields the block's true first and last
+                // characters from CollapseWhitespace's per-line Trim() below, and it also keeps
+                // adjacent content from being joined onto the block when nothing else already
+                // separates them.
                 preserveDepth = closing ? Math.Max(0, preserveDepth - 1) : preserveDepth + 1;
-                builder.Append('\n');
+                builder.Append(PreservedNewline);
             }
             else if (name is "td" or "th")
             {
@@ -104,7 +88,7 @@ internal static class HtmlText
             }
             else
             {
-                AppendTagReplacement(builder, tag, anchorHrefs, preserveDepth > 0, cellDepth > 0);
+                AppendTagReplacement(builder, tag, anchorHrefs, listCounters, preserveDepth > 0, cellDepth > 0);
             }
 
             index = tagEnd + 1;
@@ -114,13 +98,22 @@ internal static class HtmlText
         return collapsed.Replace(PreservedNewline, '\n');
     }
 
-    // Copies a literal (non-tag) span of html into the builder. Inside a preserve region, any
-    // newline in that span is replaced with the sentinel so CollapseWhitespace leaves it, and the
-    // indentation around it, alone.
+    // Copies a literal (non-tag) span of html into the builder.
+    // - Outside a preserve region, a text node that is nothing but whitespace containing a
+    //   newline (the indentation pretty-printed HTML leaves between tags) carries no content and
+    //   is dropped, so it cannot show up as a spurious blank line; a plain inline space (no
+    //   newline) is kept, since that is likely the actual space between two elements.
+    // - Inside a preserve region, any newline in the span is replaced with the sentinel so
+    //   CollapseWhitespace leaves it, and the indentation around it, alone.
     private static void AppendLiteral(StringBuilder builder, string html, int start, int length, bool preserving)
     {
         if (!preserving)
         {
+            if (IsInsignificantWhitespace(html, start, length))
+            {
+                return;
+            }
+
             builder.Append(html, start, length);
             return;
         }
@@ -142,24 +135,46 @@ internal static class HtmlText
         }
     }
 
+    private static bool IsInsignificantWhitespace(string html, int start, int length)
+    {
+        var sawNewline = false;
+        for (var i = start; i < start + length; i++)
+        {
+            var c = html[i];
+            if (!char.IsWhiteSpace(c))
+            {
+                return false;
+            }
+
+            sawNewline = sawNewline || c is '\n' or '\r';
+        }
+
+        return sawNewline;
+    }
+
+    // Whether the "<" at tagStart begins something syntactically tag-shaped (immediately, or
+    // after "/", followed by an ASCII letter), as opposed to arbitrary text like "x < 5" or
+    // "List<Item>".
+    private static bool IsTagStart(string html, int tagStart)
+    {
+        var i = tagStart + 1;
+        if (i < html.Length && html[i] == '/')
+        {
+            i++;
+        }
+
+        return i < html.Length && char.IsAsciiLetter(html[i]);
+    }
+
     // Reads the tag starting at "<" (tagStart) and reports whether it is both a syntactically
-    // valid, quote-aware tag and one of the known tag names this converter understands. A span
-    // that merely looks tag-shaped ("<Item>" inside "List<Item>") is rejected here rather than
-    // silently consumed, so its text survives in the output.
+    // valid, quote-aware tag and one of the known tag names this converter understands.
     private static bool TryReadKnownTag(string html, int tagStart, out int tagEnd, out string tag, out bool closing)
     {
         tagEnd = -1;
         tag = string.Empty;
-        closing = false;
+        closing = tagStart + 1 < html.Length && html[tagStart + 1] == '/';
 
-        var nameStart = tagStart + 1;
-        if (nameStart < html.Length && html[nameStart] == '/')
-        {
-            closing = true;
-            nameStart++;
-        }
-
-        if (nameStart >= html.Length || !char.IsAsciiLetter(html[nameStart]))
+        if (!IsTagStart(html, tagStart))
         {
             return false;
         }
@@ -216,6 +231,7 @@ internal static class HtmlText
         StringBuilder builder,
         string tag,
         Stack<string?> anchorHrefs,
+        Stack<int> listCounters,
         bool preserving,
         bool insideTableCell)
     {
@@ -228,13 +244,19 @@ internal static class HtmlText
             case "br":
                 builder.Append(newline);
                 break;
-            // The bullet prefix is emitted on open and the line break on close (rather than a
-            // leading break on open), so consecutive items are separated without an extra blank
+            // The marker (bullet, or a running number for an <ol>) is emitted on open and the
+            // line break on close, so consecutive items are separated without an extra blank
             // line, and content that follows the list still gets a break after the last item.
             case "li":
                 if (closing)
                 {
                     builder.Append(newline);
+                }
+                else if (listCounters.Count > 0 && listCounters.Peek() > 0)
+                {
+                    var ordinal = listCounters.Pop();
+                    builder.Append(ordinal).Append(". ");
+                    listCounters.Push(ordinal + 1);
                 }
                 else
                 {
@@ -242,12 +264,38 @@ internal static class HtmlText
                 }
 
                 break;
+            case "ul" or "ol":
+                if (closing)
+                {
+                    if (listCounters.Count > 0)
+                    {
+                        listCounters.Pop();
+                    }
+                }
+                else
+                {
+                    AppendBoundaryIfNeeded(builder, newline);
+                    listCounters.Push(name == "ol" ? 1 : 0);
+                }
+
+                break;
             case "p" or "div" or "blockquote" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6":
                 // A block tag nested inside a table cell would otherwise split the cell across
                 // lines, stranding the closing td/th's tab as leading whitespace that
-                // CollapseWhitespace then trims away.
-                if (closing && !insideTableCell)
+                // CollapseWhitespace then trims away, so it stays silent on both open and close.
+                if (insideTableCell)
                 {
+                    break;
+                }
+
+                if (closing)
+                {
+                    builder.Append(newline).Append(newline);
+                }
+                else if (builder.Length > 0 && builder[^1] is not ('\n' or PreservedNewline))
+                {
+                    // Content that precedes this block with no separator of its own (for
+                    // example inline text right before a <p>) would otherwise be joined onto it.
                     builder.Append(newline).Append(newline);
                 }
 
@@ -274,6 +322,25 @@ internal static class HtmlText
 
                 break;
         }
+    }
+
+    // Appends nothing when the builder already ends in a line break (real or preserved); the
+    // caller uses this to avoid opening a redundant blank line ahead of a block-level boundary
+    // that already has one.
+    private static void AppendBoundaryIfNeeded(StringBuilder builder, char newline)
+    {
+        if (builder.Length == 0)
+        {
+            return;
+        }
+
+        var last = builder[^1];
+        if (last is '\n' or PreservedNewline)
+        {
+            return;
+        }
+
+        builder.Append(newline);
     }
 
     // Quote-aware search for an "href" attribute: a candidate at a proper attribute-name
