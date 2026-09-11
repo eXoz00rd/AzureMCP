@@ -27,6 +27,7 @@ public sealed class WorkItemTools
     private static readonly HashSet<string> RichTextFields = new(StringComparer.OrdinalIgnoreCase)
     {
         "System.Description",
+        "System.History",
         "Microsoft.VSTS.TCM.ReproSteps",
         "Microsoft.VSTS.TCM.SystemInfo",
         "Microsoft.VSTS.Common.AcceptanceCriteria",
@@ -124,7 +125,7 @@ public sealed class WorkItemTools
         [Description("When true, also returns relations even when a field list is given.")]
         bool includeRelations = false,
         [Description(
-            "Format for a fixed set of built-in rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
+            "Format for a fixed set of built-in rich-text fields (System.Description, System.History, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
         )]
         string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
@@ -145,7 +146,7 @@ public sealed class WorkItemTools
         [Description("When true, also returns relations even when a field list is given.")]
         bool includeRelations = false,
         [Description(
-            "Format for a fixed set of built-in rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
+            "Format for a fixed set of built-in rich-text fields (System.Description, System.History, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
         )]
         string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
@@ -180,7 +181,7 @@ public sealed class WorkItemTools
         [Description("Maximum number of revisions to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
         [Description(
-            "Format for a fixed set of built-in rich-text fields (System.Description, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
+            "Format for a fixed set of built-in rich-text fields (System.Description, System.History, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
         )]
         string? descriptionFormat = null,
         CancellationToken cancellationToken = default)

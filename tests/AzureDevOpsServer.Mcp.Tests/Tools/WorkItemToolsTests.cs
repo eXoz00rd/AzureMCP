@@ -39,6 +39,27 @@ public sealed class WorkItemToolsTests : ToolTestsBase
         Assert.Equal("List<Item> import", workItem.Fields["System.Title"].GetString());
     }
 
+    [Theory]
+    [InlineData("System.Description")]
+    [InlineData("System.History")]
+    [InlineData("Microsoft.VSTS.TCM.ReproSteps")]
+    [InlineData("Microsoft.VSTS.TCM.SystemInfo")]
+    [InlineData("Microsoft.VSTS.Common.AcceptanceCriteria")]
+    [InlineData("Microsoft.VSTS.CMMI.Justification")]
+    [InlineData("Microsoft.VSTS.CMMI.Symptom")]
+    public async Task GetWorkItemAsync_TextFormat_ConvertsEveryAllowlistedRichTextField(string fieldName)
+    {
+        var json =
+            $$"""{ "id": 1, "rev": 1, "fields": { "{{fieldName}}": "<p>Hello <b>world</b></p>" }, "url": "https://devops.example.local/_apis/wit/workItems/1" }""";
+        using var response = JsonResponse(json);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var workItem = await tools.GetWorkItemAsync(1, null, false, "text", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Hello world", workItem.Fields[fieldName].GetString());
+    }
+
     [Fact]
     public async Task GetWorkItemAsync_TextFormat_DecodesEntitiesInAllowlistedFieldWithNoTags()
     {
