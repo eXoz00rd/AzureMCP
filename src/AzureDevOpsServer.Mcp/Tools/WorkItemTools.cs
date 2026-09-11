@@ -175,8 +175,10 @@ public sealed class WorkItemTools
     }
 
     [McpServerTool(Name = "get_work_item_revisions", ReadOnly = true, UseStructuredContent = true)]
-    [Description("Gets the revision history of a work item so field changes over time can be compared.")]
-    public async Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(
+    [Description(
+        "Gets the revision history of a work item so field changes over time can be compared. The result reports whether it was truncated, so raise the limit when it was."
+    )]
+    public async Task<LimitedList<WorkItem>> GetWorkItemRevisionsAsync(
         [Description("Work item id.")] int id,
         [Description("Maximum number of revisions to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
@@ -188,7 +190,7 @@ public sealed class WorkItemTools
     {
         var format = NormalizeDescriptionFormat(descriptionFormat);
         var revisions = await _client.GetWorkItemRevisionsAsync(id, ResponseLimits.ResolveTop(top), cancellationToken);
-        return revisions.Select(workItem => ApplyDescriptionFormat(workItem, format)).ToList();
+        return revisions with { Items = revisions.Items.Select(workItem => ApplyDescriptionFormat(workItem, format)).ToList() };
     }
 
     [McpServerTool(Name = "link_work_item", Destructive = false, UseStructuredContent = true)]

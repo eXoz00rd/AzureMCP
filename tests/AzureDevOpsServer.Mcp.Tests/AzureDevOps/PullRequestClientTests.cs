@@ -38,12 +38,13 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             TestContext.Current.CancellationToken
         );
 
-        var pullRequest = Assert.Single(pullRequests);
+        var pullRequest = Assert.Single(pullRequests.Items);
+        Assert.False(pullRequests.Truncated);
         Assert.Equal(7, pullRequest.PullRequestId);
         Assert.Equal("refs/heads/develop", pullRequest.SourceRefName);
         Assert.Equal("Sebastian", pullRequest.CreatedBy!.DisplayName);
         Assert.EndsWith(
-            "Alpha/_apis/git/repositories/WebApp/pullrequests?searchCriteria.status=active&$top=100&api-version=7.0",
+            "Alpha/_apis/git/repositories/WebApp/pullrequests?searchCriteria.status=active&$top=101&api-version=7.0",
             Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
         );
     }
@@ -62,7 +63,7 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             TestContext.Current.CancellationToken
         );
 
-        Assert.Empty(pullRequests);
+        Assert.Empty(pullRequests.Items);
         Assert.Contains(
             "searchCriteria.status=completed",
             Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
@@ -321,7 +322,7 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         using var response = JsonResponse("""{ "count": 0, "value": [] }""");
         var client = CreateClient(out var handler, response);
 
-        await client.GetProjectPullRequestsAsync(
+        var pullRequests = await client.GetProjectPullRequestsAsync(
             "Alpha",
             null,
             false,
@@ -330,10 +331,12 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             TestContext.Current.CancellationToken
         );
 
+        Assert.Empty(pullRequests.Items);
+        Assert.False(pullRequests.Truncated);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("Alpha/_apis/git/pullrequests", requestUri);
         Assert.Contains("searchCriteria.status=active", requestUri);
-        Assert.Contains("$top=100", requestUri);
+        Assert.Contains("$top=101", requestUri);
         Assert.DoesNotContain("creatorId", requestUri);
         Assert.DoesNotContain("reviewerId", requestUri);
     }
@@ -362,6 +365,29 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         Assert.Contains("searchCriteria.status=all", requestUri);
         Assert.Contains("searchCriteria.creatorId=0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", requestUri);
         Assert.Contains("searchCriteria.reviewerId=0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb", requestUri);
+    }
+
+    [Fact]
+    public async Task GetProjectPullRequestsAsync_WhenServerReturnsMoreThanTop_ReportsTruncated()
+    {
+        var entries = string.Join(
+            ',',
+            Enumerable.Range(1, 3).Select(i => $"{{ \"pullRequestId\": {i}, \"title\": \"PR {i}\", \"status\": \"active\", \"sourceRefName\": \"refs/heads/feature{i}\", \"targetRefName\": \"refs/heads/main\" }}")
+        );
+        using var response = JsonResponse($"{{ \"count\": 3, \"value\": [{entries}] }}");
+        var client = CreateClient(out _, response);
+
+        var pullRequests = await client.GetProjectPullRequestsAsync(
+            "Alpha",
+            null,
+            false,
+            false,
+            2,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(2, pullRequests.Items.Count);
+        Assert.True(pullRequests.Truncated);
     }
 
     [Fact]
@@ -1006,6 +1032,28 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             TestContext.Current.CancellationToken
         );
 
-        Assert.Contains("$top=25", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
+        Assert.Contains("$top=26", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task GetPullRequestsAsync_WhenServerReturnsMoreThanTop_ReportsTruncated()
+    {
+        var entries = string.Join(
+            ',',
+            Enumerable.Range(1, 3).Select(i => $"{{ \"pullRequestId\": {i}, \"title\": \"PR {i}\", \"status\": \"active\", \"sourceRefName\": \"refs/heads/feature{i}\", \"targetRefName\": \"refs/heads/main\" }}")
+        );
+        using var response = JsonResponse($"{{ \"count\": 3, \"value\": [{entries}] }}");
+        var client = CreateClient(out _, response);
+
+        var pullRequests = await client.GetPullRequestsAsync(
+            "WebApp",
+            "Alpha",
+            null,
+            2,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(2, pullRequests.Items.Count);
+        Assert.True(pullRequests.Truncated);
     }
 }

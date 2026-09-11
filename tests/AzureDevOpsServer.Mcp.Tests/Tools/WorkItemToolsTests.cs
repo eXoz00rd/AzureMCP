@@ -165,7 +165,7 @@ public sealed class WorkItemToolsTests : ToolTestsBase
             TestContext.Current.CancellationToken
         );
 
-        Assert.Equal("Rev text", Assert.Single(revisions).Fields["System.Description"].GetString());
+        Assert.Equal("Rev text", Assert.Single(revisions.Items).Fields["System.Description"].GetString());
     }
 
     [Fact]

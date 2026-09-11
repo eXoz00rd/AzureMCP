@@ -7,7 +7,7 @@ namespace AzureDevOpsServer.Mcp.AzureDevOps;
 
 public sealed partial class AzureDevOpsClient
 {
-    public async Task<IReadOnlyList<GitPullRequest>> GetPullRequestsAsync(
+    public async Task<LimitedList<GitPullRequest>> GetPullRequestsAsync(
         string repository,
         string? project,
         string? status,
@@ -18,7 +18,7 @@ public sealed partial class AzureDevOpsClient
             "active" :
             status;
         using var response = await _httpClient.GetAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests?searchCriteria.status={Uri.EscapeDataString(effectiveStatus)}&$top={top}&api-version={ApiVersion(ApiArea.Git)}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/pullrequests?searchCriteria.status={Uri.EscapeDataString(effectiveStatus)}&$top={top + 1}&api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -26,7 +26,7 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<GitPullRequest>>(cancellationToken);
-        return result?.Value ?? [];
+        return LimitTo(result?.Value ?? [], top);
     }
 
     public async Task<GitPullRequest> GetPullRequestAsync(
@@ -308,7 +308,7 @@ public sealed partial class AzureDevOpsClient
             );
     }
 
-    public async Task<IReadOnlyList<GitPullRequest>> GetProjectPullRequestsAsync(
+    public async Task<LimitedList<GitPullRequest>> GetProjectPullRequestsAsync(
         string? project,
         string? status,
         bool createdByMe,
@@ -320,7 +320,7 @@ public sealed partial class AzureDevOpsClient
             "active" :
             status;
         var requestUri =
-            $"{Scope(RequireProject(project))}_apis/git/pullrequests?searchCriteria.status={Uri.EscapeDataString(effectiveStatus)}&$top={top}&api-version={ApiVersion(ApiArea.Git)}";
+            $"{Scope(RequireProject(project))}_apis/git/pullrequests?searchCriteria.status={Uri.EscapeDataString(effectiveStatus)}&$top={top + 1}&api-version={ApiVersion(ApiArea.Git)}";
 
         if (createdByMe || assignedToMe)
         {
@@ -345,7 +345,7 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<GitPullRequest>>(cancellationToken);
-        return result?.Value ?? [];
+        return LimitTo(result?.Value ?? [], top);
     }
 
     public async Task<IReadOnlyList<PolicyEvaluation>> GetPullRequestPolicyEvaluationsAsync(

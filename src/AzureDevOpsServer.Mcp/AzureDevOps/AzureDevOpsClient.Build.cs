@@ -93,14 +93,14 @@ public sealed partial class AzureDevOpsClient
         return result?.Value ?? [];
     }
 
-    public async Task<IReadOnlyList<Build>> GetBuildsAsync(
+    public async Task<LimitedList<Build>> GetBuildsAsync(
         string? project,
         int? definitionId,
         int top,
         CancellationToken cancellationToken)
     {
         var requestUri =
-            $"{Scope(RequireProject(project))}_apis/build/builds?api-version={ApiVersion(ApiArea.Build)}&$top={top}";
+            $"{Scope(RequireProject(project))}_apis/build/builds?api-version={ApiVersion(ApiArea.Build)}&$top={top + 1}";
         if (definitionId is not null)
         {
             requestUri += $"&definitions={definitionId}";
@@ -115,7 +115,7 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<Build>>(cancellationToken);
-        return result?.Value ?? [];
+        return LimitTo(result?.Value ?? [], top);
     }
 
     public async Task<Build> QueueBuildAsync(

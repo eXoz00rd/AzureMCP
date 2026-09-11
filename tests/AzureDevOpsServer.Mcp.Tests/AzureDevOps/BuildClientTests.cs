@@ -74,14 +74,31 @@ public sealed class BuildClientTests : AzureDevOpsClientTestsBase
 
         var builds = await client.GetBuildsAsync("Alpha", 12, 20, TestContext.Current.CancellationToken);
 
-        var build = Assert.Single(builds);
+        var build = Assert.Single(builds.Items);
+        Assert.False(builds.Truncated);
         Assert.Equal("20260810.1", build.BuildNumber);
         Assert.Equal("succeeded", build.Result);
         Assert.Equal(12, build.Definition!.Id);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
-        Assert.Contains("$top=20", requestUri);
+        Assert.Contains("$top=21", requestUri);
         Assert.Contains("definitions=12", requestUri);
         Assert.Contains("Alpha/_apis/build/builds", requestUri);
+    }
+
+    [Fact]
+    public async Task GetBuildsAsync_WhenServerReturnsMoreThanTop_ReportsTruncated()
+    {
+        var entries = string.Join(
+            ',',
+            Enumerable.Range(1, 3).Select(i => $"{{ \"id\": {i}, \"buildNumber\": \"{i}\", \"status\": \"completed\" }}")
+        );
+        using var response = JsonResponse($"{{ \"count\": 3, \"value\": [{entries}] }}");
+        var client = CreateClient(out _, response);
+
+        var builds = await client.GetBuildsAsync("Alpha", null, 2, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, builds.Items.Count);
+        Assert.True(builds.Truncated);
     }
 
     [Fact]

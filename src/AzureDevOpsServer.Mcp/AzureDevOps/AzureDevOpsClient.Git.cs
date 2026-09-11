@@ -26,14 +26,14 @@ public sealed partial class AzureDevOpsClient
         return result?.Value ?? [];
     }
 
-    public async Task<IReadOnlyList<GitRef>> GetBranchesAsync(
+    public async Task<LimitedList<GitRef>> GetBranchesAsync(
         string repository,
         string? project,
         int top,
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/refs?filter=heads/&$top={top}&api-version={ApiVersion(ApiArea.Git)}",
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/refs?filter=heads/&$top={top + 1}&api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -41,7 +41,7 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<GitRef>>(cancellationToken);
-        return result?.Value ?? [];
+        return LimitTo(result?.Value ?? [], top);
     }
 
     public async Task<GitFileContent> GetFileContentAsync(
@@ -101,7 +101,7 @@ public sealed partial class AzureDevOpsClient
         );
     }
 
-    public async Task<IReadOnlyList<GitCommit>> GetCommitsAsync(
+    public async Task<LimitedList<GitCommit>> GetCommitsAsync(
         string repository,
         string? branch,
         string? itemPath,
@@ -110,7 +110,7 @@ public sealed partial class AzureDevOpsClient
         CancellationToken cancellationToken)
     {
         var requestUri =
-            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/commits?searchCriteria.$top={top}&api-version={ApiVersion(ApiArea.Git)}";
+            $"{Scope(project)}_apis/git/repositories/{Uri.EscapeDataString(repository)}/commits?searchCriteria.$top={top + 1}&api-version={ApiVersion(ApiArea.Git)}";
         if (!string.IsNullOrWhiteSpace(branch))
         {
             requestUri += $"&searchCriteria.itemVersion.version={Uri.EscapeDataString(ShortBranchName(branch))}";
@@ -130,7 +130,7 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<GitCommit>>(cancellationToken);
-        return result?.Value ?? [];
+        return LimitTo(result?.Value ?? [], top);
     }
 
     public async Task<GitCommitDetails> GetCommitAsync(
@@ -198,10 +198,7 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<GitTreeItem>>(cancellationToken);
-        var items = result?.Value ?? [];
-        return items.Count <= maxItems ?
-            new LimitedList<GitTreeItem>(items, false) :
-            new LimitedList<GitTreeItem>(items.Take(maxItems).ToList(), true);
+        return LimitTo(result?.Value ?? [], maxItems);
     }
 
     public async Task<GitDiffs> GetBranchDiffAsync(

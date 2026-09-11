@@ -192,13 +192,13 @@ public sealed partial class AzureDevOpsClient
             comment;
     }
 
-    public async Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(
+    public async Task<LimitedList<WorkItem>> GetWorkItemRevisionsAsync(
         int id,
         int top,
         CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"_apis/wit/workItems/{id}/revisions?$top={top}&api-version={ApiVersion(ApiArea.WorkItems)}",
+            $"_apis/wit/workItems/{id}/revisions?$top={top + 1}&api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -206,7 +206,7 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<WorkItem>>(cancellationToken);
-        return result?.Value ?? [];
+        return LimitTo(result?.Value ?? [], top);
     }
 
     public async Task<WorkItem> AddWorkItemRelationAsync(

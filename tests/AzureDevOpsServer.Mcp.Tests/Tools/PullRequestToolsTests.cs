@@ -47,7 +47,7 @@ public sealed class PullRequestToolsTests : ToolTestsBase
         );
 
         Assert.Contains("/FallbackProject/_apis/git/repositories/WebApp/pullrequests", harness.RequestUri);
-        Assert.Contains("$top=100", harness.RequestUri);
+        Assert.Contains("$top=101", harness.RequestUri);
         Assert.Contains("searchCriteria.status=active", harness.RequestUri);
     }
 
@@ -67,7 +67,7 @@ public sealed class PullRequestToolsTests : ToolTestsBase
         );
 
         Assert.Contains("/Explicit/_apis/git/repositories/WebApp/pullrequests", harness.RequestUri);
-        Assert.Contains("$top=5", harness.RequestUri);
+        Assert.Contains("$top=6", harness.RequestUri);
         Assert.DoesNotContain("FallbackProject", harness.RequestUri);
     }
 
