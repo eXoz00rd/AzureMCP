@@ -12,6 +12,7 @@ public sealed partial class AzureDevOpsClient
 {
     private const int MaxErrorBodyLength = 500;
     private const int ProjectPageSize = 100;
+    private const int MaxProjectPages = 100;
     private const string ContinuationTokenHeader = "x-ms-continuationtoken";
 
     private readonly HttpClient _httpClient;
@@ -23,10 +24,12 @@ public sealed partial class AzureDevOpsClient
         _options = options;
     }
 
-    public async Task<IReadOnlyList<TeamProject>> GetProjectsAsync(CancellationToken cancellationToken)
+    public async Task<LimitedList<TeamProject>> GetProjectsAsync(CancellationToken cancellationToken)
     {
         var projects = new List<TeamProject>();
         string? continuationToken = null;
+        var pageCount = 0;
+        var truncated = false;
 
         do
         {
@@ -50,12 +53,23 @@ public sealed partial class AzureDevOpsClient
                 projects.AddRange(page.Value);
             }
 
+            pageCount++;
+
             continuationToken = response.Headers.TryGetValues(ContinuationTokenHeader, out var values) ?
                 values.FirstOrDefault() :
                 null;
+
+            // A malformed or looping continuation token from the server would otherwise page
+            // forever, so stop once a generous page ceiling is reached even if the server still
+            // offers a token, and report that projects beyond it were left out.
+            if (pageCount >= MaxProjectPages && !string.IsNullOrEmpty(continuationToken))
+            {
+                truncated = true;
+                continuationToken = null;
+            }
         } while (!string.IsNullOrEmpty(continuationToken));
 
-        return projects;
+        return new LimitedList<TeamProject>(projects, truncated);
     }
 
     public async Task<ProjectDetails> GetProjectAsync(string? project, CancellationToken cancellationToken)

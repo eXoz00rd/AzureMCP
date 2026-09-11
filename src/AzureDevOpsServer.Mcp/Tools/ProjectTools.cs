@@ -20,8 +20,10 @@ public sealed class ProjectTools
     }
 
     [McpServerTool(Name = "list_projects", ReadOnly = true, UseStructuredContent = true)]
-    [Description("Lists the projects in the configured Azure DevOps Server collection.")]
-    public Task<IReadOnlyList<TeamProject>> ListProjectsAsync(CancellationToken cancellationToken)
+    [Description(
+        "Lists the projects in the configured Azure DevOps Server collection. The result reports whether it was truncated by an internal safety ceiling; this should not happen for a real collection."
+    )]
+    public Task<LimitedList<TeamProject>> ListProjectsAsync(CancellationToken cancellationToken)
     {
         return _client.GetProjectsAsync(cancellationToken);
     }

@@ -81,10 +81,11 @@ public sealed class ProjectClientTests : AzureDevOpsClientTestsBase
 
         var projects = await client.GetProjectsAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, projects.Count);
-        Assert.Equal("Alpha", projects[0].Name);
-        Assert.Equal("First project", projects[0].Description);
-        Assert.Null(projects[1].Description);
+        Assert.Equal(2, projects.Items.Count);
+        Assert.False(projects.Truncated);
+        Assert.Equal("Alpha", projects.Items[0].Name);
+        Assert.Equal("First project", projects.Items[0].Description);
+        Assert.Null(projects.Items[1].Description);
         Assert.EndsWith(
             "_apis/projects?api-version=7.0&$top=100",
             Assert.Single(handler.Requests).RequestUri!.ToString()
@@ -129,9 +130,70 @@ public sealed class ProjectClientTests : AzureDevOpsClientTestsBase
 
         var projects = await client.GetProjectsAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, projects.Count);
+        Assert.Equal(2, projects.Items.Count);
+        Assert.False(projects.Truncated);
         Assert.Equal(2, handler.Requests.Count);
         Assert.Contains("continuationToken=token-123", handler.Requests[1].RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task GetProjectsAsync_WhenContinuationTokenNeverEnds_StopsAtPageCeiling()
+    {
+        const int maxProjectPages = 100;
+        var responses = Enumerable.Range(1, maxProjectPages)
+                                   .Select(i =>
+                                   {
+                                       var response = JsonResponse(
+                                           $"{{ \"count\": 1, \"value\": [ {{ \"id\": \"{Guid.NewGuid()}\", \"name\": \"Project{i}\", \"state\": \"wellFormed\", \"url\": \"https://devops.example.local/DefaultCollection/_apis/projects/p{i}\" }} ] }}"
+                                       );
+                                       response.Headers.Add("x-ms-continuationtoken", $"token-{i}");
+                                       return response;
+                                   })
+                                   .ToArray();
+        var client = CreateClient(out var handler, responses);
+
+        var projects = await client.GetProjectsAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(maxProjectPages, projects.Items.Count);
+        Assert.True(projects.Truncated);
+        Assert.Equal(maxProjectPages, handler.Requests.Count);
+
+        foreach (var response in responses)
+        {
+            response.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task GetProjectsAsync_WhenCollectionEndsExactlyAtPageCeiling_ReportsNotTruncated()
+    {
+        const int maxProjectPages = 100;
+        var responses = Enumerable.Range(1, maxProjectPages)
+                                   .Select(i =>
+                                   {
+                                       var response = JsonResponse(
+                                           $"{{ \"count\": 1, \"value\": [ {{ \"id\": \"{Guid.NewGuid()}\", \"name\": \"Project{i}\", \"state\": \"wellFormed\", \"url\": \"https://devops.example.local/DefaultCollection/_apis/projects/p{i}\" }} ] }}"
+                                       );
+                                       if (i < maxProjectPages)
+                                       {
+                                           response.Headers.Add("x-ms-continuationtoken", $"token-{i}");
+                                       }
+
+                                       return response;
+                                   })
+                                   .ToArray();
+        var client = CreateClient(out var handler, responses);
+
+        var projects = await client.GetProjectsAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(maxProjectPages, projects.Items.Count);
+        Assert.False(projects.Truncated);
+        Assert.Equal(maxProjectPages, handler.Requests.Count);
+
+        foreach (var response in responses)
+        {
+            response.Dispose();
+        }
     }
 
     [Theory]

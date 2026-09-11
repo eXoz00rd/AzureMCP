@@ -62,6 +62,13 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException("At least one work item id is required.");
         }
 
+        if (ids.Count > ResponseLimits.MaxWorkItemIds)
+        {
+            throw new AzureDevOpsClientException(
+                $"At most {ResponseLimits.MaxWorkItemIds} work item ids are allowed per call. Received {ids.Count}."
+            );
+        }
+
         using var response = await _httpClient.GetAsync(
             $"_apis/wit/workitems?ids={string.Join(',', ids)}&{FieldsOrRelations(fields, includeRelations)}&api-version={ApiVersion(ApiArea.WorkItems)}",
             HttpCompletionOption.ResponseHeadersRead,

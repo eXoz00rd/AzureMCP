@@ -83,6 +83,20 @@ public sealed class LimitValidationTests : ToolTestsBase
     }
 
     [Fact]
+    public async Task GetWorkItemsAsync_WithTooManyIds_FailsBeforeSendingRequest()
+    {
+        var harness = CreateHarness("FallbackProject");
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+        var ids = Enumerable.Range(1, ResponseLimits.MaxWorkItemIds + 1).ToArray();
+
+        await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => tools.GetWorkItemsAsync(ids, null, false, null, TestContext.Current.CancellationToken)
+        );
+
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Fact]
     public async Task ListBranchesAsync_AtRangeBoundaries_SendsRequest()
     {
         using var minimum = EmptyList();

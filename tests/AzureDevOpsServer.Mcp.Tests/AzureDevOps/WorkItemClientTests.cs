@@ -491,6 +491,32 @@ public sealed class WorkItemClientTests : AzureDevOpsClientTestsBase
         Assert.Empty(handler.Requests);
     }
 
+    [Fact]
+    public async Task GetWorkItemsAsync_WithTooManyIds_Throws()
+    {
+        var client = CreateClient(out var handler);
+        var ids = Enumerable.Range(1, ResponseLimits.MaxWorkItemIds + 1).ToArray();
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+            => client.GetWorkItemsAsync(ids, null, false, TestContext.Current.CancellationToken)
+        );
+
+        Assert.Contains($"At most {ResponseLimits.MaxWorkItemIds} work item ids", exception.Message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetWorkItemsAsync_AtMaximumIds_SendsRequest()
+    {
+        using var response = JsonResponse("""{ "count": 0, "value": [] }""");
+        var client = CreateClient(out var handler, response);
+        var ids = Enumerable.Range(1, ResponseLimits.MaxWorkItemIds).ToArray();
+
+        await client.GetWorkItemsAsync(ids, null, false, TestContext.Current.CancellationToken);
+
+        Assert.Single(handler.Requests);
+    }
+
 
     [Fact]
     public async Task GetWorkItemAsync_WithFields_RequestsFieldsInsteadOfRelations()
