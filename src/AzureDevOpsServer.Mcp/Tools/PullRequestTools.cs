@@ -21,8 +21,10 @@ public sealed class PullRequestTools
     }
 
     [McpServerTool(Name = "list_pull_requests", ReadOnly = true, UseStructuredContent = true)]
-    [Description("Lists pull requests of a Git repository filtered by status.")]
-    public Task<IReadOnlyList<GitPullRequest>> ListPullRequestsAsync(
+    [Description(
+        "Lists pull requests of a Git repository filtered by status. The result reports whether it was truncated, so raise the limit when it was."
+    )]
+    public Task<LimitedList<GitPullRequest>> ListPullRequestsAsync(
         [Description("Repository name or id.")] string repository,
         [Description("Optional status filter: active, completed, abandoned, or all. Defaults to active.")]
         string? status = null,
@@ -164,9 +166,9 @@ public sealed class PullRequestTools
 
     [McpServerTool(Name = "list_my_pull_requests", ReadOnly = true, UseStructuredContent = true)]
     [Description(
-        "Lists pull requests across all repositories of a project, optionally only those the signed-in user created or reviews. Answers questions like which pull requests are waiting for me."
+        "Lists pull requests across all repositories of a project, optionally only those the signed-in user created or reviews. Answers questions like which pull requests are waiting for me. The result reports whether it was truncated, so raise the limit when it was."
     )]
-    public Task<IReadOnlyList<GitPullRequest>> ListMyPullRequestsAsync(
+    public Task<LimitedList<GitPullRequest>> ListMyPullRequestsAsync(
         [Description("Optional status filter: active, completed, abandoned, or all. Defaults to active.")]
         string? status = null,
         [Description("Set to true to only return pull requests created by the signed-in user.")]

@@ -33,9 +33,9 @@ public sealed class RepositoryTools
 
     [McpServerTool(Name = "list_branches", ReadOnly = true, UseStructuredContent = true)]
     [Description(
-        "Lists the branches of a Git repository. Returns at most the requested number of branches, so raise it when a branch seems missing."
+        "Lists the branches of a Git repository. Returns at most the requested number of branches; the result reports whether it was truncated, so raise the limit when it was."
     )]
-    public Task<IReadOnlyList<GitRef>> ListBranchesAsync(
+    public Task<LimitedList<GitRef>> ListBranchesAsync(
         [Description("Repository name or id.")] string repository,
         [Description("Maximum number of branches to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
@@ -79,8 +79,10 @@ public sealed class RepositoryTools
     }
 
     [McpServerTool(Name = "list_commits", ReadOnly = true, UseStructuredContent = true)]
-    [Description("Lists recent commits of a repository, optionally filtered by branch and file path.")]
-    public Task<IReadOnlyList<GitCommit>> ListCommitsAsync(
+    [Description(
+        "Lists recent commits of a repository, optionally filtered by branch and file path. The result reports whether it was truncated, so raise the limit when it was."
+    )]
+    public Task<LimitedList<GitCommit>> ListCommitsAsync(
         [Description("Repository name or id.")] string repository,
         [Description(
             "Optional branch name, with or without the refs/heads/ prefix. Uses the default branch when omitted."

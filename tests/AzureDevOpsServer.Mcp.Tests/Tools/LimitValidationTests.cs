@@ -91,7 +91,7 @@ public sealed class LimitValidationTests : ToolTestsBase
 
         await tools.ListBranchesAsync("WebApp", ResponseLimits.MinTop, null, TestContext.Current.CancellationToken);
 
-        Assert.Contains($"$top={ResponseLimits.MinTop}", harness.RequestUri);
+        Assert.Contains($"$top={ResponseLimits.MinTop + 1}", harness.RequestUri);
     }
 
     [Fact]
@@ -103,6 +103,6 @@ public sealed class LimitValidationTests : ToolTestsBase
 
         await tools.ListBranchesAsync("WebApp", ResponseLimits.MaxTop, null, TestContext.Current.CancellationToken);
 
-        Assert.Contains($"$top={ResponseLimits.MaxTop}", harness.RequestUri);
+        Assert.Contains($"$top={ResponseLimits.MaxTop + 1}", harness.RequestUri);
     }
 }

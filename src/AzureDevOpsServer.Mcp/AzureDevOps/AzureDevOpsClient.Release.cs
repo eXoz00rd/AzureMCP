@@ -10,14 +10,14 @@ namespace AzureDevOpsServer.Mcp.AzureDevOps;
 
 public sealed partial class AzureDevOpsClient
 {
-    public async Task<IReadOnlyList<ReleaseApproval>> GetReleaseApprovalsAsync(
+    public async Task<LimitedList<ReleaseApproval>> GetReleaseApprovalsAsync(
         string? project,
         int? releaseId,
         int top,
         CancellationToken cancellationToken)
     {
         var requestUri =
-            $"{Scope(RequireProject(project))}_apis/release/approvals?statusFilter=pending&$top={top}&api-version={ApiVersion(ApiArea.Release)}";
+            $"{Scope(RequireProject(project))}_apis/release/approvals?statusFilter=pending&$top={top + 1}&api-version={ApiVersion(ApiArea.Release)}";
         if (releaseId is not null)
         {
             requestUri += $"&releaseIdsFilter={releaseId}";
@@ -32,7 +32,7 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<ReleaseApproval>>(cancellationToken);
-        return result?.Value ?? [];
+        return LimitTo(result?.Value ?? [], top);
     }
 
     public async Task<ReleaseApproval> UpdateReleaseApprovalAsync(
@@ -101,14 +101,14 @@ public sealed partial class AzureDevOpsClient
         return result?.Value ?? [];
     }
 
-    public async Task<IReadOnlyList<Release>> GetReleasesAsync(
+    public async Task<LimitedList<Release>> GetReleasesAsync(
         string? project,
         int? definitionId,
         int top,
         CancellationToken cancellationToken)
     {
         var requestUri =
-            $"{Scope(RequireProject(project))}_apis/release/releases?api-version={ApiVersion(ApiArea.Release)}&$top={top}";
+            $"{Scope(RequireProject(project))}_apis/release/releases?api-version={ApiVersion(ApiArea.Release)}&$top={top + 1}";
         if (definitionId is not null)
         {
             requestUri += $"&definitionId={definitionId}";
@@ -123,7 +123,7 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<Release>>(cancellationToken);
-        return result?.Value ?? [];
+        return LimitTo(result?.Value ?? [], top);
     }
 
     public async Task<Release> GetReleaseAsync(

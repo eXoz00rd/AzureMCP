@@ -87,6 +87,15 @@ public sealed partial class AzureDevOpsClient
             project;
     }
 
+    // Callers request one more item than the effective limit, so a full page means there is
+    // more beyond it; this lets truncation be reported without a separate total count.
+    private static LimitedList<T> LimitTo<T>(IReadOnlyList<T> items, int top)
+    {
+        return items.Count <= top ?
+            new LimitedList<T>(items, false) :
+            new LimitedList<T>(items.Take(top).ToList(), true);
+    }
+
     private static string ToRefName(string branch)
     {
         return branch.StartsWith("refs/", StringComparison.Ordinal) ?

@@ -73,10 +73,11 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
 
         var branches = await client.GetBranchesAsync("WebApp", "Alpha", 100, TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, branches.Count);
-        Assert.Equal("refs/heads/main", branches[0].Name);
+        Assert.Equal(2, branches.Items.Count);
+        Assert.False(branches.Truncated);
+        Assert.Equal("refs/heads/main", branches.Items[0].Name);
         Assert.EndsWith(
-            "Alpha/_apis/git/repositories/WebApp/refs?filter=heads/&$top=100&api-version=7.0",
+            "Alpha/_apis/git/repositories/WebApp/refs?filter=heads/&$top=101&api-version=7.0",
             Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
         );
     }
@@ -161,11 +162,12 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
             TestContext.Current.CancellationToken
         );
 
-        var commit = Assert.Single(commits);
+        var commit = Assert.Single(commits.Items);
+        Assert.False(commits.Truncated);
         Assert.Equal("Fix login bug", commit.Comment);
         Assert.Equal("Sebastian", commit.Author!.Name);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
-        Assert.Contains("searchCriteria.$top=20", requestUri);
+        Assert.Contains("searchCriteria.$top=21", requestUri);
         Assert.Contains("searchCriteria.itemVersion.version=develop", requestUri);
         Assert.Contains("searchCriteria.itemPath=%2Fsrc", requestUri);
     }
@@ -752,7 +754,40 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
 
         await client.GetBranchesAsync("WebApp", "Alpha", 250, TestContext.Current.CancellationToken);
 
-        Assert.Contains("$top=250", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
+        Assert.Contains("$top=251", Assert.Single(handler.Requests).RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task GetBranchesAsync_WhenServerReturnsMoreThanTop_ReportsTruncated()
+    {
+        var entries = string.Join(',', Enumerable.Range(1, 3).Select(i => $"{{ \"name\": \"refs/heads/branch{i}\", \"objectId\": \"a{i}\" }}"));
+        using var response = JsonResponse($"{{ \"count\": 3, \"value\": [{entries}] }}");
+        var client = CreateClient(out _, response);
+
+        var branches = await client.GetBranchesAsync("WebApp", "Alpha", 2, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, branches.Items.Count);
+        Assert.True(branches.Truncated);
+    }
+
+    [Fact]
+    public async Task GetCommitsAsync_WhenServerReturnsMoreThanTop_ReportsTruncated()
+    {
+        var entries = string.Join(',', Enumerable.Range(1, 3).Select(i => $"{{ \"commitId\": \"commit{i}\", \"comment\": \"Change {i}\" }}"));
+        using var response = JsonResponse($"{{ \"count\": 3, \"value\": [{entries}] }}");
+        var client = CreateClient(out _, response);
+
+        var commits = await client.GetCommitsAsync(
+            "WebApp",
+            null,
+            null,
+            2,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(2, commits.Items.Count);
+        Assert.True(commits.Truncated);
     }
 
 }
