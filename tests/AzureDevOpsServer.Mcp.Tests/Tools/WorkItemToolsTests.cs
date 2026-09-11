@@ -17,7 +17,7 @@ public sealed class WorkItemToolsTests : ToolTestsBase
         var harness = CreateHarness("FallbackProject", response);
         var tools = new WorkItemTools(harness.Client, harness.Options);
 
-        await tools.CreateWorkItemAsync(
+        var result = await tools.CreateWorkItemAsync(
             "Bug",
             "Login fails",
             new Dictionary<string, string> { ["System.Description"] = "Steps to reproduce" },
@@ -25,6 +25,11 @@ public sealed class WorkItemToolsTests : ToolTestsBase
             TestContext.Current.CancellationToken
         );
 
+        Assert.Equal(1, result.Id);
+        Assert.Equal(1, result.Rev);
+        Assert.True(result.Success);
+        Assert.Contains("System.Title", result.ChangedFields);
+        Assert.Contains("System.Description", result.ChangedFields);
         Assert.Contains("/FallbackProject/_apis/wit/workitems/$Bug", harness.RequestUri);
         using var body = JsonDocument.Parse(harness.Handler.RequestBodies[0]);
         var paths = body.RootElement
@@ -33,6 +38,73 @@ public sealed class WorkItemToolsTests : ToolTestsBase
                         .ToList();
         Assert.Contains("/fields/System.Title", paths);
         Assert.Contains("/fields/System.Description", paths);
+    }
+
+    [Fact]
+    public async Task UpdateWorkItemAsync_ReturnsMinimalResultWithChangedFields()
+    {
+        using var response = JsonResponse(WorkItemJson);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var result = await tools.UpdateWorkItemAsync(
+            1,
+            new Dictionary<string, string> { ["System.State"] = "Active" },
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(1, result.Id);
+        Assert.Equal(1, result.Rev);
+        Assert.True(result.Success);
+        Assert.Equal(["System.State"], result.ChangedFields);
+    }
+
+    [Fact]
+    public async Task LinkWorkItemAsync_ReturnsMinimalResultWithRelation()
+    {
+        using var response = JsonResponse(WorkItemJson);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var result = await tools.LinkWorkItemAsync(
+            1,
+            "related",
+            2,
+            null,
+            null,
+            null,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(1, result.Id);
+        Assert.Equal(1, result.Rev);
+        Assert.True(result.Success);
+        Assert.Equal(["System.LinkTypes.Related"], result.ChangedFields);
+    }
+
+    [Fact]
+    public async Task AddWorkItemAttachmentAsync_ReturnsMinimalResult()
+    {
+        using var uploadResponse = JsonResponse(
+            """{ "id": "1a2b3c4d-5e6f-4a8b-9c0d-1e2f3a4b5c6d", "url": "https://devops.example.local/_apis/wit/attachments/1a2b3c4d-5e6f-4a8b-9c0d-1e2f3a4b5c6d" }"""
+        );
+        using var relationResponse = JsonResponse(WorkItemJson);
+        var harness = CreateHarness("FallbackProject", uploadResponse, relationResponse);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var result = await tools.AddWorkItemAttachmentAsync(
+            1,
+            "build-log.txt",
+            "log contents",
+            null,
+            null,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(1, result.Id);
+        Assert.Equal(1, result.Rev);
+        Assert.True(result.Success);
+        Assert.Equal(["AttachedFile"], result.ChangedFields);
     }
 
     [Fact]

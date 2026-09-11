@@ -108,7 +108,7 @@ public sealed class WorkItemTools
     [Description(
         "Links a work item to another work item, or to a commit or pull request by its artifact URL. To link a pull request, prefer link_pull_request_to_work_item, which builds the URL itself."
     )]
-    public Task<WorkItem> LinkWorkItemAsync(
+    public async Task<WorkItemWriteResult> LinkWorkItemAsync(
         [Description("Work item id that receives the link.")] int id,
         [Description(
             "Link kind: parent, child, related, duplicate, predecessor, successor, or a raw relation name such as ArtifactLink."
@@ -149,7 +149,7 @@ public sealed class WorkItemTools
                 );
         }
 
-        return _client.AddWorkItemRelationAsync(
+        var workItem = await _client.AddWorkItemRelationAsync(
             id,
             relation,
             url,
@@ -157,11 +157,12 @@ public sealed class WorkItemTools
             comment,
             cancellationToken
         );
+        return new WorkItemWriteResult(workItem.Id, workItem.Rev, [relation], true);
     }
 
     [McpServerTool(Name = "add_work_item_attachment", Destructive = false, UseStructuredContent = true)]
     [Description("Uploads text content as a file and attaches it to a work item, for example a log excerpt or a note.")]
-    public Task<WorkItem> AddWorkItemAttachmentAsync(
+    public async Task<WorkItemWriteResult> AddWorkItemAttachmentAsync(
         [Description("Work item id.")] int id,
         [Description("File name including extension, for example build-log.txt.")]
         string fileName,
@@ -173,7 +174,7 @@ public sealed class WorkItemTools
         string? project = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.AddWorkItemAttachmentAsync(
+        var workItem = await _client.AddWorkItemAttachmentAsync(
             id,
             fileName,
             content,
@@ -181,6 +182,7 @@ public sealed class WorkItemTools
             EffectiveProject(project),
             cancellationToken
         );
+        return new WorkItemWriteResult(workItem.Id, workItem.Rev, ["AttachedFile"], true);
     }
 
     internal static string ParseLinkType(string linkType)
@@ -202,7 +204,7 @@ public sealed class WorkItemTools
 
     [McpServerTool(Name = "create_work_item", Destructive = false, UseStructuredContent = true)]
     [Description("Creates a new work item of the given type. Requires a project name or ADOS_DEFAULT_PROJECT.")]
-    public Task<WorkItem> CreateWorkItemAsync(
+    public async Task<WorkItemWriteResult> CreateWorkItemAsync(
         [Description("Work item type, for example Bug, Task, or User Story.")] string type,
         [Description("Title of the new work item.")]
         string title,
@@ -227,18 +229,20 @@ public sealed class WorkItemTools
         var effectiveProject = string.IsNullOrWhiteSpace(project) ?
             _options.Value.DefaultProject :
             project;
-        return _client.CreateWorkItemAsync(effectiveProject, type, allFields, cancellationToken);
+        var workItem = await _client.CreateWorkItemAsync(effectiveProject, type, allFields, cancellationToken);
+        return new WorkItemWriteResult(workItem.Id, workItem.Rev, allFields.Keys.ToList(), true);
     }
 
     [McpServerTool(Name = "update_work_item", Destructive = true, UseStructuredContent = true)]
     [Description("Updates fields of an existing work item.")]
-    public Task<WorkItem> UpdateWorkItemAsync(
+    public async Task<WorkItemWriteResult> UpdateWorkItemAsync(
         [Description("Work item id.")] int id,
         [Description("Fields to set as reference name to value pairs, for example System.State or System.AssignedTo.")]
         Dictionary<string, string> fields,
         CancellationToken cancellationToken = default)
     {
-        return _client.UpdateWorkItemAsync(id, fields, cancellationToken);
+        var workItem = await _client.UpdateWorkItemAsync(id, fields, cancellationToken);
+        return new WorkItemWriteResult(workItem.Id, workItem.Rev, fields.Keys.ToList(), true);
     }
 
     [McpServerTool(Name = "add_work_item_comment", Destructive = false, UseStructuredContent = true)]
