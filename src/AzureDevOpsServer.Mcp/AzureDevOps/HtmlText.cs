@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace AzureDevOpsServer.Mcp.AzureDevOps;
 
@@ -8,7 +10,7 @@ namespace AzureDevOpsServer.Mcp.AzureDevOps;
 // full HTML parser dependency for what is, in practice, a small set of tags emitted by the
 // Azure DevOps Server rich text editor. Only WorkItemTools.RichTextFields decides which fields
 // are ever passed through here; this converter has no opinion on that.
-internal static class HtmlText
+internal static partial class HtmlText
 {
     // A Private Use Area character standing in for a newline that must survive
     // CollapseWhitespace's per-line trimming untouched, because it falls inside (or bounds) a
@@ -35,16 +37,36 @@ internal static class HtmlText
     };
 
     // PreservedNewline and PreservedTab are also ordinary Unicode characters that a field value
-    // could (vanishingly unlikely, but not impossible) already contain. Since they have no
-    // defined meaning outside a private, per-application agreement, a stray occurrence is
-    // replaced with the standard Unicode replacement character up front, so the final Replace
-    // calls below can never mistake real field content for one of this converter's own markers.
+    // could (vanishingly unlikely, but not impossible) already contain, either as the literal
+    // character or as a numeric character reference (for example "&#xE000;") that WebUtility.
+    // HtmlDecode resolves to the same character later, after this method has already run. Since
+    // neither has a defined meaning outside a private, per-application agreement, a stray
+    // occurrence of either form is replaced with the standard Unicode replacement character up
+    // front, so the final Replace calls in ToPlainText can never mistake real field content —
+    // however it was originally written — for one of this converter's own markers.
     private static string SanitizeReservedSentinels(string html)
     {
+        html = NumericCharacterReference().Replace(
+            html,
+            match =>
+            {
+                var isHex = match.Groups["hex"].Success;
+                var digits = isHex ? match.Groups["hex"].Value : match.Groups["dec"].Value;
+                var style = isHex ? NumberStyles.HexNumber : NumberStyles.Integer;
+                return long.TryParse(digits, style, CultureInfo.InvariantCulture, out var value) &&
+                    value is 0xE000 or 0xE001 ?
+                    ReplacementCharacter.ToString() :
+                    match.Value;
+            }
+        );
+
         return html.IndexOf(PreservedNewline) < 0 && html.IndexOf(PreservedTab) < 0 ?
             html :
             html.Replace(PreservedNewline, ReplacementCharacter).Replace(PreservedTab, ReplacementCharacter);
     }
+
+    [GeneratedRegex(@"&#(?:x(?<hex>[0-9a-fA-F]+)|(?<dec>[0-9]+));", RegexOptions.IgnoreCase)]
+    private static partial Regex NumericCharacterReference();
 
     public static string ToPlainText(string html)
     {
@@ -150,6 +172,11 @@ internal static class HtmlText
                 {
                     if (!isFirstCellInRow)
                     {
+                        // Pretty-printed whitespace between cells (for example a newline and
+                        // indentation before this <td>) was already collapsed to a plain space
+                        // by AppendLiteral; that space must not sit between the previous cell's
+                        // content and this separator, so it is trimmed before the tab goes in.
+                        TrimTrailingSpace(builder);
                         builder.Append(PreservedTab);
                     }
 
@@ -454,6 +481,14 @@ internal static class HtmlText
         }
 
         builder.Append(newline);
+    }
+
+    private static void TrimTrailingSpace(StringBuilder builder)
+    {
+        while (builder.Length > 0 && builder[^1] == ' ')
+        {
+            builder.Length--;
+        }
     }
 
     // Quote-aware search for an "href" attribute: a candidate at a proper attribute-name

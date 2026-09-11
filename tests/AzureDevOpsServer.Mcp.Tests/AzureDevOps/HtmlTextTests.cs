@@ -81,6 +81,16 @@ public sealed class HtmlTextTests
     }
 
     [Fact]
+    public void ToPlainText_WithEntityEncodedSentinelCharacter_ReplacesItInsteadOfMisreadingItAsAMarker()
+    {
+        var replacementCharacter = (char)0xFFFD;
+
+        var text = HtmlText.ToPlainText("<p>Weird&#xE000;char</p>");
+
+        Assert.Equal($"Weird{replacementCharacter}char", text);
+    }
+
+    [Fact]
     public void ToPlainText_WithInlineCode_KeepsItInTheSurroundingSentence()
     {
         var text = HtmlText.ToPlainText("<p>Run <code>foo()</code> now</p>");
@@ -194,6 +204,14 @@ public sealed class HtmlTextTests
         var text = HtmlText.ToPlainText("<table><tr><td>Owner</td><td>Value</td></tr></table>");
 
         Assert.Equal("Owner\tValue", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithPrettyPrintedWhitespaceBetweenTableCells_DoesNotLeaveASpaceBeforeTheSeparator()
+    {
+        var text = HtmlText.ToPlainText("<table><tr>\n  <td>A</td>\n  <td>B</td>\n</tr></table>");
+
+        Assert.Equal("A\tB", text);
     }
 
     [Fact]
