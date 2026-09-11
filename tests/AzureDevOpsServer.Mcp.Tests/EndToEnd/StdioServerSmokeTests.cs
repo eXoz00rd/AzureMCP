@@ -60,7 +60,13 @@ public sealed class StdioServerSmokeTests
         var update = await client.CallToolAsync("update_work_item", updateArguments, cancellationToken: cancellationToken);
         Assert.True(update.IsError is null or false);
         Assert.NotNull(update.StructuredContent);
-        Assert.Contains("Resolved", update.StructuredContent.ToString());
+        var updateText = update.StructuredContent.ToString();
+        Assert.NotNull(updateText);
+        using var updateJson = System.Text.Json.JsonDocument.Parse(updateText);
+        Assert.True(updateJson.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal(4, updateJson.RootElement.GetProperty("rev").GetInt32());
+        Assert.Contains("System.State", update.StructuredContent.ToString());
+        Assert.False(updateJson.RootElement.TryGetProperty("fields", out _));
 
         updateArguments["expectedRevision"] = 2;
         var conflict = await client.CallToolAsync("update_work_item", updateArguments, cancellationToken: cancellationToken);
