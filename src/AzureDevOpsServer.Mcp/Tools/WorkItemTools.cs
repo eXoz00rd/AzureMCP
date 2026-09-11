@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json;
 using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.AzureDevOps.Models;
 using AzureDevOpsServer.Mcp.Configuration;
@@ -11,6 +12,9 @@ namespace AzureDevOpsServer.Mcp.Tools;
 [McpServerToolType]
 public sealed class WorkItemTools
 {
+    private const string DescriptionFormatHtml = "html";
+    private const string DescriptionFormatText = "text";
+
     private readonly AzureDevOpsClient _client;
     private readonly IOptions<AzureDevOpsServerOptions> _options;
 
@@ -43,11 +47,50 @@ public sealed class WorkItemTools
             project;
     }
 
+    private static string NormalizeDescriptionFormat(string? descriptionFormat)
+    {
+        if (string.IsNullOrWhiteSpace(descriptionFormat) ||
+            string.Equals(descriptionFormat, DescriptionFormatHtml, StringComparison.OrdinalIgnoreCase))
+        {
+            return DescriptionFormatHtml;
+        }
+
+        if (string.Equals(descriptionFormat, DescriptionFormatText, StringComparison.OrdinalIgnoreCase))
+        {
+            return DescriptionFormatText;
+        }
+
+        throw new McpException(
+            $"'descriptionFormat' must be '{DescriptionFormatHtml}' or '{DescriptionFormatText}'. Received '{descriptionFormat}'."
+        );
+    }
+
+    // Only string field values that look like HTML are converted, so plain fields (titles,
+    // states, identities) are returned exactly as the server sent them.
+    private static WorkItem ApplyDescriptionFormat(WorkItem workItem, string descriptionFormat)
+    {
+        if (descriptionFormat != DescriptionFormatText)
+        {
+            return workItem;
+        }
+
+        var converted = new Dictionary<string, JsonElement>(workItem.Fields.Count);
+        foreach (var (name, value) in workItem.Fields)
+        {
+            converted[name] = value.ValueKind == JsonValueKind.String &&
+                HtmlText.LooksLikeHtml(value.GetString() ?? string.Empty) ?
+                JsonSerializer.SerializeToElement(HtmlText.ToPlainText(value.GetString()!)) :
+                value;
+        }
+
+        return workItem with { Fields = converted };
+    }
+
     [McpServerTool(Name = "get_work_item", ReadOnly = true, UseStructuredContent = true)]
     [Description(
         "Gets a single work item. Returns all fields and relations unless a field list is given; prefer a field list to avoid pulling large HTML descriptions."
     )]
-    public Task<WorkItem> GetWorkItemAsync(
+    public async Task<WorkItem> GetWorkItemAsync(
         [Description("Work item id.")] int id,
         [Description(
             "Optional field reference names to return, for example System.Title and System.State. Relations are only returned when this is omitted, or when includeRelations is set."
@@ -55,14 +98,20 @@ public sealed class WorkItemTools
         string[]? fields = null,
         [Description("When true, also returns relations even when a field list is given.")]
         bool includeRelations = false,
+        [Description(
+            "Format for rich-text fields such as System.Description: 'html' (default, unchanged) or 'text' (tags stripped, entities decoded)."
+        )]
+        string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GetWorkItemAsync(id, fields, includeRelations, cancellationToken);
+        var format = NormalizeDescriptionFormat(descriptionFormat);
+        var workItem = await _client.GetWorkItemAsync(id, fields, includeRelations, cancellationToken);
+        return ApplyDescriptionFormat(workItem, format);
     }
 
     [McpServerTool(Name = "get_work_items", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets multiple work items by their ids in one call. Prefer a field list when fetching many items.")]
-    public Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
+    public async Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
         [Description("Work item ids.")] int[] ids,
         [Description(
             "Optional field reference names to return. Relations are only returned when this is omitted, or when includeRelations is set."
@@ -70,9 +119,15 @@ public sealed class WorkItemTools
         string[]? fields = null,
         [Description("When true, also returns relations even when a field list is given.")]
         bool includeRelations = false,
+        [Description(
+            "Format for rich-text fields such as System.Description: 'html' (default, unchanged) or 'text' (tags stripped, entities decoded)."
+        )]
+        string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GetWorkItemsAsync(ids, fields, includeRelations, cancellationToken);
+        var format = NormalizeDescriptionFormat(descriptionFormat);
+        var workItems = await _client.GetWorkItemsAsync(ids, fields, includeRelations, cancellationToken);
+        return workItems.Select(workItem => ApplyDescriptionFormat(workItem, format)).ToList();
     }
 
     [McpServerTool(Name = "list_work_item_comments", ReadOnly = true, UseStructuredContent = true)]
@@ -95,13 +150,19 @@ public sealed class WorkItemTools
 
     [McpServerTool(Name = "get_work_item_revisions", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets the revision history of a work item so field changes over time can be compared.")]
-    public Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(
+    public async Task<IReadOnlyList<WorkItem>> GetWorkItemRevisionsAsync(
         [Description("Work item id.")] int id,
         [Description("Maximum number of revisions to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
+        [Description(
+            "Format for rich-text fields such as System.Description: 'html' (default, unchanged) or 'text' (tags stripped, entities decoded)."
+        )]
+        string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GetWorkItemRevisionsAsync(id, ResponseLimits.ResolveTop(top), cancellationToken);
+        var format = NormalizeDescriptionFormat(descriptionFormat);
+        var revisions = await _client.GetWorkItemRevisionsAsync(id, ResponseLimits.ResolveTop(top), cancellationToken);
+        return revisions.Select(workItem => ApplyDescriptionFormat(workItem, format)).ToList();
     }
 
     [McpServerTool(Name = "link_work_item", Destructive = false, UseStructuredContent = true)]
