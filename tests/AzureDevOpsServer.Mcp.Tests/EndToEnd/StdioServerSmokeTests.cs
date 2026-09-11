@@ -18,7 +18,7 @@ namespace AzureDevOpsServer.Mcp.Tests.EndToEnd;
 public sealed class StdioServerSmokeTests
 {
     [Fact]
-    public async Task Server_OverStdio_InitializesListsToolsAndPromptsAndCallsAReadOnlyTool()
+    public async Task Server_OverStdio_InitializesListsToolsAndPromptsAndCallsReadAndWriteTools()
     {
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         cancellation.CancelAfter(TimeSpan.FromSeconds(30));
@@ -47,6 +47,37 @@ public sealed class StdioServerSmokeTests
 
         var tools = await client.ListToolsAsync(cancellationToken: cancellationToken);
         Assert.Contains(tools, tool => tool.Name == "list_projects");
+        var updateTool = Assert.Single(tools, tool => tool.Name == "update_work_item");
+        Assert.True(updateTool.JsonSchema.GetProperty("properties").TryGetProperty("expectedRevision", out _));
+        Assert.DoesNotContain(updateTool.JsonSchema.GetProperty("required").EnumerateArray(),
+            parameter => parameter.GetString() == "expectedRevision");
+        var updateArguments = new Dictionary<string, object?>
+        {
+            ["id"] = 42,
+            ["fields"] = new Dictionary<string, string> { ["System.State"] = "Resolved" },
+            ["expectedRevision"] = 3
+        };
+        var update = await client.CallToolAsync("update_work_item", updateArguments, cancellationToken: cancellationToken);
+        Assert.True(update.IsError is null or false);
+        Assert.NotNull(update.StructuredContent);
+        var updateText = update.StructuredContent.ToString();
+        Assert.NotNull(updateText);
+        using var updateJson = System.Text.Json.JsonDocument.Parse(updateText);
+        Assert.True(updateJson.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal(4, updateJson.RootElement.GetProperty("rev").GetInt32());
+        Assert.Contains("System.State", update.StructuredContent.ToString());
+        Assert.False(updateJson.RootElement.TryGetProperty("fields", out _));
+
+        updateArguments["expectedRevision"] = 2;
+        var conflict = await client.CallToolAsync("update_work_item", updateArguments, cancellationToken: cancellationToken);
+        Assert.True(conflict.IsError);
+        Assert.Contains("current revision is 4", System.Text.Json.JsonSerializer.Serialize(conflict));
+
+        updateArguments.Remove("expectedRevision");
+        var unconditional = await client.CallToolAsync("update_work_item", updateArguments, cancellationToken: cancellationToken);
+        Assert.True(unconditional.IsError is null or false);
+        Assert.NotNull(unconditional.StructuredContent);
+        Assert.Contains("System.State", unconditional.StructuredContent.ToString());
 
         var prompts = await client.ListPromptsAsync(cancellationToken: cancellationToken);
         Assert.Contains(prompts, prompt => prompt.Name == "review_pull_request");

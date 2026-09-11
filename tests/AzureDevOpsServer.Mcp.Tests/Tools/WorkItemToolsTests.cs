@@ -40,18 +40,19 @@ public sealed class WorkItemToolsTests : ToolTestsBase
         Assert.Contains("/fields/System.Description", paths);
     }
 
-    [Fact]
-    public async Task UpdateWorkItemAsync_ReturnsMinimalResultWithChangedFields()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UpdateWorkItemAsync_ReturnsMinimalResultWithChangedFields(bool positionalToken)
     {
         using var response = JsonResponse(WorkItemJson);
         var harness = CreateHarness(null, response);
         var tools = new WorkItemTools(harness.Client, harness.Options);
 
-        var result = await tools.UpdateWorkItemAsync(
-            1,
-            new Dictionary<string, string> { ["System.State"] = "Active" },
-            TestContext.Current.CancellationToken
-        );
+        var fields = new Dictionary<string, string> { ["System.State"] = "Active" };
+        var result = positionalToken ?
+            await tools.UpdateWorkItemAsync(1, fields, TestContext.Current.CancellationToken) :
+            await tools.UpdateWorkItemAsync(1, fields, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.Id);
         Assert.Equal(1, result.Rev);

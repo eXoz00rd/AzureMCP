@@ -94,7 +94,7 @@ public sealed partial class AzureDevOpsClient
             $"refs/heads/{branch}";
     }
 
-    private static HttpContent CreateJsonPatchContent(IReadOnlyDictionary<string, string> fields)
+    private static HttpContent CreateJsonPatchContent(IReadOnlyDictionary<string, string> fields, int? expectedRevision = null)
     {
         if (fields.Count == 0)
         {
@@ -102,8 +102,13 @@ public sealed partial class AzureDevOpsClient
         }
 
         var operations = fields
-                         .Select(field => new { op = "add", path = $"/fields/{field.Key}", value = field.Value })
+                         .Select(field => new { op = "add", path = $"/fields/{field.Key}", value = (object)field.Value })
                          .ToList();
+        if (expectedRevision is not null)
+        {
+            operations.Insert(0, new { op = "test", path = "/rev", value = (object)expectedRevision.Value });
+        }
+
         return new StringContent(
             JsonSerializer.Serialize(operations),
             Encoding.UTF8,
