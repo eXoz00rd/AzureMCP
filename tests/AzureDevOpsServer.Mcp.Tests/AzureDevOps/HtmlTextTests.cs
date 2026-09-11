@@ -46,6 +46,22 @@ public sealed class HtmlTextTests
     }
 
     [Fact]
+    public void ToPlainText_WithMultipleBlocksInOneListItem_SeparatesThem()
+    {
+        var text = HtmlText.ToPlainText("<li><p>One</p><p>Two</p></li>");
+
+        Assert.Equal("- One Two", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithMultipleBlocksInOneTableCell_SeparatesThem()
+    {
+        var text = HtmlText.ToPlainText("<table><tr><td><p>One</p><p>Two</p></td><td>Value</td></tr></table>");
+
+        Assert.Equal("One Two\tValue", text);
+    }
+
+    [Fact]
     public void ToPlainText_WithNestedList_DoesNotAddBlankLineBeforeNextSibling()
     {
         var text = HtmlText.ToPlainText("<ul><li>Parent<ul><li>Child</li></ul></li><li>Next</li></ul>");
@@ -118,6 +134,22 @@ public sealed class HtmlTextTests
         var text = HtmlText.ToPlainText("""<p title="1 > 0">Kept</p>""");
 
         Assert.Equal("Kept", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithUnterminatedTagFollowedByUnrelatedClosingTag_DoesNotConsumeTheLaterTag()
+    {
+        var text = HtmlText.ToPlainText("<b unterminated</p>");
+
+        Assert.Equal("<b unterminated</p>", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithNewlineInsideATextNode_CollapsesItToASingleSpace()
+    {
+        var text = HtmlText.ToPlainText("<p>one\n  two</p>");
+
+        Assert.Equal("one two", text);
     }
 
     [Fact]

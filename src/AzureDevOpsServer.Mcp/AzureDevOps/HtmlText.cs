@@ -178,62 +178,70 @@ internal static class HtmlText
     }
 
     // Copies a literal (non-tag) span of html into the builder.
-    // - Outside a preserve region, a text node that is nothing but whitespace containing a
-    //   newline collapses to a single space instead of being copied verbatim. This serves two
-    //   different real cases with one rule: pure indentation pretty-printed HTML leaves between
-    //   block-level tags (for example between <ul> and <li>) ends up at the edge of a line once
-    //   CollapseWhitespace's per-line Trim() runs below, so the space is discarded there anyway;
-    //   a source line wrap between inline content (for example "<span>one</span>\n<span>two</span>")
-    //   is not at a line edge, so the space survives as the word separator it represents. A plain
-    //   inline run of spaces with no newline is left untouched either way.
+    // - Outside a preserve region, HTML's own whitespace-collapsing rule applies: every maximal
+    //   run of whitespace that contains a newline collapses to a single space, wherever it falls
+    //   in the span, not only when the whole span is nothing but whitespace. This serves two
+    //   different real cases with one rule. A run between two tags (for example between <ul> and
+    //   <li>) is pure source indentation; the space it collapses to then lands at the edge of a
+    //   line once CollapseWhitespace's per-line Trim() runs below, so it disappears there anyway.
+    //   A run inside a normal text node (for example "one\n  two", or a line wrap between inline
+    //   elements) is not at a line edge, so the collapsed space survives as the word separator
+    //   HTML says it is, instead of being read as a hard line break. A run with no newline (an
+    //   ordinary inline space or run of spaces) is left untouched either way.
     // - Inside a preserve region, any newline in the span is replaced with the sentinel so
     //   CollapseWhitespace leaves it, and the indentation around it, alone.
     private static void AppendLiteral(StringBuilder builder, string html, int start, int length, bool preserving)
     {
+        var end = start + length;
+
         if (!preserving)
         {
-            if (IsWhitespaceOnlySpanWithNewline(html, start, length))
+            var i = start;
+            while (i < end)
             {
-                builder.Append(' ');
-                return;
+                var c = html[i];
+                if (!char.IsWhiteSpace(c))
+                {
+                    builder.Append(c);
+                    i++;
+                    continue;
+                }
+
+                var runStart = i;
+                var sawNewline = false;
+                while (i < end && char.IsWhiteSpace(html[i]))
+                {
+                    sawNewline = sawNewline || html[i] is '\n' or '\r';
+                    i++;
+                }
+
+                if (sawNewline)
+                {
+                    builder.Append(' ');
+                }
+                else
+                {
+                    builder.Append(html, runStart, i - runStart);
+                }
             }
 
-            builder.Append(html, start, length);
             return;
         }
 
-        var end = start + length;
-        var i = start;
-        while (i < end)
+        var j = start;
+        while (j < end)
         {
-            var c = html[i];
-            if (c == '\r' && i + 1 < end && html[i + 1] == '\n')
+            var c = html[j];
+            if (c == '\r' && j + 1 < end && html[j + 1] == '\n')
             {
                 builder.Append(PreservedNewline);
-                i += 2;
+                j += 2;
                 continue;
             }
 
             builder.Append(c is '\n' or '\r' ? PreservedNewline : c);
-            i++;
+            j++;
         }
-    }
-
-    private static bool IsWhitespaceOnlySpanWithNewline(string html, int start, int length)
-    {
-        var sawNewline = false;
-        for (var i = start; i < start + length; i++)
-        {
-            var c = html[i];
-            if (!char.IsWhiteSpace(c))
-            {
-                return false;
-            }
-
-            sawNewline = sawNewline || c is '\n' or '\r';
-        }
-
-        return sawNewline;
     }
 
     // Whether the "<" at tagStart begins something syntactically tag-shaped (immediately, or
@@ -281,7 +289,11 @@ internal static class HtmlText
     }
 
     // Tag boundaries are quote-aware so a ">" inside an attribute value (for example
-    // title="1 > 0") does not end the tag early.
+    // title="1 > 0") does not end the tag early. An unquoted "<" invalidates the tag instead of
+    // being skipped over: a real tag's own syntax never contains one outside a quoted attribute
+    // value, so allowing it through would let a later, unrelated tag's ">" be misread as this
+    // one's end — for example "<b unterminated</p>" must not consume the "</p>" that belongs to
+    // something else entirely.
     private static int FindTagEnd(string html, int tagStart)
     {
         var inQuote = '\0';
@@ -305,6 +317,10 @@ internal static class HtmlText
             else if (c == '>')
             {
                 return i;
+            }
+            else if (c == '<')
+            {
+                return -1;
             }
         }
 
@@ -370,15 +386,25 @@ internal static class HtmlText
 
                 break;
             case "p" or "div" or "blockquote" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6":
-                // A block tag nested inside a table cell would otherwise split the cell across
-                // lines, stranding the closing td/th's tab as leading whitespace that
-                // CollapseWhitespace then trims away; nested inside a list item, it would
-                // likewise split that item's text onto its own paragraph and add a blank line
-                // before the next item. Either way it stays silent on both open and close, so a
-                // <li> or <td>/<th> reads as one continuous entry regardless of how its own
-                // content happens to be marked up internally.
                 if (insideTableCell || listItemDepth > 0)
                 {
+                    // A paragraph break here would otherwise split a <li> or <td>/<th> across
+                    // lines — stranding the closing td/th's tab as leading whitespace that
+                    // CollapseWhitespace then trims away, or adding a blank line before the next
+                    // list item — so it stays silent on both open and close, and a <li>/<td>
+                    // reads as one continuous entry regardless of how its content is marked up
+                    // internally. Two blocks in a row within that same entry (for example two
+                    // <p>s in one <li>) still need some separator so their text does not run
+                    // together, so a plain space is inserted on open when one is not already
+                    // there — checked here rather than on close, so it is never followed by a
+                    // redundant space right before that entry's own closing separator (a list
+                    // marker's newline, or a table cell's tab).
+                    if (!closing && builder.Length > 0 &&
+                        builder[^1] is not (' ' or '\t' or '\n' or PreservedTab or PreservedNewline))
+                    {
+                        builder.Append(' ');
+                    }
+
                     break;
                 }
 
