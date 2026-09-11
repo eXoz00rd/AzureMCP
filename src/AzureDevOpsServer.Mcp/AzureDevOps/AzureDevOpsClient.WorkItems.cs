@@ -461,5 +461,9 @@ public sealed partial class AzureDevOpsClient
         {
             return null;
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
     }
 }

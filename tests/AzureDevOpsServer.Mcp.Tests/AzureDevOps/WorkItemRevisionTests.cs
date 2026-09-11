@@ -10,6 +10,66 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
     private const string WorkItemJson = """{"id":42,"rev":4,"fields":{},"url":"https://example.test/42"}""";
     private static readonly Dictionary<string, string> Fields = new() { ["System.State"] = "Resolved" };
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task DiagnosticCancellation_PreservesPatchErrorUnlessCallerCanceled(bool cancelCaller, bool taskCanceled)
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        using var handler = new DiagnosticCancellationHandler(() =>
+        {
+            if (cancelCaller)
+            {
+                cancellation.Cancel();
+            }
+
+            return taskCanceled ? new TaskCanceledException("Diagnostic timeout") :
+                new OperationCanceledException("Diagnostic canceled");
+        });
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri($"{CollectionUrl}/") };
+        var client = new AzureDevOpsClient(httpClient, CreateOptions(null));
+
+        if (cancelCaller)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.UpdateWorkItemAsync(42, Fields, cancellation.Token, 3));
+            Assert.True(cancellation.IsCancellationRequested);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
+                client.UpdateWorkItemAsync(42, Fields, cancellation.Token, 3));
+            Assert.Contains("Original rejection", error.Message);
+            Assert.False(cancellation.IsCancellationRequested);
+        }
+
+        Assert.Equal(new[] { HttpMethod.Patch, HttpMethod.Get }, handler.Methods);
+    }
+
+    private sealed class DiagnosticCancellationHandler : HttpMessageHandler
+    {
+        private readonly Func<Exception> _diagnosticException;
+
+        public DiagnosticCancellationHandler(Func<Exception> diagnosticException)
+        {
+            _diagnosticException = diagnosticException;
+        }
+
+        public List<HttpMethod> Methods { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Methods.Add(request.Method);
+            return request.Method == HttpMethod.Patch ?
+                Task.FromResult(JsonResponse("""{"message":"Original rejection"}""", HttpStatusCode.BadRequest)) :
+                Task.FromException<HttpResponseMessage>(_diagnosticException());
+        }
+    }
+
     [Fact]
     public async Task MatchingRevision_PrependsNumericTestBeforeFieldUpdates()
     {
