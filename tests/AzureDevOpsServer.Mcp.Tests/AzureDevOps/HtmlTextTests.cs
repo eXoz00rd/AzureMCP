@@ -30,6 +30,30 @@ public sealed class HtmlTextTests
     }
 
     [Fact]
+    public void ToPlainText_WithInlineCode_KeepsItInTheSurroundingSentence()
+    {
+        var text = HtmlText.ToPlainText("<p>Run <code>foo()</code> now</p>");
+
+        Assert.Equal("Run foo() now", text);
+    }
+
+    [Fact]
+    public void ToPlainText_StripsStrikethroughTag()
+    {
+        var text = HtmlText.ToPlainText("<p><s>strike</s></p>");
+
+        Assert.Equal("strike", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithEmptyLeadingTableCell_KeepsTheSeparatorForTheSecondCell()
+    {
+        var text = HtmlText.ToPlainText("<tr><td></td><td>Value</td></tr>");
+
+        Assert.Equal("\tValue", text);
+    }
+
+    [Fact]
     public void ToPlainText_ConvertsLinkToTextWithUrl()
     {
         var text = HtmlText.ToPlainText("""<p>See <a href="https://example.com/doc">the doc</a> for details.</p>""");

@@ -12,13 +12,20 @@ internal static class HtmlText
 {
     // A Private Use Area character standing in for a newline that must survive
     // CollapseWhitespace's per-line trimming untouched, because it falls inside (or bounds) a
-    // <pre>/<code> block where whitespace is significant. Restored to a real '\n' once
-    // collapsing is done.
+    // <pre> block where whitespace is significant. Restored to a real '\n' once collapsing is
+    // done.
     private const char PreservedNewline = (char)0xE000;
+
+    // A Private Use Area character standing in for a table-cell tab that must survive
+    // CollapseWhitespace's per-line trimming untouched, because a leading or trailing empty cell
+    // would otherwise have its separator stripped as ordinary line-edge whitespace. Restored to
+    // a real '\t' once collapsing is done.
+    private const char PreservedTab = (char)0xE001;
 
     private static readonly HashSet<string> KnownTags = new(StringComparer.OrdinalIgnoreCase)
     {
         "p", "div", "span", "br", "ul", "ol", "li", "a", "b", "i", "strong", "em", "u",
+        "s", "strike", "del", "ins", "sub", "sup", "mark", "small", "font",
         "table", "thead", "tbody", "tr", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6",
         "blockquote", "pre", "code", "img", "hr"
     };
@@ -31,6 +38,7 @@ internal static class HtmlText
         var index = 0;
         var preserveDepth = 0;
         var cellDepth = 0;
+        var isFirstCellInRow = true;
 
         while (index < html.Length)
         {
@@ -77,10 +85,10 @@ internal static class HtmlText
             AppendLiteral(builder, html, index, tagStart - index, preserveDepth > 0);
 
             var name = ExtractTagName(tag, closing);
-            if (name is "pre" or "code")
+            if (name is "pre")
             {
-                // <pre>/<code> content is whitespace-significant end to end, including leading
-                // or trailing spaces with no adjacent newline, so a sentinel boundary is emitted
+                // <pre> content is whitespace-significant end to end, including leading or
+                // trailing spaces with no adjacent newline, so a sentinel boundary is emitted
                 // unconditionally on both sides: it shields the block's true first and last
                 // characters from CollapseWhitespace's per-line Trim() below, and it also keeps
                 // adjacent content from being joined onto the block when nothing else already
@@ -88,18 +96,45 @@ internal static class HtmlText
                 preserveDepth = closing ? Math.Max(0, preserveDepth - 1) : preserveDepth + 1;
                 builder.Append(PreservedNewline);
             }
+            else if (name is "code")
+            {
+                // <code> is normally inline (for example "Run <code>foo()</code> now"), so
+                // unlike <pre> it does not get its own boundary newline — only its own content's
+                // whitespace is protected, which also covers the common <pre><code>...</code></pre>
+                // block-code case since preserveDepth simply nests one level deeper there.
+                preserveDepth = closing ? Math.Max(0, preserveDepth - 1) : preserveDepth + 1;
+            }
+            else if (name is "tr")
+            {
+                if (closing)
+                {
+                    builder.Append('\n');
+                }
+                else
+                {
+                    isFirstCellInRow = true;
+                }
+            }
             else if (name is "td" or "th")
             {
                 // Tracked here (rather than left to AppendTagReplacement) so nested block tags
                 // inside a cell (case below) can be told to stay silent instead of breaking the
-                // cell across lines, which would otherwise strip the tab as leading whitespace.
+                // cell across lines. The separator itself is emitted as a sentinel before each
+                // non-first cell's content (not after every cell's close), so a leading or
+                // trailing empty cell's tab is not later stripped as ordinary line-edge
+                // whitespace by CollapseWhitespace's per-line Trim().
                 if (closing)
                 {
                     cellDepth = Math.Max(0, cellDepth - 1);
-                    builder.Append('\t');
                 }
                 else
                 {
+                    if (!isFirstCellInRow)
+                    {
+                        builder.Append(PreservedTab);
+                    }
+
+                    isFirstCellInRow = false;
                     cellDepth++;
                 }
             }
@@ -112,7 +147,7 @@ internal static class HtmlText
         }
 
         var collapsed = CollapseWhitespace(WebUtility.HtmlDecode(builder.ToString()));
-        return collapsed.Replace(PreservedNewline, '\n');
+        return collapsed.Replace(PreservedNewline, '\n').Replace(PreservedTab, '\t');
     }
 
     // Copies a literal (non-tag) span of html into the builder.
@@ -319,13 +354,6 @@ internal static class HtmlText
                     // Content that precedes this block with no separator of its own (for
                     // example inline text right before a <p>) would otherwise be joined onto it.
                     builder.Append(newline).Append(newline);
-                }
-
-                break;
-            case "tr":
-                if (closing)
-                {
-                    builder.Append(newline);
                 }
 
                 break;
