@@ -206,15 +206,14 @@ internal static partial class HtmlText
 
     // Copies a literal (non-tag) span of html into the builder.
     // - Outside a preserve region, HTML's own whitespace-collapsing rule applies: every maximal
-    //   run of whitespace that contains a newline collapses to a single space, wherever it falls
-    //   in the span, not only when the whole span is nothing but whitespace. This serves two
-    //   different real cases with one rule. A run between two tags (for example between <ul> and
-    //   <li>) is pure source indentation; the space it collapses to then lands at the edge of a
-    //   line once CollapseWhitespace's per-line Trim() runs below, so it disappears there anyway.
-    //   A run inside a normal text node (for example "one\n  two", or a line wrap between inline
-    //   elements) is not at a line edge, so the collapsed space survives as the word separator
-    //   HTML says it is, instead of being read as a hard line break. A run with no newline (an
-    //   ordinary inline space or run of spaces) is left untouched either way.
+    //   run of whitespace — a single space just as much as a run spanning a newline and several
+    //   more characters — collapses to one space, wherever it falls in the span, not only when
+    //   the whole span is nothing but whitespace. A run between two tags (for example between
+    //   <ul> and <li>) is pure source indentation; the space it collapses to then lands at the
+    //   edge of a line once CollapseWhitespace's per-line Trim() runs below, so it disappears
+    //   there anyway. A run inside a normal text node (for example "one\n  two", or
+    //   "one    two") is not at a line edge, so the collapsed space survives as the single word
+    //   separator HTML renders it as, instead of a hard line break or untouched run of spaces.
     // - Inside a preserve region, any newline in the span is replaced with the sentinel so
     //   CollapseWhitespace leaves it, and the indentation around it, alone.
     private static void AppendLiteral(StringBuilder builder, string html, int start, int length, bool preserving)
@@ -234,21 +233,10 @@ internal static partial class HtmlText
                     continue;
                 }
 
-                var runStart = i;
-                var sawNewline = false;
+                builder.Append(' ');
                 while (i < end && char.IsWhiteSpace(html[i]))
                 {
-                    sawNewline = sawNewline || html[i] is '\n' or '\r';
                     i++;
-                }
-
-                if (sawNewline)
-                {
-                    builder.Append(' ');
-                }
-                else
-                {
-                    builder.Append(html, runStart, i - runStart);
                 }
             }
 

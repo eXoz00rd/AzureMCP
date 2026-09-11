@@ -163,6 +163,14 @@ public sealed class HtmlTextTests
     }
 
     [Fact]
+    public void ToPlainText_WithMultipleSpacesAndNoNewline_CollapsesToASingleSpace()
+    {
+        var text = HtmlText.ToPlainText("<p>one    two</p>");
+
+        Assert.Equal("one two", text);
+    }
+
+    [Fact]
     public void ToPlainText_WithUnterminatedTag_KeepsRemainingTextVerbatim()
     {
         var text = HtmlText.ToPlainText("<p>Before <b unterminated");
@@ -210,6 +218,14 @@ public sealed class HtmlTextTests
     public void ToPlainText_WithPrettyPrintedWhitespaceBetweenTableCells_DoesNotLeaveASpaceBeforeTheSeparator()
     {
         var text = HtmlText.ToPlainText("<table><tr>\n  <td>A</td>\n  <td>B</td>\n</tr></table>");
+
+        Assert.Equal("A\tB", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithLiteralTabBetweenTableCells_DoesNotProduceADoubleSeparator()
+    {
+        var text = HtmlText.ToPlainText("<table><tr><td>A</td>\t<td>B</td></tr></table>");
 
         Assert.Equal("A\tB", text);
     }
