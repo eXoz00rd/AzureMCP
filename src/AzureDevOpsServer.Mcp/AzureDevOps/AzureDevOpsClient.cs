@@ -12,6 +12,7 @@ public sealed partial class AzureDevOpsClient
 {
     private const int MaxErrorBodyLength = 500;
     private const int ProjectPageSize = 100;
+    private const int MaxProjectPages = 100;
     private const string ContinuationTokenHeader = "x-ms-continuationtoken";
 
     private readonly HttpClient _httpClient;
@@ -27,6 +28,7 @@ public sealed partial class AzureDevOpsClient
     {
         var projects = new List<TeamProject>();
         string? continuationToken = null;
+        var pageCount = 0;
 
         do
         {
@@ -50,7 +52,12 @@ public sealed partial class AzureDevOpsClient
                 projects.AddRange(page.Value);
             }
 
-            continuationToken = response.Headers.TryGetValues(ContinuationTokenHeader, out var values) ?
+            pageCount++;
+
+            // A malformed or looping continuation token from the server would otherwise page
+            // forever, so stop once a generous page ceiling is reached even if the server still
+            // offers a token.
+            continuationToken = pageCount < MaxProjectPages && response.Headers.TryGetValues(ContinuationTokenHeader, out var values) ?
                 values.FirstOrDefault() :
                 null;
         } while (!string.IsNullOrEmpty(continuationToken));

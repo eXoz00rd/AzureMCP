@@ -134,6 +134,33 @@ public sealed class ProjectClientTests : AzureDevOpsClientTestsBase
         Assert.Contains("continuationToken=token-123", handler.Requests[1].RequestUri!.ToString());
     }
 
+    [Fact]
+    public async Task GetProjectsAsync_WhenContinuationTokenNeverEnds_StopsAtPageCeiling()
+    {
+        const int maxProjectPages = 100;
+        var responses = Enumerable.Range(1, maxProjectPages)
+                                   .Select(i =>
+                                   {
+                                       var response = JsonResponse(
+                                           $"{{ \"count\": 1, \"value\": [ {{ \"id\": \"{Guid.NewGuid()}\", \"name\": \"Project{i}\", \"state\": \"wellFormed\", \"url\": \"https://devops.example.local/DefaultCollection/_apis/projects/p{i}\" }} ] }}"
+                                       );
+                                       response.Headers.Add("x-ms-continuationtoken", $"token-{i}");
+                                       return response;
+                                   })
+                                   .ToArray();
+        var client = CreateClient(out var handler, responses);
+
+        var projects = await client.GetProjectsAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(maxProjectPages, projects.Count);
+        Assert.Equal(maxProjectPages, handler.Requests.Count);
+
+        foreach (var response in responses)
+        {
+            response.Dispose();
+        }
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized)]
     [InlineData(HttpStatusCode.NonAuthoritativeInformation)]

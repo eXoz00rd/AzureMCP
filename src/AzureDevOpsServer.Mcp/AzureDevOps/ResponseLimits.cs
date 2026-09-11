@@ -20,6 +20,10 @@ public static class ResponseLimits
     public const int MinDepth = 0;
     public const int MaxDepth = 10;
 
+    // Azure DevOps Server's work item batch API rejects a request over roughly this many ids
+    // with an opaque server error, so it is rejected client-side with a clear message instead.
+    public const int MaxWorkItemIds = 200;
+
     public const string TopRange = "1-1000";
     public const string MaxCharsRange = "1-1000000";
     public const string MaxItemsRange = "1-10000";

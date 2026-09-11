@@ -61,9 +61,11 @@ public sealed class WorkItemTools
     }
 
     [McpServerTool(Name = "get_work_items", ReadOnly = true, UseStructuredContent = true)]
-    [Description("Gets multiple work items by their ids in one call. Prefer a field list when fetching many items.")]
+    [Description(
+        "Gets multiple work items by their ids in one call. Prefer a field list when fetching many items. Accepts at most 200 ids per call."
+    )]
     public Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
-        [Description("Work item ids.")] int[] ids,
+        [Description("Work item ids. At most 200 per call.")] int[] ids,
         [Description(
             "Optional field reference names to return. Relations are only returned when this is omitted, or when includeRelations is set."
         )]
