@@ -486,16 +486,31 @@ public sealed partial class AzureDevOpsClient
     {
         try
         {
-            var current = await GetWorkItemAsync(id, ["System.Id"], false, cancellationToken);
-            return current.Rev > 0 ? current.Rev : null;
+            using var response = await _httpClient.GetAsync(
+                $"_apis/wit/workitems/{id}?fields=System.Id&api-version={ApiVersion(ApiArea.WorkItems)}",
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken
+            );
+            if (!response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NonAuthoritativeInformation)
+            {
+                return null;
+            }
+
+            var body = await BoundedText.ReadAsync(response.Content, ResponseLimits.DefaultMaxChars, cancellationToken);
+            if (body.Truncated)
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(body.Text);
+            return document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty("rev", out var revision) &&
+                revision.ValueKind == JsonValueKind.Number &&
+                revision.TryGetInt32(out var value) && value > 0 ? value : null;
         }
-        catch (Exception exception) when (
-            exception is AzureDevOpsClientException or HttpRequestException or JsonException)
+        catch (Exception)
         {
-            return null;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
+            cancellationToken.ThrowIfCancellationRequested();
             return null;
         }
     }

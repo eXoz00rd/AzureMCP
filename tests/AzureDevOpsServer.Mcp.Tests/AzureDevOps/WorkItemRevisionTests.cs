@@ -14,6 +14,39 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task UnexpectedDiagnosticFailure_PreservesPatchError(bool ioFailure)
+    {
+        using var handler = new DiagnosticCancellationHandler(() =>
+            ioFailure ? new IOException("Read failed") : new InvalidOperationException("Transport failed"));
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri($"{CollectionUrl}/") };
+        var client = new AzureDevOpsClient(httpClient, CreateOptions(null));
+        var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
+            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+        Assert.Contains("Original rejection", error.Message);
+        Assert.Equal(new[] { HttpMethod.Patch, HttpMethod.Get }, handler.Methods);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.NonAuthoritativeInformation)]
+    [InlineData(HttpStatusCode.OK)]
+    public async Task LargeDiagnosticBody_PreservesPatchErrorWithoutBuffering(HttpStatusCode status)
+    {
+        using var rejected = JsonResponse(RevisionError, HttpStatusCode.BadRequest);
+        using var content = new StreamingErrorContent(new string('x', ResponseLimits.DefaultMaxChars + 1));
+        using var diagnostic = new HttpResponseMessage(status) { Content = content };
+        var client = CreateClient(out var handler, rejected, diagnostic);
+        var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
+            client.UpdateWorkItemAsync(42, Fields, TestContext.Current.CancellationToken, 3));
+        Assert.Contains("Original rejection", error.Message);
+        Assert.Equal(status == HttpStatusCode.OK ? 1 : 0, content.StreamReads);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task LegacySignature_RemainsCallableWithoutRevision(bool tool)
     {
         using var response = JsonResponse(WorkItemJson);
@@ -80,6 +113,10 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
     [InlineData("""{"id":42,"fields":{}}""")]
     [InlineData("""{"id":42,"rev":0,"fields":{}}""")]
     [InlineData("""{"id":42,"rev":-1,"fields":{}}""")]
+    [InlineData("""{"rev":"invalid"}""")]
+    [InlineData("""{"rev":2147483648}""")]
+    [InlineData("[]")]
+    [InlineData("invalid json")]
     public async Task InvalidDiagnosticRevision_PreservesOriginalError(string json)
     {
         using var rejected = JsonResponse(RevisionError, HttpStatusCode.BadRequest);
