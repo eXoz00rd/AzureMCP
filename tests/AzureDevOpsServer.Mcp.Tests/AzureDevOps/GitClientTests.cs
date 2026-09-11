@@ -771,6 +771,19 @@ public sealed class GitClientTests : AzureDevOpsClientTestsBase
     }
 
     [Fact]
+    public async Task GetBranchesAsync_WhenServerReturnsExactlyTop_ReportsNotTruncated()
+    {
+        var entries = string.Join(',', Enumerable.Range(1, 2).Select(i => $"{{ \"name\": \"refs/heads/branch{i}\", \"objectId\": \"a{i}\" }}"));
+        using var response = JsonResponse($"{{ \"count\": 2, \"value\": [{entries}] }}");
+        var client = CreateClient(out _, response);
+
+        var branches = await client.GetBranchesAsync("WebApp", "Alpha", 2, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, branches.Items.Count);
+        Assert.False(branches.Truncated);
+    }
+
+    [Fact]
     public async Task GetCommitsAsync_WhenServerReturnsMoreThanTop_ReportsTruncated()
     {
         var entries = string.Join(',', Enumerable.Range(1, 3).Select(i => $"{{ \"commitId\": \"commit{i}\", \"comment\": \"Change {i}\" }}"));

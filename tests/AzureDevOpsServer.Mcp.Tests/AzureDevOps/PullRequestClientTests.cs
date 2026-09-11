@@ -322,7 +322,7 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         using var response = JsonResponse("""{ "count": 0, "value": [] }""");
         var client = CreateClient(out var handler, response);
 
-        await client.GetProjectPullRequestsAsync(
+        var pullRequests = await client.GetProjectPullRequestsAsync(
             "Alpha",
             null,
             false,
@@ -331,6 +331,8 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             TestContext.Current.CancellationToken
         );
 
+        Assert.Empty(pullRequests.Items);
+        Assert.False(pullRequests.Truncated);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("Alpha/_apis/git/pullrequests", requestUri);
         Assert.Contains("searchCriteria.status=active", requestUri);

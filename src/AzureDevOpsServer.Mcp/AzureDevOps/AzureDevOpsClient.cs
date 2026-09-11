@@ -87,8 +87,9 @@ public sealed partial class AzureDevOpsClient
             project;
     }
 
-    // Callers request one more item than the effective limit, so a full page means there is
-    // more beyond it; this lets truncation be reported without a separate total count.
+    // Trims to top and reports whether more items came back than that. Most callers request
+    // top + 1 from the server, so a full page means there is more beyond it; GetRepositoryItemsAsync
+    // instead fetches the whole unbounded result and relies on this to cap it after the fact.
     private static LimitedList<T> LimitTo<T>(IReadOnlyList<T> items, int top)
     {
         return items.Count <= top ?
