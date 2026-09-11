@@ -11,6 +11,164 @@ public sealed class WorkItemToolsTests : ToolTestsBase
         """{ "id": 1, "rev": 1, "fields": { "System.Title": "Title" }, "url": "https://devops.example.local/_apis/wit/workItems/1" }""";
 
     [Fact]
+    public async Task GetWorkItemAsync_DefaultFormat_ReturnsHtmlUnchanged()
+    {
+        const string json =
+            """{ "id": 1, "rev": 1, "fields": { "System.Title": "Title", "System.Description": "<p>Hello <b>world</b></p>" }, "url": "https://devops.example.local/_apis/wit/workItems/1" }""";
+        using var response = JsonResponse(json);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var workItem = await tools.GetWorkItemAsync(1, null, false, null, TestContext.Current.CancellationToken);
+
+        Assert.Equal("<p>Hello <b>world</b></p>", workItem.Fields["System.Description"].GetString());
+    }
+
+    [Fact]
+    public async Task GetWorkItemAsync_TextFormat_ConvertsHtmlFieldsAndLeavesPlainFieldsUntouched()
+    {
+        const string json =
+            """{ "id": 1, "rev": 1, "fields": { "System.Title": "List<Item> import", "System.Description": "<p>Hello <b>world</b></p>" }, "url": "https://devops.example.local/_apis/wit/workItems/1" }""";
+        using var response = JsonResponse(json);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var workItem = await tools.GetWorkItemAsync(1, null, false, "text", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Hello world", workItem.Fields["System.Description"].GetString());
+        Assert.Equal("List<Item> import", workItem.Fields["System.Title"].GetString());
+    }
+
+    [Theory]
+    [InlineData("System.Description")]
+    [InlineData("System.History")]
+    [InlineData("Microsoft.VSTS.TCM.ReproSteps")]
+    [InlineData("Microsoft.VSTS.TCM.SystemInfo")]
+    [InlineData("Microsoft.VSTS.Common.AcceptanceCriteria")]
+    [InlineData("Microsoft.VSTS.CMMI.Justification")]
+    [InlineData("Microsoft.VSTS.CMMI.Symptom")]
+    public async Task GetWorkItemAsync_TextFormat_ConvertsEveryAllowlistedRichTextField(string fieldName)
+    {
+        var json =
+            $$"""{ "id": 1, "rev": 1, "fields": { "{{fieldName}}": "<p>Hello <b>world</b></p>" }, "url": "https://devops.example.local/_apis/wit/workItems/1" }""";
+        using var response = JsonResponse(json);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var workItem = await tools.GetWorkItemAsync(1, null, false, "text", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Hello world", workItem.Fields[fieldName].GetString());
+    }
+
+    [Fact]
+    public async Task GetWorkItemAsync_TextFormat_DecodesEntitiesInAllowlistedFieldWithNoTags()
+    {
+        const string json =
+            """{ "id": 1, "rev": 1, "fields": { "System.Description": "Fish &amp; Chips" }, "url": "https://devops.example.local/_apis/wit/workItems/1" }""";
+        using var response = JsonResponse(json);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var workItem = await tools.GetWorkItemAsync(1, null, false, "text", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Fish & Chips", workItem.Fields["System.Description"].GetString());
+    }
+
+    [Fact]
+    public async Task GetWorkItemAsync_WithInvalidDescriptionFormat_ThrowsBeforeRequest()
+    {
+        using var response = JsonResponse(WorkItemJson);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var exception = await Assert.ThrowsAsync<McpException>(() => tools.GetWorkItemAsync(
+                1,
+                null,
+                false,
+                "markdown",
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Contains("descriptionFormat", exception.Message);
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetWorkItemAsync_WithBlankDescriptionFormat_ThrowsInsteadOfDefaulting()
+    {
+        using var response = JsonResponse(WorkItemJson);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var exception = await Assert.ThrowsAsync<McpException>(() => tools.GetWorkItemAsync(
+                1,
+                null,
+                false,
+                "   ",
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Contains("descriptionFormat", exception.Message);
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetWorkItemAsync_TextFormat_LeavesNonAllowlistedFieldWithLiteralTagTextUntouched()
+    {
+        const string json =
+            """{ "id": 1, "rev": 1, "fields": { "System.Title": "Fix <span> rendering", "System.Description": "<p>Hello <b>world</b></p>" }, "url": "https://devops.example.local/_apis/wit/workItems/1" }""";
+        using var response = JsonResponse(json);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var workItem = await tools.GetWorkItemAsync(1, null, false, "text", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Fix <span> rendering", workItem.Fields["System.Title"].GetString());
+        Assert.Equal("Hello world", workItem.Fields["System.Description"].GetString());
+    }
+
+    [Fact]
+    public async Task GetWorkItemsAsync_TextFormat_ConvertsEachItem()
+    {
+        const string json =
+            """{ "count": 1, "value": [ { "id": 1, "rev": 1, "fields": { "System.Description": "<ul><li>One</li><li>Two</li></ul>" }, "url": "https://devops.example.local/_apis/wit/workItems/1" } ] }""";
+        using var response = JsonResponse(json);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var workItems = await tools.GetWorkItemsAsync(
+            [1],
+            null,
+            false,
+            "text",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("- One\n- Two", Assert.Single(workItems).Fields["System.Description"].GetString());
+    }
+
+    [Fact]
+    public async Task GetWorkItemRevisionsAsync_TextFormat_ConvertsEachRevision()
+    {
+        const string json =
+            """{ "count": 1, "value": [ { "id": 1, "rev": 1, "fields": { "System.Description": "<p>Rev text</p>" }, "url": "https://devops.example.local/_apis/wit/workItems/1" } ] }""";
+        using var response = JsonResponse(json);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var revisions = await tools.GetWorkItemRevisionsAsync(
+            1,
+            null,
+            "text",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("Rev text", Assert.Single(revisions.Items).Fields["System.Description"].GetString());
+    }
+
+    [Fact]
     public async Task CreateWorkItemAsync_MergesTitleWithExtraFields()
     {
         using var response = JsonResponse(WorkItemJson);

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json;
 using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.AzureDevOps.Models;
 using AzureDevOpsServer.Mcp.Configuration;
@@ -11,6 +12,29 @@ namespace AzureDevOpsServer.Mcp.Tools;
 [McpServerToolType]
 public sealed class WorkItemTools
 {
+    private const string DescriptionFormatHtml = "html";
+    private const string DescriptionFormatText = "text";
+
+    // Whether a field is HTML is a property of the field itself, not something safely inferable
+    // from its value: a plain field can legitimately contain tag-shaped text (for example a title
+    // "Fix <span> rendering"), and an HTML field can legitimately hold a value with no tags at
+    // all (for example a freshly created item whose description is still plain text). Neither a
+    // per-value heuristic nor a "does this field's value look like HTML" check can therefore
+    // decide this correctly in general, so the contract is deliberately narrowed to a fixed,
+    // documented set of built-in field reference names instead: descriptionFormat converts only
+    // these fields, and a custom process template's own HTML field outside this list is always
+    // returned as sent, even when descriptionFormat is 'text'.
+    private static readonly HashSet<string> RichTextFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "System.Description",
+        "System.History",
+        "Microsoft.VSTS.TCM.ReproSteps",
+        "Microsoft.VSTS.TCM.SystemInfo",
+        "Microsoft.VSTS.Common.AcceptanceCriteria",
+        "Microsoft.VSTS.CMMI.Justification",
+        "Microsoft.VSTS.CMMI.Symptom"
+    };
+
     private readonly AzureDevOpsClient _client;
     private readonly IOptions<AzureDevOpsServerOptions> _options;
 
@@ -43,11 +67,56 @@ public sealed class WorkItemTools
             project;
     }
 
+    // Defaults only when the argument is omitted. An explicitly supplied blank value is not a
+    // valid 'html' or 'text' and falls through to the rejection below instead of silently
+    // defaulting.
+    private static string NormalizeDescriptionFormat(string? descriptionFormat)
+    {
+        if (descriptionFormat is null ||
+            string.Equals(descriptionFormat, DescriptionFormatHtml, StringComparison.OrdinalIgnoreCase))
+        {
+            return DescriptionFormatHtml;
+        }
+
+        if (string.Equals(descriptionFormat, DescriptionFormatText, StringComparison.OrdinalIgnoreCase))
+        {
+            return DescriptionFormatText;
+        }
+
+        throw new McpException(
+            $"'descriptionFormat' must be '{DescriptionFormatHtml}' or '{DescriptionFormatText}'. Received '{descriptionFormat}'."
+        );
+    }
+
+    // Only known rich-text fields are converted, so plain fields (titles, states, identities,
+    // and any field outside the allowlist) are returned exactly as the server sent them, even
+    // when their value happens to contain tag-shaped text.
+    private static WorkItem ApplyDescriptionFormat(WorkItem workItem, string descriptionFormat)
+    {
+        if (descriptionFormat != DescriptionFormatText)
+        {
+            return workItem;
+        }
+
+        var converted = new Dictionary<string, JsonElement>(workItem.Fields.Count);
+        foreach (var (name, value) in workItem.Fields)
+        {
+            // The allowlist alone decides whether a field is converted; a further "does it look
+            // like HTML" check would skip decoding an allowlisted value that has no tags at all,
+            // for example an entity-only value such as "Fish &amp; Chips".
+            converted[name] = RichTextFields.Contains(name) && value.ValueKind == JsonValueKind.String ?
+                JsonSerializer.SerializeToElement(HtmlText.ToPlainText(value.GetString()!)) :
+                value;
+        }
+
+        return workItem with { Fields = converted };
+    }
+
     [McpServerTool(Name = "get_work_item", ReadOnly = true, UseStructuredContent = true)]
     [Description(
         "Gets a single work item. Returns all fields and relations unless a field list is given; prefer a field list to avoid pulling large HTML descriptions."
     )]
-    public Task<WorkItem> GetWorkItemAsync(
+    public async Task<WorkItem> GetWorkItemAsync(
         [Description("Work item id.")] int id,
         [Description(
             "Optional field reference names to return, for example System.Title and System.State. Relations are only returned when this is omitted, or when includeRelations is set."
@@ -55,14 +124,20 @@ public sealed class WorkItemTools
         string[]? fields = null,
         [Description("When true, also returns relations even when a field list is given.")]
         bool includeRelations = false,
+        [Description(
+            "Format for a fixed set of built-in rich-text fields (System.Description, System.History, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
+        )]
+        string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GetWorkItemAsync(id, fields, includeRelations, cancellationToken);
+        var format = NormalizeDescriptionFormat(descriptionFormat);
+        var workItem = await _client.GetWorkItemAsync(id, fields, includeRelations, cancellationToken);
+        return ApplyDescriptionFormat(workItem, format);
     }
 
     [McpServerTool(Name = "get_work_items", ReadOnly = true, UseStructuredContent = true)]
     [Description("Gets multiple work items by their ids in one call. Prefer a field list when fetching many items.")]
-    public Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
+    public async Task<IReadOnlyList<WorkItem>> GetWorkItemsAsync(
         [Description("Work item ids.")] int[] ids,
         [Description(
             "Optional field reference names to return. Relations are only returned when this is omitted, or when includeRelations is set."
@@ -70,9 +145,15 @@ public sealed class WorkItemTools
         string[]? fields = null,
         [Description("When true, also returns relations even when a field list is given.")]
         bool includeRelations = false,
+        [Description(
+            "Format for a fixed set of built-in rich-text fields (System.Description, System.History, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
+        )]
+        string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GetWorkItemsAsync(ids, fields, includeRelations, cancellationToken);
+        var format = NormalizeDescriptionFormat(descriptionFormat);
+        var workItems = await _client.GetWorkItemsAsync(ids, fields, includeRelations, cancellationToken);
+        return workItems.Select(workItem => ApplyDescriptionFormat(workItem, format)).ToList();
     }
 
     [McpServerTool(Name = "list_work_item_comments", ReadOnly = true, UseStructuredContent = true)]
@@ -97,13 +178,19 @@ public sealed class WorkItemTools
     [Description(
         "Gets the revision history of a work item so field changes over time can be compared. The result reports whether it was truncated, so raise the limit when it was."
     )]
-    public Task<LimitedList<WorkItem>> GetWorkItemRevisionsAsync(
+    public async Task<LimitedList<WorkItem>> GetWorkItemRevisionsAsync(
         [Description("Work item id.")] int id,
         [Description("Maximum number of revisions to return. Defaults to 100. Valid range 1-1000.")]
         int? top = null,
+        [Description(
+            "Format for a fixed set of built-in rich-text fields (System.Description, System.History, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."
+        )]
+        string? descriptionFormat = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GetWorkItemRevisionsAsync(id, ResponseLimits.ResolveTop(top), cancellationToken);
+        var format = NormalizeDescriptionFormat(descriptionFormat);
+        var revisions = await _client.GetWorkItemRevisionsAsync(id, ResponseLimits.ResolveTop(top), cancellationToken);
+        return revisions with { Items = revisions.Items.Select(workItem => ApplyDescriptionFormat(workItem, format)).ToList() };
     }
 
     [McpServerTool(Name = "link_work_item", Destructive = false, UseStructuredContent = true)]
