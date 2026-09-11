@@ -90,7 +90,7 @@ public sealed class LimitValidationTests : ToolTestsBase
         var ids = Enumerable.Range(1, ResponseLimits.MaxWorkItemIds + 1).ToArray();
 
         await Assert.ThrowsAsync<AzureDevOpsClientException>(
-            () => tools.GetWorkItemsAsync(ids, null, false, TestContext.Current.CancellationToken)
+            () => tools.GetWorkItemsAsync(ids, null, false, null, TestContext.Current.CancellationToken)
         );
 
         Assert.Empty(harness.Handler.Requests);
