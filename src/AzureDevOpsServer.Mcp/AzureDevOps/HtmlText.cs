@@ -39,6 +39,7 @@ internal static class HtmlText
         var preserveDepth = 0;
         var cellDepth = 0;
         var isFirstCellInRow = true;
+        var afterListMarker = false;
 
         while (index < html.Length)
         {
@@ -140,7 +141,15 @@ internal static class HtmlText
             }
             else
             {
-                AppendTagReplacement(builder, tag, anchorHrefs, listCounters, preserveDepth > 0, cellDepth > 0);
+                AppendTagReplacement(
+                    builder,
+                    tag,
+                    anchorHrefs,
+                    listCounters,
+                    preserveDepth > 0,
+                    cellDepth > 0,
+                    ref afterListMarker
+                );
             }
 
             index = tagEnd + 1;
@@ -290,11 +299,14 @@ internal static class HtmlText
         Stack<string?> anchorHrefs,
         Stack<int> listCounters,
         bool preserving,
-        bool insideTableCell)
+        bool insideTableCell,
+        ref bool afterListMarker)
     {
         var closing = tag.StartsWith('/');
         var name = ExtractTagName(tag, closing);
         var newline = preserving ? PreservedNewline : '\n';
+        var wasAfterListMarker = afterListMarker;
+        afterListMarker = false;
 
         switch (name)
         {
@@ -314,10 +326,12 @@ internal static class HtmlText
                     var ordinal = listCounters.Pop();
                     builder.Append(ordinal).Append(". ");
                     listCounters.Push(ordinal + 1);
+                    afterListMarker = true;
                 }
                 else
                 {
                     builder.Append("- ");
+                    afterListMarker = true;
                 }
 
                 break;
@@ -349,10 +363,14 @@ internal static class HtmlText
                 {
                     builder.Append(newline).Append(newline);
                 }
-                else if (builder.Length > 0 && builder[^1] is not ('\n' or PreservedNewline))
+                else if (!wasAfterListMarker && builder.Length > 0 &&
+                    builder[^1] is not ('\n' or PreservedNewline))
                 {
                     // Content that precedes this block with no separator of its own (for
                     // example inline text right before a <p>) would otherwise be joined onto it.
+                    // The one exception is a list marker ("- " or "1. ") that was just emitted:
+                    // a block wrapping an <li>'s text (<li><p>One</p></li>) must stay glued to
+                    // its marker rather than being pushed onto its own line.
                     builder.Append(newline).Append(newline);
                 }
 

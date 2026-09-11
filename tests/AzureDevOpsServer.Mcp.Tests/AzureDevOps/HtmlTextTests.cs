@@ -30,6 +30,14 @@ public sealed class HtmlTextTests
     }
 
     [Fact]
+    public void ToPlainText_WithBlockElementWrappingListItemText_KeepsTheMarkerWithItsText()
+    {
+        var text = HtmlText.ToPlainText("<li><p>One</p></li>");
+
+        Assert.Equal("- One", text);
+    }
+
+    [Fact]
     public void ToPlainText_WithInlineCode_KeepsItInTheSurroundingSentence()
     {
         var text = HtmlText.ToPlainText("<p>Run <code>foo()</code> now</p>");
