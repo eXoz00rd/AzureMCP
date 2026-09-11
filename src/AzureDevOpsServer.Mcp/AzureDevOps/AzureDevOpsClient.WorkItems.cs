@@ -409,25 +409,109 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException("The create work item response could not be parsed.");
     }
 
-    public async Task<WorkItem> UpdateWorkItemAsync(
+    public Task<WorkItem> UpdateWorkItemAsync(
         int id,
         IReadOnlyDictionary<string, string> fields,
         CancellationToken cancellationToken)
     {
+        return UpdateWorkItemAsync(id, fields, null, cancellationToken);
+    }
+
+    public async Task<WorkItem> UpdateWorkItemAsync(
+        int id,
+        IReadOnlyDictionary<string, string> fields,
+        int? expectedRevision,
+        CancellationToken cancellationToken)
+    {
+        if (expectedRevision is <= 0)
+        {
+            throw new AzureDevOpsClientException("expectedRevision must be a positive revision number.");
+        }
+
         using var request = new HttpRequestMessage(
             HttpMethod.Patch,
             $"_apis/wit/workitems/{id}?api-version={ApiVersion(ApiArea.WorkItems)}"
         )
         {
-            Content = CreateJsonPatchContent(fields)
+            Content = CreateJsonPatchContent(fields, expectedRevision)
         };
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        if (expectedRevision is not null &&
+            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed)
+        {
+            var body = await BoundedText.ReadAsync(response.Content, ResponseLimits.DefaultMaxChars, cancellationToken);
+            if (!body.Truncated && IsRevisionMismatch(body.Text))
+            {
+                var currentRevision = await TryGetCurrentRevisionAsync(id, cancellationToken);
+                if (currentRevision is not null && currentRevision != expectedRevision)
+                {
+                    throw new AzureDevOpsClientException(
+                        $"Update rejected: work item {id} has changed since revision {expectedRevision}; current revision is {currentRevision}. Read the work item again, reconcile the changes, and retry with its current revision."
+                    );
+                }
+            }
+
+            var truncation = body.Truncated ? " Error response truncated." : string.Empty;
+            throw new AzureDevOpsClientException(
+                $"Azure DevOps Server request failed with status {(int)response.StatusCode} ({response.StatusCode}). {ExtractErrorMessage(body.Text)}{truncation}"
+            );
+        }
 
         await EnsureSuccessAsync(response, cancellationToken);
 
         var workItem = await response.Content.ReadFromJsonAsync<WorkItem>(cancellationToken);
         return workItem ??
             throw new AzureDevOpsClientException($"The update response for work item {id} could not be parsed.");
+    }
+
+    private static bool IsRevisionMismatch(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty("typeKey", out var typeKey) &&
+                typeKey.ValueKind == JsonValueKind.String &&
+                typeKey.ValueEquals("WorkItemRevisionMismatchException");
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<int?> TryGetCurrentRevisionAsync(int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await _httpClient.GetAsync(
+                $"_apis/wit/workitems/{id}?fields=System.Id&api-version={ApiVersion(ApiArea.WorkItems)}",
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken
+            );
+            if (!response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NonAuthoritativeInformation)
+            {
+                return null;
+            }
+
+            var body = await BoundedText.ReadAsync(response.Content, ResponseLimits.DefaultMaxChars, cancellationToken);
+            if (body.Truncated)
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(body.Text);
+            return document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty("rev", out var revision) &&
+                revision.ValueKind == JsonValueKind.Number &&
+                revision.TryGetInt32(out var value) && value > 0 ? value : null;
+        }
+        catch (Exception)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return null;
+        }
     }
 }
