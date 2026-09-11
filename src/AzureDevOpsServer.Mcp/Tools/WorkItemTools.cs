@@ -233,12 +233,12 @@ public sealed class WorkItemTools
         return new WorkItemWriteResult(workItem.Id, workItem.Rev, allFields.Keys.ToList(), true);
     }
 
-    public Task<WorkItem> UpdateWorkItemAsync(
+    public Task<WorkItemWriteResult> UpdateWorkItemAsync(
         int id,
         Dictionary<string, string> fields,
         CancellationToken token)
     {
-        return _client.UpdateWorkItemAsync(id, fields, token);
+        return UpdateWorkItemAsync(id, fields, null, token);
     }
 
     [McpServerTool(Name = "update_work_item", Destructive = true, UseStructuredContent = true)]
