@@ -238,4 +238,22 @@ public sealed class HtmlTextTests
 
         Assert.Equal("- One\n- Two", text);
     }
+
+    [Fact]
+    public void ToPlainText_WithNewlineBetweenInlineElements_CollapsesToASingleSpace()
+    {
+        var text = HtmlText.ToPlainText("<span>one</span>\n<span>two</span>");
+
+        Assert.Equal("one two", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithManyUnterminatedTagLikeFragments_ReturnsInputVerbatim()
+    {
+        var malformed = string.Concat(Enumerable.Repeat("<a", 5000));
+
+        var text = HtmlText.ToPlainText(malformed);
+
+        Assert.Equal(malformed, text);
+    }
 }

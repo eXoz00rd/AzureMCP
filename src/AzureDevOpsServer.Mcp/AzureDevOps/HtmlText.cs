@@ -50,10 +50,27 @@ internal static class HtmlText
             // time, including its angle brackets.
             if (!TryReadKnownTag(html, tagStart, out var tagEnd, out var tag, out var closing))
             {
-                var unknownTagEnd = IsTagStart(html, tagStart) ? FindTagEnd(html, tagStart) : -1;
-                var skipLength = unknownTagEnd >= 0 ? unknownTagEnd - tagStart + 1 : 1;
-                AppendLiteral(builder, html, index, tagStart - index + skipLength, preserveDepth > 0);
-                index = tagStart + skipLength;
+                if (IsTagStart(html, tagStart))
+                {
+                    var unknownTagEnd = FindTagEnd(html, tagStart);
+                    if (unknownTagEnd >= 0)
+                    {
+                        AppendLiteral(builder, html, index, unknownTagEnd - index + 1, preserveDepth > 0);
+                        index = unknownTagEnd + 1;
+                        continue;
+                    }
+
+                    // No terminator was found anywhere in the rest of the string, so no tag
+                    // starting at or after this position can terminate either: append the
+                    // remainder as one literal run and stop, rather than re-scanning it one "<"
+                    // at a time, which would be quadratic for malformed input containing many
+                    // unterminated tag-like fragments.
+                    AppendLiteral(builder, html, index, html.Length - index, preserveDepth > 0);
+                    break;
+                }
+
+                AppendLiteral(builder, html, index, tagStart - index + 1, preserveDepth > 0);
+                index = tagStart + 1;
                 continue;
             }
 
@@ -100,17 +117,22 @@ internal static class HtmlText
 
     // Copies a literal (non-tag) span of html into the builder.
     // - Outside a preserve region, a text node that is nothing but whitespace containing a
-    //   newline (the indentation pretty-printed HTML leaves between tags) carries no content and
-    //   is dropped, so it cannot show up as a spurious blank line; a plain inline space (no
-    //   newline) is kept, since that is likely the actual space between two elements.
+    //   newline collapses to a single space instead of being copied verbatim. This serves two
+    //   different real cases with one rule: pure indentation pretty-printed HTML leaves between
+    //   block-level tags (for example between <ul> and <li>) ends up at the edge of a line once
+    //   CollapseWhitespace's per-line Trim() runs below, so the space is discarded there anyway;
+    //   a source line wrap between inline content (for example "<span>one</span>\n<span>two</span>")
+    //   is not at a line edge, so the space survives as the word separator it represents. A plain
+    //   inline run of spaces with no newline is left untouched either way.
     // - Inside a preserve region, any newline in the span is replaced with the sentinel so
     //   CollapseWhitespace leaves it, and the indentation around it, alone.
     private static void AppendLiteral(StringBuilder builder, string html, int start, int length, bool preserving)
     {
         if (!preserving)
         {
-            if (IsInsignificantWhitespace(html, start, length))
+            if (IsWhitespaceOnlySpanWithNewline(html, start, length))
             {
+                builder.Append(' ');
                 return;
             }
 
@@ -135,7 +157,7 @@ internal static class HtmlText
         }
     }
 
-    private static bool IsInsignificantWhitespace(string html, int start, int length)
+    private static bool IsWhitespaceOnlySpanWithNewline(string html, int start, int length)
     {
         var sawNewline = false;
         for (var i = start; i < start + length; i++)
