@@ -144,4 +144,32 @@ public sealed class HtmlTextTests
 
         Assert.Equal("Returns a List<Item> result.", text);
     }
+
+    [Fact]
+    public void ToPlainText_WithoutAnyTags_StillDecodesEntities()
+    {
+        var text = HtmlText.ToPlainText("Fish &amp; Chips");
+
+        Assert.Equal("Fish & Chips", text);
+    }
+
+    [Fact]
+    public void ToPlainText_PreservesIndentationInsidePreBlock()
+    {
+        var text = HtmlText.ToPlainText("<pre>\n    first line\n    second line\n</pre>");
+
+        Assert.Equal("\n    first line\n    second line\n", text);
+    }
+
+    [Fact]
+    public void ToPlainText_PreservesIndentationInsideCodeBlockSurroundedByParagraphs()
+    {
+        var text = HtmlText.ToPlainText(
+            "<p>Before</p><pre>\n    indented\n</pre><p>After</p>"
+        );
+
+        Assert.Contains("\n    indented\n", text);
+        Assert.StartsWith("Before", text);
+        Assert.EndsWith("After", text);
+    }
 }

@@ -97,9 +97,10 @@ public sealed class WorkItemTools
         var converted = new Dictionary<string, JsonElement>(workItem.Fields.Count);
         foreach (var (name, value) in workItem.Fields)
         {
-            converted[name] = RichTextFields.Contains(name) &&
-                value.ValueKind == JsonValueKind.String &&
-                HtmlText.LooksLikeHtml(value.GetString() ?? string.Empty) ?
+            // The allowlist alone decides whether a field is converted; a further "does it look
+            // like HTML" check would skip decoding an allowlisted value that has no tags at all,
+            // for example an entity-only value such as "Fish &amp; Chips".
+            converted[name] = RichTextFields.Contains(name) && value.ValueKind == JsonValueKind.String ?
                 JsonSerializer.SerializeToElement(HtmlText.ToPlainText(value.GetString()!)) :
                 value;
         }

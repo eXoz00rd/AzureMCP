@@ -40,6 +40,20 @@ public sealed class WorkItemToolsTests : ToolTestsBase
     }
 
     [Fact]
+    public async Task GetWorkItemAsync_TextFormat_DecodesEntitiesInAllowlistedFieldWithNoTags()
+    {
+        const string json =
+            """{ "id": 1, "rev": 1, "fields": { "System.Description": "Fish &amp; Chips" }, "url": "https://devops.example.local/_apis/wit/workItems/1" }""";
+        using var response = JsonResponse(json);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var workItem = await tools.GetWorkItemAsync(1, null, false, "text", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Fish & Chips", workItem.Fields["System.Description"].GetString());
+    }
+
+    [Fact]
     public async Task GetWorkItemAsync_WithInvalidDescriptionFormat_ThrowsBeforeRequest()
     {
         using var response = JsonResponse(WorkItemJson);
