@@ -47,9 +47,12 @@ public sealed class WorkItemTools
             project;
     }
 
+    // Defaults only when the argument is omitted. An explicitly supplied blank value is not a
+    // valid 'html' or 'text' and falls through to the rejection below instead of silently
+    // defaulting.
     private static string NormalizeDescriptionFormat(string? descriptionFormat)
     {
-        if (string.IsNullOrWhiteSpace(descriptionFormat) ||
+        if (descriptionFormat is null ||
             string.Equals(descriptionFormat, DescriptionFormatHtml, StringComparison.OrdinalIgnoreCase))
         {
             return DescriptionFormatHtml;

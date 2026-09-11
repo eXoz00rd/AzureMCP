@@ -10,12 +10,44 @@ namespace AzureDevOpsServer.Mcp.AzureDevOps;
 // Azure DevOps Server rich text editor.
 internal static partial class HtmlText
 {
+    private static readonly HashSet<string> KnownTags = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "p", "div", "span", "br", "ul", "ol", "li", "a", "b", "i", "strong", "em", "u",
+        "table", "thead", "tbody", "tr", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6",
+        "blockquote", "pre", "code", "img", "hr"
+    };
+
     // A value is only treated as HTML when it contains at least one recognizable tag, so a plain
     // value that happens to contain "<" or ">" (a title like "List<Item>") is left untouched
-    // instead of being misread as markup.
+    // instead of being misread as markup. Uses the same quote-aware tag scan as ToPlainText, so a
+    // ">" inside an attribute value does not hide a real tag from detection.
     public static bool LooksLikeHtml(string value)
     {
-        return KnownTagRegex().IsMatch(value);
+        var index = 0;
+        while (index < value.Length)
+        {
+            var tagStart = value.IndexOf('<', index);
+            if (tagStart < 0)
+            {
+                return false;
+            }
+
+            var tagEnd = FindTagEnd(value, tagStart);
+            if (tagEnd < 0)
+            {
+                return false;
+            }
+
+            var tag = value[(tagStart + 1)..tagEnd];
+            if (KnownTags.Contains(ExtractTagName(tag, tag.StartsWith('/'))))
+            {
+                return true;
+            }
+
+            index = tagEnd + 1;
+        }
+
+        return false;
     }
 
     public static string ToPlainText(string html)
@@ -170,11 +202,8 @@ internal static partial class HtmlText
         return builder.ToString();
     }
 
-    [GeneratedRegex(
-        "</?(?:p|div|span|br|ul|ol|li|a|b|i|strong|em|u|table|thead|tbody|tr|td|th|h[1-6]|blockquote|pre|code|img|hr)\\b[^>]*>",
-        RegexOptions.IgnoreCase)]
-    private static partial Regex KnownTagRegex();
-
-    [GeneratedRegex("href\\s*=\\s*[\"']([^\"']*)[\"']", RegexOptions.IgnoreCase)]
+    // Requires "href" to start at the beginning of the tag content or after whitespace, so
+    // "data-href" is not misread as the "href" attribute.
+    [GeneratedRegex("(?:^|\\s)href\\s*=\\s*[\"']([^\"']*)[\"']", RegexOptions.IgnoreCase)]
     private static partial Regex HrefRegex();
 }

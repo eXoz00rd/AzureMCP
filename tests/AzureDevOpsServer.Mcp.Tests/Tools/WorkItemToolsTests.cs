@@ -60,6 +60,26 @@ public sealed class WorkItemToolsTests : ToolTestsBase
     }
 
     [Fact]
+    public async Task GetWorkItemAsync_WithBlankDescriptionFormat_ThrowsInsteadOfDefaulting()
+    {
+        using var response = JsonResponse(WorkItemJson);
+        var harness = CreateHarness(null, response);
+        var tools = new WorkItemTools(harness.Client, harness.Options);
+
+        var exception = await Assert.ThrowsAsync<McpException>(() => tools.GetWorkItemAsync(
+                1,
+                null,
+                false,
+                "   ",
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Contains("descriptionFormat", exception.Message);
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Fact]
     public async Task GetWorkItemsAsync_TextFormat_ConvertsEachItem()
     {
         const string json =

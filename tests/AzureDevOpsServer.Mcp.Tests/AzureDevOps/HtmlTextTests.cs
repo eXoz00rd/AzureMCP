@@ -78,4 +78,28 @@ public sealed class HtmlTextTests
 
         Assert.Equal("Before <b unterminated", text);
     }
+
+    [Fact]
+    public void LooksLikeHtml_WithAngleBracketInsideQuotedAttribute_StillDetectsTheTag()
+    {
+        Assert.True(HtmlText.LooksLikeHtml("""<br title="1 > 0">After"""));
+    }
+
+    [Fact]
+    public void ToPlainText_WithDataHrefAttribute_DoesNotFabricateLinkUrl()
+    {
+        var text = HtmlText.ToPlainText("""<p>See <a data-href="https://tracking.example.com">the doc</a>.</p>""");
+
+        Assert.Equal("See the doc.", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithDataHrefBeforeRealHref_UsesTheRealHrefValue()
+    {
+        var text = HtmlText.ToPlainText(
+            """<p><a data-href="https://tracking.example.com" href="https://example.com/doc">the doc</a></p>"""
+        );
+
+        Assert.Equal("the doc (https://example.com/doc)", text);
+    }
 }
