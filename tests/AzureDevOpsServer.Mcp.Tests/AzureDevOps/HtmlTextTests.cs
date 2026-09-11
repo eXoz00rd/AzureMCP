@@ -38,6 +38,33 @@ public sealed class HtmlTextTests
     }
 
     [Fact]
+    public void ToPlainText_WithBlockElementWrappingMultipleListItems_KeepsItemsAdjacent()
+    {
+        var text = HtmlText.ToPlainText("<ul><li><p>One</p></li><li><p>Two</p></li></ul>");
+
+        Assert.Equal("- One\n- Two", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithNestedList_DoesNotAddBlankLineBeforeNextSibling()
+    {
+        var text = HtmlText.ToPlainText("<ul><li>Parent<ul><li>Child</li></ul></li><li>Next</li></ul>");
+
+        Assert.Equal("- Parent\n- Child\n- Next", text);
+    }
+
+    [Fact]
+    public void ToPlainText_WithLiteralSentinelCharacterInContent_ReplacesItInsteadOfMisreadingItAsAMarker()
+    {
+        var strayMarker = (char)0xE000;
+        var replacementCharacter = (char)0xFFFD;
+
+        var text = HtmlText.ToPlainText($"<p>Weird{strayMarker}char</p>");
+
+        Assert.Equal($"Weird{replacementCharacter}char", text);
+    }
+
+    [Fact]
     public void ToPlainText_WithInlineCode_KeepsItInTheSurroundingSentence()
     {
         var text = HtmlText.ToPlainText("<p>Run <code>foo()</code> now</p>");

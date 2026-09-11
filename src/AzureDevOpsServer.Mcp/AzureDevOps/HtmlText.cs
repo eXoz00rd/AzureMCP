@@ -22,6 +22,10 @@ internal static class HtmlText
     // a real '\t' once collapsing is done.
     private const char PreservedTab = (char)0xE001;
 
+    // The standard Unicode replacement character, used to neutralize a stray occurrence of
+    // either sentinel above found in real input (see SanitizeReservedSentinels).
+    private const char ReplacementCharacter = (char)0xFFFD;
+
     private static readonly HashSet<string> KnownTags = new(StringComparer.OrdinalIgnoreCase)
     {
         "p", "div", "span", "br", "ul", "ol", "li", "a", "b", "i", "strong", "em", "u",
@@ -30,8 +34,22 @@ internal static class HtmlText
         "blockquote", "pre", "code", "img", "hr"
     };
 
+    // PreservedNewline and PreservedTab are also ordinary Unicode characters that a field value
+    // could (vanishingly unlikely, but not impossible) already contain. Since they have no
+    // defined meaning outside a private, per-application agreement, a stray occurrence is
+    // replaced with the standard Unicode replacement character up front, so the final Replace
+    // calls below can never mistake real field content for one of this converter's own markers.
+    private static string SanitizeReservedSentinels(string html)
+    {
+        return html.IndexOf(PreservedNewline) < 0 && html.IndexOf(PreservedTab) < 0 ?
+            html :
+            html.Replace(PreservedNewline, ReplacementCharacter).Replace(PreservedTab, ReplacementCharacter);
+    }
+
     public static string ToPlainText(string html)
     {
+        html = SanitizeReservedSentinels(html);
+
         var builder = new StringBuilder(html.Length);
         var anchorHrefs = new Stack<string?>();
         var listCounters = new Stack<int>();
@@ -39,7 +57,7 @@ internal static class HtmlText
         var preserveDepth = 0;
         var cellDepth = 0;
         var isFirstCellInRow = true;
-        var afterListMarker = false;
+        var listItemDepth = 0;
 
         while (index < html.Length)
         {
@@ -148,7 +166,7 @@ internal static class HtmlText
                     listCounters,
                     preserveDepth > 0,
                     cellDepth > 0,
-                    ref afterListMarker
+                    ref listItemDepth
                 );
             }
 
@@ -300,13 +318,11 @@ internal static class HtmlText
         Stack<int> listCounters,
         bool preserving,
         bool insideTableCell,
-        ref bool afterListMarker)
+        ref int listItemDepth)
     {
         var closing = tag.StartsWith('/');
         var name = ExtractTagName(tag, closing);
         var newline = preserving ? PreservedNewline : '\n';
-        var wasAfterListMarker = afterListMarker;
-        afterListMarker = false;
 
         switch (name)
         {
@@ -314,24 +330,27 @@ internal static class HtmlText
                 builder.Append(newline);
                 break;
             // The marker (bullet, or a running number for an <ol>) is emitted on open and the
-            // line break on close, so consecutive items are separated without an extra blank
-            // line, and content that follows the list still gets a break after the last item.
+            // line break on close (only when the builder does not already end in one, so a
+            // nested list's own closing line break is not duplicated by its parent item's),
+            // so consecutive items are separated without an extra blank line, and content that
+            // follows the list still gets a break after the last item.
             case "li":
                 if (closing)
                 {
-                    builder.Append(newline);
+                    listItemDepth = Math.Max(0, listItemDepth - 1);
+                    AppendBoundaryIfNeeded(builder, newline);
                 }
                 else if (listCounters.Count > 0 && listCounters.Peek() > 0)
                 {
                     var ordinal = listCounters.Pop();
                     builder.Append(ordinal).Append(". ");
                     listCounters.Push(ordinal + 1);
-                    afterListMarker = true;
+                    listItemDepth++;
                 }
                 else
                 {
                     builder.Append("- ");
-                    afterListMarker = true;
+                    listItemDepth++;
                 }
 
                 break;
@@ -353,8 +372,12 @@ internal static class HtmlText
             case "p" or "div" or "blockquote" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6":
                 // A block tag nested inside a table cell would otherwise split the cell across
                 // lines, stranding the closing td/th's tab as leading whitespace that
-                // CollapseWhitespace then trims away, so it stays silent on both open and close.
-                if (insideTableCell)
+                // CollapseWhitespace then trims away; nested inside a list item, it would
+                // likewise split that item's text onto its own paragraph and add a blank line
+                // before the next item. Either way it stays silent on both open and close, so a
+                // <li> or <td>/<th> reads as one continuous entry regardless of how its own
+                // content happens to be marked up internally.
+                if (insideTableCell || listItemDepth > 0)
                 {
                     break;
                 }
@@ -363,14 +386,10 @@ internal static class HtmlText
                 {
                     builder.Append(newline).Append(newline);
                 }
-                else if (!wasAfterListMarker && builder.Length > 0 &&
-                    builder[^1] is not ('\n' or PreservedNewline))
+                else if (builder.Length > 0 && builder[^1] is not ('\n' or PreservedNewline))
                 {
                     // Content that precedes this block with no separator of its own (for
                     // example inline text right before a <p>) would otherwise be joined onto it.
-                    // The one exception is a list marker ("- " or "1. ") that was just emitted:
-                    // a block wrapping an <li>'s text (<li><p>One</p></li>) must stay glued to
-                    // its marker rather than being pushed onto its own line.
                     builder.Append(newline).Append(newline);
                 }
 
