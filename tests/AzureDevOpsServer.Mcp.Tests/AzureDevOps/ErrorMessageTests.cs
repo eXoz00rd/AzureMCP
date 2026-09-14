@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.Tests.Infrastructure;
 using Xunit;
@@ -7,6 +9,19 @@ namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;
 
 public sealed class ErrorMessageTests : AzureDevOpsClientTestsBase
 {
+    private const string PatValue = "pat-value";
+
+    private static AzureDevOpsClient CreateClientWithPat(
+        out StubHttpMessageHandler handler,
+        params HttpResponseMessage[] responses)
+    {
+        handler = new StubHttpMessageHandler(responses);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri($"{CollectionUrl}/") };
+        var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($":{PatValue}"));
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+        return new AzureDevOpsClient(httpClient, CreateOptions(null));
+    }
+
     [Fact]
     public void ExtractErrorMessage_WithAzureDevOpsError_ReturnsOnlyMessage()
     {
@@ -89,21 +104,25 @@ public sealed class ErrorMessageTests : AzureDevOpsClientTestsBase
         {
             Content = new StringContent("<html>Sign in</html>")
         };
-        response.Headers.WwwAuthenticate.Add(new System.Net.Http.Headers.AuthenticationHeaderValue("Negotiate"));
-        response.Headers.WwwAuthenticate.Add(new System.Net.Http.Headers.AuthenticationHeaderValue("NTLM"));
-        var client = CreateClient(out _, response);
+        response.Headers.WwwAuthenticate.Add(new AuthenticationHeaderValue("Negotiate"));
+        response.Headers.WwwAuthenticate.Add(new AuthenticationHeaderValue("NTLM"));
+        var client = CreateClientWithPat(out var handler, response);
 
         var exception =
             await Assert.ThrowsAsync<AzureDevOpsClientException>(()
                 => client.GetProjectsAsync(TestContext.Current.CancellationToken)
             );
 
+        var sentCredentials = Assert.Single(handler.Requests).Headers.Authorization?.Parameter;
+        Assert.NotNull(sentCredentials);
+
         Assert.Contains($"{(int)statusCode}", exception.Message);
         Assert.Contains("_apis/projects", exception.Message);
         Assert.Contains("Negotiate", exception.Message);
         Assert.Contains("NTLM", exception.Message);
         Assert.DoesNotContain("Authorization", exception.Message);
-        Assert.DoesNotContain("pat-value", exception.Message);
+        Assert.DoesNotContain(PatValue, exception.Message);
+        Assert.DoesNotContain(sentCredentials, exception.Message);
     }
 
     [Fact]
