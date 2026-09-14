@@ -78,4 +78,48 @@ public sealed class ErrorMessageTests : AzureDevOpsClientTestsBase
         Assert.Contains("404", exception.Message);
         Assert.DoesNotContain("typeKey", exception.Message);
     }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.NonAuthoritativeInformation)]
+    public async Task EnsureSuccessAsync_OnAuthFailure_SurfacesRequestUriAndOfferedSchemesWithoutCredentials(
+        HttpStatusCode statusCode)
+    {
+        using var response = new HttpResponseMessage(statusCode)
+        {
+            Content = new StringContent("<html>Sign in</html>")
+        };
+        response.Headers.WwwAuthenticate.Add(new System.Net.Http.Headers.AuthenticationHeaderValue("Negotiate"));
+        response.Headers.WwwAuthenticate.Add(new System.Net.Http.Headers.AuthenticationHeaderValue("NTLM"));
+        var client = CreateClient(out _, response);
+
+        var exception =
+            await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+                => client.GetProjectsAsync(TestContext.Current.CancellationToken)
+            );
+
+        Assert.Contains($"{(int)statusCode}", exception.Message);
+        Assert.Contains("_apis/projects", exception.Message);
+        Assert.Contains("Negotiate", exception.Message);
+        Assert.Contains("NTLM", exception.Message);
+        Assert.DoesNotContain("Authorization", exception.Message);
+        Assert.DoesNotContain("pat-value", exception.Message);
+    }
+
+    [Fact]
+    public async Task EnsureSuccessAsync_OnAuthFailure_WithoutChallengeHeader_SaysSoInsteadOfGuessing()
+    {
+        using var response = new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent("<html>Sign in</html>")
+        };
+        var client = CreateClient(out _, response);
+
+        var exception =
+            await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+                => client.GetProjectsAsync(TestContext.Current.CancellationToken)
+            );
+
+        Assert.Contains("no WWW-Authenticate header", exception.Message);
+    }
 }
