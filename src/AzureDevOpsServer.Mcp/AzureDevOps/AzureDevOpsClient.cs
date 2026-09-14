@@ -151,8 +151,13 @@ public sealed partial class AzureDevOpsClient
     {
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.NonAuthoritativeInformation)
         {
+            var authBody = await BoundedText.ReadAsync(response.Content, ResponseLimits.DefaultMaxChars, cancellationToken);
+            var authTruncation = authBody.Truncated ? " Error response truncated." : string.Empty;
             throw new AzureDevOpsClientException(
-                "Authentication against Azure DevOps Server failed. Verify that the PAT is valid, not expired, and has the required scopes."
+                $"Authentication against Azure DevOps Server failed for {RequestUri(response)} with status " +
+                $"{(int)response.StatusCode} ({response.StatusCode}). Server-offered authentication schemes: " +
+                $"{AuthenticationSchemes(response)}. Verify that the PAT is valid, not expired, and has the " +
+                $"required scopes. {ExtractErrorMessage(authBody.Text)}{authTruncation}"
             );
         }
 
@@ -161,10 +166,27 @@ public sealed partial class AzureDevOpsClient
             return;
         }
 
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        var body = await BoundedText.ReadAsync(response.Content, ResponseLimits.DefaultMaxChars, cancellationToken);
+        var truncation = body.Truncated ? " Error response truncated." : string.Empty;
         throw new AzureDevOpsClientException(
-            $"Azure DevOps Server request failed with status {(int)response.StatusCode} ({response.StatusCode}). {ExtractErrorMessage(body)}"
+            $"Azure DevOps Server request failed with status {(int)response.StatusCode} ({response.StatusCode}). {ExtractErrorMessage(body.Text)}{truncation}"
         );
+    }
+
+    private static string RequestUri(HttpResponseMessage response)
+    {
+        return response.RequestMessage?.RequestUri?.ToString() ?? "the request";
+    }
+
+    private static string AuthenticationSchemes(HttpResponseMessage response)
+    {
+        var schemes = new List<string>();
+        foreach (var challenge in response.Headers.WwwAuthenticate)
+        {
+            schemes.Add(challenge.Scheme);
+        }
+
+        return schemes.Count == 0 ? "none (no WWW-Authenticate header)" : string.Join(", ", schemes);
     }
 
     internal static string ExtractErrorMessage(string body)

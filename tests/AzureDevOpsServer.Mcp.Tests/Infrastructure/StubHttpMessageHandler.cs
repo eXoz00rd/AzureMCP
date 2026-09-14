@@ -23,6 +23,8 @@ public sealed class StubHttpMessageHandler : HttpMessageHandler
             RequestBodies.Add(await request.Content.ReadAsStringAsync(cancellationToken));
         }
 
-        return _responses.Dequeue();
+        var response = _responses.Dequeue();
+        response.RequestMessage ??= request;
+        return response;
     }
 }

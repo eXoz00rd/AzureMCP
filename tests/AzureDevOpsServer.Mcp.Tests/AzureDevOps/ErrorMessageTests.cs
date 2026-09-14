@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.Tests.Infrastructure;
 using Xunit;
@@ -7,6 +9,19 @@ namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;
 
 public sealed class ErrorMessageTests : AzureDevOpsClientTestsBase
 {
+    private const string PatValue = "pat-value";
+
+    private static AzureDevOpsClient CreateClientWithPat(
+        out StubHttpMessageHandler handler,
+        params HttpResponseMessage[] responses)
+    {
+        handler = new StubHttpMessageHandler(responses);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri($"{CollectionUrl}/") };
+        var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($":{PatValue}"));
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+        return new AzureDevOpsClient(httpClient, CreateOptions(null));
+    }
+
     [Fact]
     public void ExtractErrorMessage_WithAzureDevOpsError_ReturnsOnlyMessage()
     {
@@ -77,5 +92,53 @@ public sealed class ErrorMessageTests : AzureDevOpsClientTestsBase
         Assert.Contains("TF401019", exception.Message);
         Assert.Contains("404", exception.Message);
         Assert.DoesNotContain("typeKey", exception.Message);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.NonAuthoritativeInformation)]
+    public async Task EnsureSuccessAsync_OnAuthFailure_SurfacesRequestUriAndOfferedSchemesWithoutCredentials(
+        HttpStatusCode statusCode)
+    {
+        using var response = new HttpResponseMessage(statusCode)
+        {
+            Content = new StringContent("<html>Sign in</html>")
+        };
+        response.Headers.WwwAuthenticate.Add(new AuthenticationHeaderValue("Negotiate"));
+        response.Headers.WwwAuthenticate.Add(new AuthenticationHeaderValue("NTLM"));
+        var client = CreateClientWithPat(out var handler, response);
+
+        var exception =
+            await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+                => client.GetProjectsAsync(TestContext.Current.CancellationToken)
+            );
+
+        var sentCredentials = Assert.Single(handler.Requests).Headers.Authorization?.Parameter;
+        Assert.NotNull(sentCredentials);
+
+        Assert.Contains($"{(int)statusCode}", exception.Message);
+        Assert.Contains("_apis/projects", exception.Message);
+        Assert.Contains("Negotiate", exception.Message);
+        Assert.Contains("NTLM", exception.Message);
+        Assert.DoesNotContain("Authorization", exception.Message);
+        Assert.DoesNotContain(PatValue, exception.Message);
+        Assert.DoesNotContain(sentCredentials, exception.Message);
+    }
+
+    [Fact]
+    public async Task EnsureSuccessAsync_OnAuthFailure_WithoutChallengeHeader_SaysSoInsteadOfGuessing()
+    {
+        using var response = new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent("<html>Sign in</html>")
+        };
+        var client = CreateClient(out _, response);
+
+        var exception =
+            await Assert.ThrowsAsync<AzureDevOpsClientException>(()
+                => client.GetProjectsAsync(TestContext.Current.CancellationToken)
+            );
+
+        Assert.Contains("no WWW-Authenticate header", exception.Message);
     }
 }
