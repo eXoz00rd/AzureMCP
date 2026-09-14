@@ -253,6 +253,10 @@ Releases are published to NuGet.org by the [release workflow](.github/workflows/
 
 3. The workflow builds, tests, packs with the version taken from the tag (also synced into `.mcp/server.json`), and pushes the package to NuGet.org
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes, or the [GitHub Releases](https://github.com/eXoz00rd/AzureMCP/releases) page.
+
 ## Roadmap
 
 - Wiki search through the Search extension
