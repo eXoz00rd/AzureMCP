@@ -20,6 +20,7 @@ public sealed class StdioServerSmokeTests
     [Fact]
     public async Task Server_OverStdio_InitializesListsToolsAndPromptsAndCallsReadAndWriteTools()
     {
+        const string personalAccessToken = "smoke-test-pat";
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         cancellation.CancelAfter(TimeSpan.FromSeconds(30));
         var cancellationToken = cancellation.Token;
@@ -36,7 +37,7 @@ public sealed class StdioServerSmokeTests
                 EnvironmentVariables = new Dictionary<string, string?>
                 {
                     [AzureDevOpsServerOptions.CollectionUrlVariable] = azureDevOps.CollectionUrl,
-                    [AzureDevOpsServerOptions.PersonalAccessTokenVariable] = "smoke-test-pat",
+                    [AzureDevOpsServerOptions.PersonalAccessTokenVariable] = personalAccessToken,
                     [AzureDevOpsServerOptions.LogLevelVariable] = "Information",
                 },
                 StandardErrorLines = line => stderrLines.Enqueue(line),
@@ -115,6 +116,13 @@ public sealed class StdioServerSmokeTests
         Assert.Contains(
             azureDevOps.RequestPaths,
             path => path.Contains("_apis/wit/workitems/1", StringComparison.Ordinal)
+        );
+
+        // Proves the real host wiring still authenticates every call, not only hand-assembled handlers.
+        Assert.NotEmpty(azureDevOps.AuthorizationHeaders);
+        Assert.All(
+            azureDevOps.AuthorizationHeaders,
+            header => Assert.Equal(StubCredentialProvider.ExpectedAuthorization(personalAccessToken), header)
         );
 
         // ADOS_LOG_LEVEL=Information guarantees the host lifetime messages are emitted, so a
