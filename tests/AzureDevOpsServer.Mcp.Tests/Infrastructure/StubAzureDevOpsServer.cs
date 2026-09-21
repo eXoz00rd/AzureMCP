@@ -16,6 +16,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
     private readonly Task _acceptLoop;
     private readonly object _requestsGate = new();
     private readonly List<string> _requestPaths = [];
+    private readonly List<string?> _authorizationHeaders = [];
     private readonly string _projectsResponse;
     private readonly string _workItemResponse;
 
@@ -85,6 +86,17 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
         }
     }
 
+    public IReadOnlyList<string?> AuthorizationHeaders
+    {
+        get
+        {
+            lock (_requestsGate)
+            {
+                return [.. _authorizationHeaders];
+            }
+        }
+    }
+
     private async Task AcceptLoopAsync()
     {
         while (!_stopping.IsCancellationRequested)
@@ -103,6 +115,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
             lock (_requestsGate)
             {
                 _requestPaths.Add(path);
+                _authorizationHeaders.Add(context.Request.Headers["Authorization"]);
             }
 
             var isKnownProjectsRequest = context.Request.HttpMethod == "GET" &&

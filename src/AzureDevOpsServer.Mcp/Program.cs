@@ -1,5 +1,3 @@
-using System.Net.Http.Headers;
-using System.Text;
 using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,19 +25,16 @@ builder.Services
        .Configure(options => options.LoadFromEnvironment())
        .ValidateOnStart();
 
-builder.Services.AddTransient<TlsDiagnosticsHandler>();
+builder.Services.AddSingleton<IAzureDevOpsCredentialProvider, ConfiguredCredentialProvider>();
 
 var clientBuilder = builder.Services.AddHttpClient<AzureDevOpsClient>((serviceProvider, httpClient) =>
     {
         var options = serviceProvider.GetRequiredService<IOptions<AzureDevOpsServerOptions>>().Value;
         httpClient.BaseAddress = new Uri(options.CollectionUrl.TrimEnd('/') + "/");
-        var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($":{options.PersonalAccessToken}"));
-        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
     }
 );
 
-clientBuilder.AddAzureDevOpsResilience();
-clientBuilder.AddHttpMessageHandler<TlsDiagnosticsHandler>();
+clientBuilder.AddAzureDevOpsHandlers();
 
 var startupOptions = new AzureDevOpsServerOptions();
 startupOptions.LoadFromEnvironment();

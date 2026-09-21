@@ -13,11 +13,15 @@ public sealed class StubHttpMessageHandler : HttpMessageHandler
 
     public List<string> RequestBodies { get; } = [];
 
+    // Snapshotted per send because retries reuse the same request instance.
+    public List<string?> AuthorizationHeaders { get; } = [];
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
         Requests.Add(request);
+        AuthorizationHeaders.Add(request.Headers.Authorization?.ToString());
         if (request.Content is not null)
         {
             RequestBodies.Add(await request.Content.ReadAsStringAsync(cancellationToken));
