@@ -53,7 +53,7 @@ Never add self-attribution to commits or pull request bodies.
 ## Scope and workflow
 
 - Work on one task at a time.
-- Keep pull requests focused: approximately 400 changed lines and 15 files at most.
+- Keep pull requests focused: approximately 15 files at most.
 - Open pull requests ready for review, never as drafts.
 - Do not commit until the work is reviewed and the user gives explicit approval.
 - Write code, comments, commits, pull requests, tasks, and issues in English. Internal notes may be in Polish.

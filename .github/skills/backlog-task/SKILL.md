@@ -38,7 +38,7 @@ Move the item as work progresses. Let the board automation set `Done` when the l
 - Read both repository issues and draft items in `Backlog` or `Ready`.
 - Prefer `P0`, then `P1`, then `P2`. Within the same priority, prefer correctness and reliability work over enhancements.
 - Read the complete body and `CONVENTIONS.md` before starting.
-- Choose one coherent task that fits approximately 400 changed lines and 15 files.
+- Choose one coherent task that fits approximately 15 files.
 - If equally ranked tasks are available and the choice is not obvious, ask the user.
 - If the selected task is a draft item, promote it to a GitHub Issue, add the issue to the board, and delete the old draft item.
 - Move the issue to `In progress` before implementation.
