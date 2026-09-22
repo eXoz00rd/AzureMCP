@@ -10,6 +10,7 @@ description: Azure DevOps Server tools backed by the AzureMCP server, started on
 import asyncio
 import hashlib
 import os
+import re
 import stat
 from pathlib import Path
 from typing import Optional
@@ -24,6 +25,7 @@ from pydantic import BaseModel, Field
 
 _CACHE_ROOT = Path(CACHE_DIR) / "tools" / "azure_devops" / "server"
 _BINARY_NAME = "AzureDevOpsServer.Mcp"
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 _download_lock = asyncio.Lock()
 _verified_servers: set[str] = set()
 
@@ -104,8 +106,11 @@ class Tools:
 
     async def _ensure_server(self) -> Path:
         expected = self.valves.server_sha256.strip().lower()
-        if not self.valves.server_download_url or len(expected) != 64:
-            raise RuntimeError("an administrator must set the server download URL and its SHA-256")
+        # The checksum becomes a directory name, so anything but 64 hex characters could escape the cache.
+        if not self.valves.server_download_url or not _SHA256.fullmatch(expected):
+            raise RuntimeError(
+                "an administrator must set the server download URL and its SHA-256 as 64 hexadecimal characters"
+            )
 
         target = _CACHE_ROOT / expected / _BINARY_NAME
         if expected in _verified_servers:
