@@ -1,5 +1,8 @@
+using System.Security.Authentication;
+using AzureDevOpsServer.Mcp.AzureDevOps;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
+using Polly;
 
 namespace AzureDevOpsServer.Mcp.Configuration;
 
@@ -16,6 +19,14 @@ public static class ResilienceConfiguration
         {
             options.Retry.DisableForUnsafeHttpMethods();
             configure?.Invoke(options);
+
+            // A certificate the client does not trust is rejected the same way on every attempt,
+            // so retrying it would only postpone the explanation of what has to be fixed.
+            var shouldRetry = options.Retry.ShouldHandle;
+            options.Retry.ShouldHandle = arguments =>
+                ExceptionChain.Inner<AuthenticationException>(arguments.Outcome.Exception) is not null
+                    ? PredicateResult.False()
+                    : shouldRetry(arguments);
         });
     }
 }

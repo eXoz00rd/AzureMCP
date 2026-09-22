@@ -13,7 +13,7 @@ public sealed class ConnectionDiagnosticsHandler : DelegatingHandler
         {
             return await base.SendAsync(request, cancellationToken);
         }
-        catch (HttpRequestException exception) when (Inner<AuthenticationException>(exception) is { } failure)
+        catch (HttpRequestException exception) when (ExceptionChain.Inner<AuthenticationException>(exception) is { } failure)
         {
             throw new AzureDevOpsClientException(
                 $"The TLS connection to {Authority(request)} could not be established: {Sentence(failure.Message)} " +
@@ -21,7 +21,7 @@ public sealed class ConnectionDiagnosticsHandler : DelegatingHandler
                 "point SSL_CERT_FILE at a bundle that contains it, or use a collection URL whose certificate is already trusted."
             );
         }
-        catch (HttpRequestException exception) when (Inner<SocketException>(exception) is { } failure)
+        catch (HttpRequestException exception) when (ExceptionChain.Inner<SocketException>(exception) is { } failure)
         {
             throw new AzureDevOpsClientException(
                 $"Azure DevOps Server at {Authority(request)} could not be reached: {Sentence(failure.Message)} " +
@@ -39,19 +39,5 @@ public sealed class ConnectionDiagnosticsHandler : DelegatingHandler
     private static string Authority(HttpRequestMessage request)
     {
         return request.RequestUri?.GetLeftPart(UriPartial.Authority) ?? "the configured collection";
-    }
-
-    private static TException? Inner<TException>(Exception exception)
-        where TException : Exception
-    {
-        for (var current = exception.InnerException; current is not null; current = current.InnerException)
-        {
-            if (current is TException match)
-            {
-                return match;
-            }
-        }
-
-        return null;
     }
 }
