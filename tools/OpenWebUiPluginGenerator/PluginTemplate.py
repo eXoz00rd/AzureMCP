@@ -118,11 +118,12 @@ class Tools:
             )
 
         target = _CACHE_ROOT / expected / _BINARY_NAME
-        if expected in _verified_servers:
+        if expected in _verified_servers and _is_present(target):
             return target
 
         async with _download_lock:
-            if expected not in _verified_servers:
+            if not (expected in _verified_servers and _is_present(target)):
+                _verified_servers.discard(expected)
                 _prepare_directory(target.parent)
                 # A cached file is trusted only once its hash is checked in this process; anything else is replaced.
                 if not await _matches(target, expected):
@@ -178,8 +179,12 @@ def _prepare_directory(directory: Path) -> None:
         current.mkdir(mode=0o700, exist_ok=True)
 
 
+def _is_present(path: Path) -> bool:
+    return path.is_file() and not path.is_symlink()
+
+
 async def _matches(path: Path, expected: str) -> bool:
-    if path.is_symlink() or not path.is_file():
+    if not _is_present(path):
         return False
     return await to_thread.run_sync(_sha256_of, path) == expected
 
