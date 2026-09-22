@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 _CACHE_ROOT = Path(CACHE_DIR) / "tools" / "azure_devops" / "server"
 _BINARY_NAME = "AzureDevOpsServer.Mcp"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_MAX_SERVER_BYTES = 256 * 1024 * 1024
 _download_lock = asyncio.Lock()
 _verified_servers: set[str] = set()
 
@@ -130,13 +131,27 @@ class Tools:
     async def _download(self, target: Path, expected: str) -> None:
         partial = target.with_name(_BINARY_NAME + ".partial")
         digest = hashlib.sha256()
-        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
-            async with client.stream("GET", self.valves.server_download_url) as response:
-                response.raise_for_status()
-                with open(partial, "wb") as file:
-                    async for chunk in response.aiter_bytes():
-                        digest.update(chunk)
-                        file.write(chunk)
+        received = 0
+        try:
+            async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+                async with client.stream("GET", self.valves.server_download_url) as response:
+                    response.raise_for_status()
+                    # The checksum is only known once the download ends, so the size is what stops a runaway one.
+                    declared = int(response.headers.get("content-length") or 0)
+                    if declared > _MAX_SERVER_BYTES:
+                        raise RuntimeError(
+                            f"the server download is {declared} bytes, over the {_MAX_SERVER_BYTES} byte limit"
+                        )
+                    with open(partial, "wb") as file:
+                        async for chunk in response.aiter_bytes():
+                            received += len(chunk)
+                            if received > _MAX_SERVER_BYTES:
+                                raise RuntimeError(f"the server download exceeded the {_MAX_SERVER_BYTES} byte limit")
+                            digest.update(chunk)
+                            file.write(chunk)
+        except BaseException:
+            partial.unlink(missing_ok=True)
+            raise
 
         if digest.hexdigest() != expected:
             partial.unlink(missing_ok=True)
