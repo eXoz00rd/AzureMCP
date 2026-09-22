@@ -52,6 +52,7 @@ class Tools:
         )
         timeout_seconds: int = Field(
             default=60,
+            gt=0,
             description="Maximum duration of one tool call, including server start.",
         )
 
