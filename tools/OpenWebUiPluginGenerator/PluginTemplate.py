@@ -28,6 +28,7 @@ _CACHE_ROOT = Path(CACHE_DIR) / "tools" / "azure_devops" / "server"
 _BINARY_NAME = "AzureDevOpsServer.Mcp"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _MAX_SERVER_BYTES = 256 * 1024 * 1024
+_DOWNLOAD_TIMEOUT_SECONDS = 600
 _download_lock = asyncio.Lock()
 _verified_servers: set[str] = set()
 
@@ -53,7 +54,7 @@ class Tools:
         timeout_seconds: int = Field(
             default=60,
             gt=0,
-            description="Maximum duration of one tool call, including server start.",
+            description="Maximum duration of one tool call, including starting the server. The first-use download of the server is limited separately to 10 minutes.",
         )
 
     class UserValves(BaseModel):
@@ -79,8 +80,12 @@ class Tools:
         if not self.valves.collection_url:
             return "The Azure DevOps tool is not configured: an administrator must set the collection URL."
 
+        # A slow first download must not eat the per-call timeout, or it would be cancelled and retried forever.
         try:
-            server = await self._ensure_server()
+            with anyio.fail_after(_DOWNLOAD_TIMEOUT_SECONDS):
+                server = await self._ensure_server()
+        except TimeoutError:
+            return f"The Azure DevOps server could not be downloaded within {_DOWNLOAD_TIMEOUT_SECONDS} seconds."
         except Exception as error:
             return f"The Azure DevOps server could not be prepared: {_describe(error)}"
 
