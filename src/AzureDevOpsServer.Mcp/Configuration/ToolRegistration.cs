@@ -1,11 +1,20 @@
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
 namespace AzureDevOpsServer.Mcp.Configuration;
 
 public static class ToolRegistration
 {
+    // Output schemas mark nullable properties as required, so strict clients reject results that omit nulls.
+    private static readonly JsonSerializerOptions ToolSerializerOptions = new(McpJsonUtilities.DefaultOptions)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.Never
+    };
+
     public static int AddTools(IServiceCollection services, AzureDevOpsServerOptions options)
     {
         return AddTools(services, Toolsets.Resolve(options.Toolsets), options.ReadOnly);
@@ -28,7 +37,11 @@ public static class ToolRegistration
                             request.Services ?? throw new InvalidOperationException("The MCP request has no service scope."),
                             capturedType
                         ),
-                        new McpServerToolCreateOptions { Services = serviceProvider }
+                        new McpServerToolCreateOptions
+                        {
+                            Services = serviceProvider,
+                            SerializerOptions = ToolSerializerOptions
+                        }
                     )
                 );
                 registered++;

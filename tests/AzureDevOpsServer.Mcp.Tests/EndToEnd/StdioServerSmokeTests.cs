@@ -47,6 +47,18 @@ public sealed class StdioServerSmokeTests
         await using var client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
 
         var tools = await client.ListToolsAsync(cancellationToken: cancellationToken);
+
+        void AssertConformsToOutputSchema(string toolName, ModelContextProtocol.Protocol.CallToolResult callResult)
+        {
+            var schema = System.Text.Json.JsonSerializer.SerializeToElement(
+                Assert.Single(tools, tool => tool.Name == toolName).ProtocolTool.OutputSchema
+            );
+            OutputSchemaAssert.RequiredPropertiesPresent(
+                schema,
+                System.Text.Json.JsonSerializer.SerializeToElement(callResult.StructuredContent)
+            );
+        }
+
         Assert.Contains(tools, tool => tool.Name == "list_projects");
         var updateTool = Assert.Single(tools, tool => tool.Name == "update_work_item");
         Assert.True(updateTool.JsonSchema.GetProperty("properties").TryGetProperty("expectedRevision", out _));
@@ -68,6 +80,7 @@ public sealed class StdioServerSmokeTests
         Assert.Equal(4, updateJson.RootElement.GetProperty("rev").GetInt32());
         Assert.Contains("System.State", update.StructuredContent.ToString());
         Assert.False(updateJson.RootElement.TryGetProperty("fields", out _));
+        AssertConformsToOutputSchema("update_work_item", update);
 
         updateArguments["expectedRevision"] = 2;
         var conflict = await client.CallToolAsync("update_work_item", updateArguments, cancellationToken: cancellationToken);
@@ -93,6 +106,7 @@ public sealed class StdioServerSmokeTests
         Assert.NotNull(result.StructuredContent);
         Assert.Contains("Alpha", result.StructuredContent.ToString());
         Assert.Contains(azureDevOps.RequestPaths, path => path.Contains("_apis/projects", StringComparison.Ordinal));
+        AssertConformsToOutputSchema("list_projects", result);
 
         // Exercises descriptionFormat over the real MCP argument-binding and response-serialization
         // path, not just direct C# calls into WorkItemTools, so a regression in how the registered
@@ -117,6 +131,7 @@ public sealed class StdioServerSmokeTests
             azureDevOps.RequestPaths,
             path => path.Contains("_apis/wit/workitems/1", StringComparison.Ordinal)
         );
+        AssertConformsToOutputSchema("get_work_item", workItemResult);
 
         // Proves the real host wiring still authenticates every call, not only hand-assembled handlers.
         Assert.NotEmpty(azureDevOps.AuthorizationHeaders);
