@@ -13,6 +13,7 @@ import json
 import os
 import re
 import stat
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -26,6 +27,12 @@ from pydantic import BaseModel, Field
 
 _CACHE_ROOT = Path(CACHE_DIR) / "tools" / "azure_devops" / "server"
 _BINARY_NAME = "AzureDevOpsServer.Mcp"
+_SYSTEM_CA_BUNDLES = (
+    Path("/etc/ssl/certs/ca-certificates.crt"),  # Debian, Ubuntu, Alpine
+    Path("/etc/pki/tls/certs/ca-bundle.crt"),  # Red Hat, Fedora
+    Path("/etc/ssl/ca-bundle.pem"),  # SUSE
+    Path("/etc/ssl/cert.pem"),  # Alpine, BSD
+)
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _MAX_SERVER_BYTES = 256 * 1024 * 1024
 _DOWNLOAD_TIMEOUT_SECONDS = 600
@@ -50,6 +57,10 @@ class Tools:
         default_project: str = Field(
             default="",
             description="Optional project used when a call does not name one.",
+        )
+        ca_certificate: str = Field(
+            default="",
+            description="PEM certificate of the internal authority that signed the Azure DevOps Server certificate. Leave empty when the chain is already trusted.",
         )
         timeout_seconds: int = Field(
             default=60,
@@ -84,6 +95,7 @@ class Tools:
         try:
             with anyio.fail_after(_DOWNLOAD_TIMEOUT_SECONDS):
                 server = await self._ensure_server()
+            trust_bundle = self._trust_bundle()
         except TimeoutError:
             return f"The Azure DevOps server could not be downloaded within {_DOWNLOAD_TIMEOUT_SECONDS} seconds."
         except Exception as error:
@@ -93,6 +105,8 @@ class Tools:
         env = {key: os.environ[key] for key in ("HOME", "PATH") if key in os.environ}
         env["ADOS_COLLECTION_URL"] = self.valves.collection_url
         env["ADOS_PAT"] = pat
+        if trust_bundle is not None:
+            env["SSL_CERT_FILE"] = str(trust_bundle)
         if self.valves.default_project:
             env["ADOS_DEFAULT_PROJECT"] = self.valves.default_project
 
@@ -113,6 +127,38 @@ class Tools:
         if not text and result.structuredContent is not None:
             text = json.dumps(result.structuredContent, ensure_ascii=False)
         return f"Azure DevOps returned an error: {text}" if result.isError else text
+
+    def _trust_bundle(self) -> Path | None:
+        certificate = self.valves.ca_certificate.strip()
+        if not certificate:
+            return None
+
+        bundle = _CACHE_ROOT.parent / "trust" / f"{hashlib.sha256(certificate.encode()).hexdigest()}.pem"
+        if _is_present(bundle):
+            return bundle
+
+        # SSL_CERT_FILE replaces the trust store outright, so the bundle must carry the system roots as well.
+        # Without them the server would trust only the configured authority, which is worse than not helping at all.
+        source = next((path for path in _SYSTEM_CA_BUNDLES if path.is_file()), None)
+        if source is None:
+            raise RuntimeError(
+                "no system certificate bundle was found, so trusting the configured authority "
+                "would leave the server without any public root certificate"
+            )
+
+        _prepare_directory(bundle.parent)
+        system_roots = source.read_text(encoding="utf-8")
+        # Written aside and renamed, so an interrupted write can never leave a half-built bundle in place.
+        descriptor, temporary = tempfile.mkstemp(dir=bundle.parent, prefix=f"{bundle.stem}.", suffix=".partial")
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+                file.write(f"{system_roots}\n{certificate}\n")
+            os.replace(temporary, bundle)
+        except BaseException:
+            Path(temporary).unlink(missing_ok=True)
+            raise
+
+        return bundle
 
     async def _ensure_server(self) -> Path:
         expected = self.valves.server_sha256.strip().lower()
