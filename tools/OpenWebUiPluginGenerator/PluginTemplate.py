@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 _CACHE_ROOT = Path(CACHE_DIR) / "tools" / "azure_devops" / "server"
 _BINARY_NAME = "AzureDevOpsServer.Mcp"
+_SYSTEM_CA_BUNDLE = Path("/etc/ssl/certs/ca-certificates.crt")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _MAX_SERVER_BYTES = 256 * 1024 * 1024
 _DOWNLOAD_TIMEOUT_SECONDS = 600
@@ -50,6 +51,10 @@ class Tools:
         default_project: str = Field(
             default="",
             description="Optional project used when a call does not name one.",
+        )
+        ca_certificate: str = Field(
+            default="",
+            description="PEM certificate of the internal authority that signed the Azure DevOps Server certificate. Leave empty when the chain is already trusted.",
         )
         timeout_seconds: int = Field(
             default=60,
@@ -84,6 +89,7 @@ class Tools:
         try:
             with anyio.fail_after(_DOWNLOAD_TIMEOUT_SECONDS):
                 server = await self._ensure_server()
+            trust_bundle = self._trust_bundle()
         except TimeoutError:
             return f"The Azure DevOps server could not be downloaded within {_DOWNLOAD_TIMEOUT_SECONDS} seconds."
         except Exception as error:
@@ -93,6 +99,8 @@ class Tools:
         env = {key: os.environ[key] for key in ("HOME", "PATH") if key in os.environ}
         env["ADOS_COLLECTION_URL"] = self.valves.collection_url
         env["ADOS_PAT"] = pat
+        if trust_bundle is not None:
+            env["SSL_CERT_FILE"] = str(trust_bundle)
         if self.valves.default_project:
             env["ADOS_DEFAULT_PROJECT"] = self.valves.default_project
 
@@ -113,6 +121,28 @@ class Tools:
         if not text and result.structuredContent is not None:
             text = json.dumps(result.structuredContent, ensure_ascii=False)
         return f"Azure DevOps returned an error: {text}" if result.isError else text
+
+    def _trust_bundle(self) -> Path | None:
+        certificate = self.valves.ca_certificate.strip()
+        if not certificate:
+            return None
+
+        bundle = _CACHE_ROOT.parent / "trust" / f"{hashlib.sha256(certificate.encode()).hexdigest()}.pem"
+        if _is_present(bundle):
+            return bundle
+
+        _prepare_directory(bundle.parent)
+        bundle.unlink(missing_ok=True)
+        # SSL_CERT_FILE replaces the trust store outright, so the system roots go into the bundle as well.
+        system_roots = _SYSTEM_CA_BUNDLE.read_text(encoding="utf-8") if _SYSTEM_CA_BUNDLE.is_file() else ""
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+        try:
+            with os.fdopen(os.open(bundle, flags, 0o600), "w", encoding="utf-8") as file:
+                file.write(f"{system_roots}\n{certificate}\n")
+        except FileExistsError:
+            pass
+
+        return bundle
 
     async def _ensure_server(self) -> Path:
         expected = self.valves.server_sha256.strip().lower()
