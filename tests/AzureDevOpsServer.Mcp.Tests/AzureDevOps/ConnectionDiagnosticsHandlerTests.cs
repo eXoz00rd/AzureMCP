@@ -1,15 +1,16 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Authentication;
 using AzureDevOpsServer.Mcp.AzureDevOps;
 using Xunit;
 
 namespace AzureDevOpsServer.Mcp.Tests.AzureDevOps;
 
-public sealed class TlsDiagnosticsHandlerTests
+public sealed class ConnectionDiagnosticsHandlerTests
 {
     private static HttpClient CreateClient(HttpMessageHandler innerHandler)
     {
-        var handler = new TlsDiagnosticsHandler
+        var handler = new ConnectionDiagnosticsHandler
         {
             InnerHandler = innerHandler
         };
@@ -57,6 +58,23 @@ public sealed class TlsDiagnosticsHandlerTests
         using var result = await client.GetAsync("_apis/projects", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task SendAsync_WithUnreachableHost_ThrowsActionableMessage()
+    {
+        var inner = new HttpRequestException(
+            "No connection could be made because the target machine actively refused it.",
+            new SocketException(10061)
+        );
+        using var client = CreateClient(new ThrowingHandler(inner));
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetAsync("_apis/projects", TestContext.Current.CancellationToken));
+
+        Assert.Contains("devops.example.local", exception.Message);
+        Assert.Contains("could not be reached", exception.Message);
+        Assert.Contains("the port is reachable", exception.Message);
     }
 
     private sealed class ThrowingHandler : HttpMessageHandler

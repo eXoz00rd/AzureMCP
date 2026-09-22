@@ -12,12 +12,12 @@ public static class AzureDevOpsHttpClientConfiguration
         Action<HttpStandardResilienceOptions>? configureResilience = null)
     {
         builder.Services.TryAddTransient<AzureDevOpsAuthenticationHandler>();
-        builder.Services.TryAddTransient<TlsDiagnosticsHandler>();
+        builder.Services.TryAddTransient<ConnectionDiagnosticsHandler>();
 
         // Later handlers run inside earlier ones, so authentication is resolved again on every retry attempt.
         builder.AddAzureDevOpsResilience(configureResilience);
         builder.AddHttpMessageHandler<AzureDevOpsAuthenticationHandler>();
-        builder.AddHttpMessageHandler<TlsDiagnosticsHandler>();
+        builder.AddHttpMessageHandler<ConnectionDiagnosticsHandler>();
 
         return builder;
     }
