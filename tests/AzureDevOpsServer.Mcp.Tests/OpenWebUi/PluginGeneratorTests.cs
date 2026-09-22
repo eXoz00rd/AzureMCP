@@ -27,7 +27,7 @@ public sealed class PluginGeneratorTests
 
         var getWorkItems = MethodSource(plugin, "get_work_items");
         Assert.Contains("        ids: list[int],\n", getWorkItems);
-        Assert.Contains("        fields: Optional[list[str]] = None,\n", getWorkItems);
+        Assert.Contains("        fields: Optional[list[Optional[str]]] = None,\n", getWorkItems);
         Assert.Contains("        includeRelations: bool = False,\n", getWorkItems);
         Assert.Contains("        descriptionFormat: Optional[str] = None,\n", getWorkItems);
 

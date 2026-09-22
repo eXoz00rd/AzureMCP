@@ -113,13 +113,19 @@ internal static partial class PluginGenerator
             "integer" => "int",
             "number" => "float",
             "boolean" => "bool",
-            "array" when schema.TryGetProperty("items", out var items) => $"list[{MapType(items).TypeHint}]",
+            "array" when schema.TryGetProperty("items", out var items) => $"list[{NestedTypeHint(items)}]",
             "object" when schema.TryGetProperty("additionalProperties", out var values) &&
-                values.ValueKind == JsonValueKind.Object => $"dict[str, {MapType(values).TypeHint}]",
+                values.ValueKind == JsonValueKind.Object => $"dict[str, {NestedTypeHint(values)}]",
             _ => throw new NotSupportedException($"Schema type '{type}' cannot be expressed as an Open WebUI tool parameter.")
         };
 
         return (typeHint, nullable);
+    }
+
+    private static string NestedTypeHint(JsonElement schema)
+    {
+        var (typeHint, nullable) = MapType(schema);
+        return nullable ? $"Optional[{typeHint}]" : typeHint;
     }
 
     private static (string Type, bool Nullable) ReadType(JsonElement schema)
