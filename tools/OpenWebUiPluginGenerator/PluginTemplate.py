@@ -9,6 +9,7 @@ description: Azure DevOps Server tools backed by the AzureMCP server, started on
 
 import asyncio
 import hashlib
+import json
 import os
 import re
 import stat
@@ -103,6 +104,8 @@ class Tools:
             return f"The Azure DevOps server failed: {_describe(error)}"
 
         text = "\n".join(block.text for block in result.content if getattr(block, "text", None))
+        if not text and result.structuredContent is not None:
+            text = json.dumps(result.structuredContent, ensure_ascii=False)
         return f"Azure DevOps returned an error: {text}" if result.isError else text
 
     async def _ensure_server(self) -> Path:
@@ -142,7 +145,10 @@ class Tools:
                         raise RuntimeError(
                             f"the server download is {declared} bytes, over the {_MAX_SERVER_BYTES} byte limit"
                         )
-                    with open(partial, "wb") as file:
+                    # Always a brand-new file: whatever sits at this path, including a symlink, is removed first.
+                    partial.unlink(missing_ok=True)
+                    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+                    with os.fdopen(os.open(partial, flags, 0o600), "wb") as file:
                         async for chunk in response.aiter_bytes():
                             received += len(chunk)
                             if received > _MAX_SERVER_BYTES:
