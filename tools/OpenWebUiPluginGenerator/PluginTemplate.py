@@ -118,7 +118,7 @@ class Tools:
 
         async with _download_lock:
             if expected not in _verified_servers:
-                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                _prepare_directory(target.parent)
                 # A cached file is trusted only once its hash is checked in this process; anything else is replaced.
                 if not await _matches(target, expected):
                     target.unlink(missing_ok=True)
@@ -144,6 +144,16 @@ class Tools:
 
         os.chmod(partial, stat.S_IRWXU)
         os.replace(partial, target)
+
+
+def _prepare_directory(directory: Path) -> None:
+    # Every component below Open WebUI's cache is created here and must not be a link that leads elsewhere.
+    current = Path(CACHE_DIR)
+    for part in directory.relative_to(current).parts:
+        current = current / part
+        if current.is_symlink():
+            raise RuntimeError(f"refusing to use {current}: it is a symbolic link")
+        current.mkdir(mode=0o700, exist_ok=True)
 
 
 async def _matches(path: Path, expected: str) -> bool:
