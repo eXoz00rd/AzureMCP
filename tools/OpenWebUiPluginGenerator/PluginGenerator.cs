@@ -57,6 +57,13 @@ internal static partial class PluginGenerator
             foreach (var property in properties.EnumerateObject())
             {
                 RequireIdentifier(property.Name, $"parameter of {tool.Name}");
+                if (property.Name == "self")
+                {
+                    throw new NotSupportedException(
+                        $"The parameter 'self' of {tool.Name} collides with the generated method's own 'self'."
+                    );
+                }
+
                 parameters.Add(ToParameter(property.Name, property.Value, required.Contains(property.Name)));
             }
         }

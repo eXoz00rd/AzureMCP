@@ -107,6 +107,20 @@ public sealed class PluginGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithParameterNamedSelf_Throws()
+    {
+        var tool = new Tool
+        {
+            Name = "probe",
+            InputSchema = JsonSerializer.Deserialize<JsonElement>(
+                """{"type":"object","properties":{"self":{"type":"string"}},"required":["self"]}"""
+            )
+        };
+
+        Assert.Throws<NotSupportedException>(() => PluginGenerator.Generate([tool], Settings));
+    }
+
+    [Fact]
     public void Generate_WithDownloadSettings_FillsValveDefaults()
     {
         var sha256 = new string('a', 64);
