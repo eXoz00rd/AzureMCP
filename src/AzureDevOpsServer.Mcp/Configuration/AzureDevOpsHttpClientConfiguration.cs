@@ -1,4 +1,4 @@
-﻿using AzureDevOpsServer.Mcp.AzureDevOps;
+using AzureDevOpsServer.Mcp.AzureDevOps;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
