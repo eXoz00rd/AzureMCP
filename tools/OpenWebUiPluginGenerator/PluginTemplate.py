@@ -27,7 +27,12 @@ from pydantic import BaseModel, Field
 
 _CACHE_ROOT = Path(CACHE_DIR) / "tools" / "azure_devops" / "server"
 _BINARY_NAME = "AzureDevOpsServer.Mcp"
-_SYSTEM_CA_BUNDLE = Path("/etc/ssl/certs/ca-certificates.crt")
+_SYSTEM_CA_BUNDLES = (
+    Path("/etc/ssl/certs/ca-certificates.crt"),  # Debian, Ubuntu, Alpine
+    Path("/etc/pki/tls/certs/ca-bundle.crt"),  # Red Hat, Fedora
+    Path("/etc/ssl/ca-bundle.pem"),  # SUSE
+    Path("/etc/ssl/cert.pem"),  # Alpine, BSD
+)
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _MAX_SERVER_BYTES = 256 * 1024 * 1024
 _DOWNLOAD_TIMEOUT_SECONDS = 600
@@ -132,9 +137,17 @@ class Tools:
         if _is_present(bundle):
             return bundle
 
+        # SSL_CERT_FILE replaces the trust store outright, so the bundle must carry the system roots as well.
+        # Without them the server would trust only the configured authority, which is worse than not helping at all.
+        source = next((path for path in _SYSTEM_CA_BUNDLES if path.is_file()), None)
+        if source is None:
+            raise RuntimeError(
+                "no system certificate bundle was found, so trusting the configured authority "
+                "would leave the server without any public root certificate"
+            )
+
         _prepare_directory(bundle.parent)
-        # SSL_CERT_FILE replaces the trust store outright, so the system roots go into the bundle as well.
-        system_roots = _SYSTEM_CA_BUNDLE.read_text(encoding="utf-8") if _SYSTEM_CA_BUNDLE.is_file() else ""
+        system_roots = source.read_text(encoding="utf-8")
         # Written aside and renamed, so an interrupted write can never leave a half-built bundle in place.
         descriptor, temporary = tempfile.mkstemp(dir=bundle.parent, prefix=f"{bundle.stem}.", suffix=".partial")
         try:
