@@ -32,7 +32,7 @@ Do not push directly to `main`.
 ## Pull requests
 
 - Use a concise title in the same style as a commit summary.
-- Keep changes focused: approximately 400 changed lines and 15 files at most.
+- Keep changes focused: approximately 15 files at most.
 - Open pull requests ready for review, never as drafts.
 - Include `## Summary` and `## Test plan` sections.
 - Do not commit or push until the user gives explicit approval.

@@ -43,7 +43,7 @@ Set board priority as follows:
 - `P1`: material production-readiness or quality gap
 - `P2`: maintainability or developer-experience improvement
 
-Set a board size of `XS`, `S`, `M`, `L`, or `XL`. Prefer work that fits in approximately 400 changed lines and 15 files. Split larger work into independently verifiable tasks.
+Set a board size of `XS`, `S`, `M`, `L`, or `XL`. Prefer work that fits in approximately 15 files. Split larger work into independently verifiable tasks.
 
 ## Task description
 
