@@ -84,6 +84,15 @@ public sealed class PluginGeneratorTests
     }
 
     [Fact]
+    public void Generate_EscapesFrontmatterValuesAndKeepsThemOnOneLine()
+    {
+        var plugin = PluginGenerator.Generate([], new PluginSettings("1.2.3", "a\"\"\"b\nc", string.Empty, string.Empty));
+
+        Assert.Contains("Toolsets: a\\\"\\\"\\\"b c.\n", plugin);
+        Assert.DoesNotContain("a\"\"\"b", plugin);
+    }
+
+    [Fact]
     public void Generate_WithUnsupportedSchemaType_Throws()
     {
         var tool = new Tool

@@ -36,8 +36,8 @@ internal static partial class PluginGenerator
     public static string Generate(IReadOnlyList<Tool> tools, PluginSettings settings)
     {
         return ReadTemplate()
-               .Replace("%%VERSION%%", settings.Version)
-               .Replace("%%TOOLSETS%%", settings.Toolsets)
+               .Replace("%%VERSION%%", FrontmatterValue(settings.Version))
+               .Replace("%%TOOLSETS%%", FrontmatterValue(settings.Toolsets))
                .Replace("%%DOWNLOAD_URL%%", PythonString(settings.DownloadUrl))
                .Replace("%%SHA256%%", PythonString(settings.Sha256))
                .Replace("%%TOOL_METHODS%%", string.Join("\n", tools.Select(GenerateMethod)).TrimEnd('\n'));
@@ -155,10 +155,20 @@ internal static partial class PluginGenerator
         return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n") + "\"";
     }
 
+    // Open WebUI reads frontmatter line by line from the module docstring, so a value must stay on one line.
+    private static string FrontmatterValue(string value)
+    {
+        return EscapeDocstring(value.ReplaceLineEndings(" "));
+    }
+
+    private static string EscapeDocstring(string text)
+    {
+        return text.Replace("\\", "\\\\").Replace("\"\"\"", "\\\"\\\"\\\"");
+    }
+
     private static void AppendDocstringLines(StringBuilder method, string text)
     {
-        var escaped = text.Replace("\\", "\\\\").Replace("\"\"\"", "\\\"\\\"\\\"");
-        foreach (var line in escaped.ReplaceLineEndings("\n").Split('\n'))
+        foreach (var line in EscapeDocstring(text).ReplaceLineEndings("\n").Split('\n'))
         {
             method.Append($"        {line}".TrimEnd()).Append('\n');
         }

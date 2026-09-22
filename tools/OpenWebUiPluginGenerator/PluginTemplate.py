@@ -16,19 +16,16 @@ from typing import Optional
 
 import anyio
 import httpx
+from anyio import to_thread
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from open_webui.config import CACHE_DIR
 from pydantic import BaseModel, Field
 
-try:
-    from open_webui.config import CACHE_DIR
-
-    _CACHE_ROOT = Path(CACHE_DIR) / "tools" / "azure_devops" / "server"
-except ImportError:
-    _CACHE_ROOT = Path("/tmp") / "azure_devops" / "server"
-
+_CACHE_ROOT = Path(CACHE_DIR) / "tools" / "azure_devops" / "server"
 _BINARY_NAME = "AzureDevOpsServer.Mcp"
 _download_lock = asyncio.Lock()
+_verified_servers: set[str] = set()
 
 
 class Tools:
@@ -82,8 +79,10 @@ class Tools:
         except Exception as error:
             return f"The Azure DevOps server could not be prepared: {_describe(error)}"
 
-        # The MCP stdio client passes only HOME and PATH plus these, never Open WebUI's own environment.
-        env = {"ADOS_COLLECTION_URL": self.valves.collection_url, "ADOS_PAT": pat}
+        # Only HOME and PATH are inherited; Open WebUI's own environment and its secrets never reach the server.
+        env = {key: os.environ[key] for key in ("HOME", "PATH") if key in os.environ}
+        env["ADOS_COLLECTION_URL"] = self.valves.collection_url
+        env["ADOS_PAT"] = pat
         if self.valves.default_project:
             env["ADOS_DEFAULT_PROJECT"] = self.valves.default_project
 
@@ -109,32 +108,51 @@ class Tools:
             raise RuntimeError("an administrator must set the server download URL and its SHA-256")
 
         target = _CACHE_ROOT / expected / _BINARY_NAME
-        if target.is_file():
+        if expected in _verified_servers:
             return target
 
         async with _download_lock:
-            if target.is_file():
-                return target
-
-            target.parent.mkdir(parents=True, exist_ok=True)
-            partial = target.with_name(_BINARY_NAME + ".partial")
-            digest = hashlib.sha256()
-            async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
-                async with client.stream("GET", self.valves.server_download_url) as response:
-                    response.raise_for_status()
-                    with open(partial, "wb") as file:
-                        async for chunk in response.aiter_bytes():
-                            digest.update(chunk)
-                            file.write(chunk)
-
-            if digest.hexdigest() != expected:
-                partial.unlink(missing_ok=True)
-                raise RuntimeError("the downloaded server does not match the configured SHA-256")
-
-            os.chmod(partial, os.stat(partial).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-            os.replace(partial, target)
+            if expected not in _verified_servers:
+                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                # A cached file is trusted only once its hash is checked in this process; anything else is replaced.
+                if not await _matches(target, expected):
+                    target.unlink(missing_ok=True)
+                    await self._download(target, expected)
+                _verified_servers.add(expected)
 
         return target
+
+    async def _download(self, target: Path, expected: str) -> None:
+        partial = target.with_name(_BINARY_NAME + ".partial")
+        digest = hashlib.sha256()
+        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+            async with client.stream("GET", self.valves.server_download_url) as response:
+                response.raise_for_status()
+                with open(partial, "wb") as file:
+                    async for chunk in response.aiter_bytes():
+                        digest.update(chunk)
+                        file.write(chunk)
+
+        if digest.hexdigest() != expected:
+            partial.unlink(missing_ok=True)
+            raise RuntimeError("the downloaded server does not match the configured SHA-256")
+
+        os.chmod(partial, stat.S_IRWXU)
+        os.replace(partial, target)
+
+
+async def _matches(path: Path, expected: str) -> bool:
+    if path.is_symlink() or not path.is_file():
+        return False
+    return await to_thread.run_sync(_sha256_of, path) == expected
+
+
+def _sha256_of(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _describe(error: BaseException) -> str:
