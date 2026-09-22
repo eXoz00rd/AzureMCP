@@ -13,6 +13,7 @@ import json
 import os
 import re
 import stat
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -132,15 +133,17 @@ class Tools:
             return bundle
 
         _prepare_directory(bundle.parent)
-        bundle.unlink(missing_ok=True)
         # SSL_CERT_FILE replaces the trust store outright, so the system roots go into the bundle as well.
         system_roots = _SYSTEM_CA_BUNDLE.read_text(encoding="utf-8") if _SYSTEM_CA_BUNDLE.is_file() else ""
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+        # Written aside and renamed, so an interrupted write can never leave a half-built bundle in place.
+        descriptor, temporary = tempfile.mkstemp(dir=bundle.parent, prefix=f"{bundle.stem}.", suffix=".partial")
         try:
-            with os.fdopen(os.open(bundle, flags, 0o600), "w", encoding="utf-8") as file:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as file:
                 file.write(f"{system_roots}\n{certificate}\n")
-        except FileExistsError:
-            pass
+            os.replace(temporary, bundle)
+        except BaseException:
+            Path(temporary).unlink(missing_ok=True)
+            raise
 
         return bundle
 
