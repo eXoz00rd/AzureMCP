@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AzureDevOpsServer.Mcp\AzureDevOpsServer.Mcp.csproj" />
+    <ProjectReference Include="..\..\tools\OpenWebUiPluginGenerator\OpenWebUiPluginGenerator.csproj" />
   </ItemGroup>
 
 </Project>
