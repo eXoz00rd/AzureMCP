@@ -10,7 +10,7 @@
     <PackageId>AzureDevOpsServer.Mcp</PackageId>
     <VersionPrefix>0.1.0</VersionPrefix>
     <VersionSuffix>dev</VersionSuffix>
-    <Description>MCP server for Azure DevOps Server (on-premises) with PAT authentication.</Description>
+    <Description>MCP server for Azure DevOps Server (on-premises) with PAT authentication, over stdio or Streamable HTTP. Requires the ASP.NET Core runtime.</Description>
     <PackageTags>mcp;mcp-server;azure-devops;azure-devops-server;on-premises;pat</PackageTags>
     <RepositoryUrl>https://github.com/eXoz00rd/AzureMCP</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -56,6 +56,7 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.9.0" />
     <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
   </ItemGroup>
 
 </Project>

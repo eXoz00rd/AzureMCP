@@ -75,4 +75,83 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
         Assert.True(result.Failed);
         Assert.Contains(AzureDevOpsServerOptions.ApiVersionVariable, result.FailureMessage);
     }
+
+    [Fact]
+    public void Validate_WithHttpTransportAndNoToken_Fails()
+    {
+        var options = CreateValidOptions();
+        options.Transport = "http";
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Failed);
+        Assert.Contains(AzureDevOpsServerOptions.HttpTokenVariable, result.FailureMessage);
+    }
+
+    [Theory]
+    [InlineData("http", "shared-token", false)]
+    [InlineData("http", null, true)]
+    [InlineData("stdio", null, false)]
+    [InlineData(null, null, false)]
+    public void Validate_WithTokenAnonymousOptInOrStdio_Succeeds(string? transport, string? token, bool allowAnonymous)
+    {
+        var options = CreateValidOptions();
+        options.Transport = transport;
+        options.HttpToken = token;
+        options.HttpAllowAnonymous = allowAnonymous;
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Theory]
+    [InlineData("http://0.0.0.0:8080")]
+    [InlineData("http://+:8080")]
+    [InlineData("http://*:8080")]
+    [InlineData("http://devops-mcp.example.local:8080")]
+    [InlineData("http://127.0.0.1:8080;http://0.0.0.0:8081")]
+    public void Validate_WithAnonymousAccessOnARoutableAddress_Fails(string httpUrl)
+    {
+        var options = CreateValidOptions();
+        options.Transport = "http";
+        options.HttpAllowAnonymous = true;
+        options.HttpUrl = httpUrl;
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Failed);
+        Assert.Contains(AzureDevOpsServerOptions.HttpAllowAnonymousVariable, result.FailureMessage);
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:8080")]
+    [InlineData("http://localhost:8080")]
+    [InlineData("http://[::1]:8080")]
+    [InlineData("http://127.0.0.1:8080;http://[::1]:8080")]
+    public void Validate_WithAnonymousAccessOnLoopback_Succeeds(string httpUrl)
+    {
+        var options = CreateValidOptions();
+        options.Transport = "http";
+        options.HttpAllowAnonymous = true;
+        options.HttpUrl = httpUrl;
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public void Validate_WithTokenOnARoutableAddress_Succeeds()
+    {
+        var options = CreateValidOptions();
+        options.Transport = "http";
+        options.HttpToken = "shared-token";
+        options.HttpAllowAnonymous = true;
+        options.HttpUrl = "http://0.0.0.0:8080";
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Succeeded);
+    }
 }
