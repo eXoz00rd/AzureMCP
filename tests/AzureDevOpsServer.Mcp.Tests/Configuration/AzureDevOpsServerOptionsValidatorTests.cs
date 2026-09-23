@@ -1,3 +1,4 @@
+using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.Configuration;
 using Xunit;
 
@@ -77,10 +78,30 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
     }
 
     [Fact]
-    public void Validate_WithHttpTransportAndNoToken_Fails()
+    public void Validate_OverHttpWithTokenAndNoPersonalAccessToken_Succeeds()
     {
-        var options = CreateValidOptions();
-        options.Transport = "http";
+        var result = _validator.Validate(null, CreateValidHttpOptions());
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public void Validate_OverHttpWithAnonymousOptInInsteadOfToken_Succeeds()
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpToken = null;
+        options.HttpAllowAnonymous = true;
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public void Validate_OverHttpWithoutTokenOrAnonymousOptIn_Fails()
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpToken = null;
 
         var result = _validator.Validate(null, options);
 
@@ -88,17 +109,27 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
         Assert.Contains(AzureDevOpsServerOptions.HttpTokenVariable, result.FailureMessage);
     }
 
+    [Fact]
+    public void Validate_OverHttpWithSharedPersonalAccessToken_Fails()
+    {
+        var options = CreateValidHttpOptions();
+        options.PersonalAccessToken = "shared-pat";
+
+        var result = _validator.Validate(null, options);
+
+        // A configured PAT over HTTP would silently act for anyone whose request lacks their own.
+        Assert.True(result.Failed);
+        Assert.Contains(AzureDevOpsServerOptions.PersonalAccessTokenVariable, result.FailureMessage);
+        Assert.Contains(RequestCredentialProvider.HeaderName, result.FailureMessage);
+    }
+
     [Theory]
-    [InlineData("http", "shared-token", false)]
-    [InlineData("http", null, true)]
-    [InlineData("stdio", null, false)]
-    [InlineData(null, null, false)]
-    public void Validate_WithTokenAnonymousOptInOrStdio_Succeeds(string? transport, string? token, bool allowAnonymous)
+    [InlineData("stdio")]
+    [InlineData(null)]
+    public void Validate_OverStdioWithoutHttpToken_Succeeds(string? transport)
     {
         var options = CreateValidOptions();
         options.Transport = transport;
-        options.HttpToken = token;
-        options.HttpAllowAnonymous = allowAnonymous;
 
         var result = _validator.Validate(null, options);
 
@@ -113,8 +144,8 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
     [InlineData("http://127.0.0.1:8080;http://0.0.0.0:8081")]
     public void Validate_WithAnonymousAccessOnARoutableAddress_Fails(string httpUrl)
     {
-        var options = CreateValidOptions();
-        options.Transport = "http";
+        var options = CreateValidHttpOptions();
+        options.HttpToken = null;
         options.HttpAllowAnonymous = true;
         options.HttpUrl = httpUrl;
 
@@ -131,8 +162,8 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
     [InlineData("http://127.0.0.1:8080;http://[::1]:8080")]
     public void Validate_WithAnonymousAccessOnLoopback_Succeeds(string httpUrl)
     {
-        var options = CreateValidOptions();
-        options.Transport = "http";
+        var options = CreateValidHttpOptions();
+        options.HttpToken = null;
         options.HttpAllowAnonymous = true;
         options.HttpUrl = httpUrl;
 
@@ -144,14 +175,21 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
     [Fact]
     public void Validate_WithTokenOnARoutableAddress_Succeeds()
     {
-        var options = CreateValidOptions();
-        options.Transport = "http";
-        options.HttpToken = "shared-token";
+        var options = CreateValidHttpOptions();
         options.HttpAllowAnonymous = true;
         options.HttpUrl = "http://0.0.0.0:8080";
 
         var result = _validator.Validate(null, options);
 
         Assert.True(result.Succeeded);
+    }
+
+    private static AzureDevOpsServerOptions CreateValidHttpOptions()
+    {
+        var options = CreateValidOptions();
+        options.Transport = "http";
+        options.PersonalAccessToken = string.Empty;
+        options.HttpToken = "shared-token";
+        return options;
     }
 }
