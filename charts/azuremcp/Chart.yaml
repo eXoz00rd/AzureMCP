@@ -1,0 +1,14 @@
+apiVersion: v2
+name: azuremcp
+description: MCP server for Azure DevOps Server (on-premises), served over Streamable HTTP with each caller's own PAT.
+type: application
+# Both are replaced with the release version when the chart is packaged; a chart installed from source needs image.tag.
+version: 0.0.0-dev
+appVersion: 0.0.0-dev
+home: https://github.com/eXoz00rd/AzureMCP
+sources:
+  - https://github.com/eXoz00rd/AzureMCP
+keywords:
+  - mcp
+  - azure-devops
+  - open-webui
