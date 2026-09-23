@@ -14,7 +14,7 @@ public sealed class ServerConfigurationTests
     [InlineData(null, true)]
     [InlineData("workitems,repositories", false)]
     [InlineData("builds,releases", true)]
-    public void AddAzureDevOpsMcpServer_RegistersTheToolsAndPromptsTheOptionsSelect(string? toolsets, bool readOnly)
+    public void AddAzureDevOpsMcpServer_RegistersSelectedToolsPromptsAndInstructions(string? toolsets, bool readOnly)
     {
         var options = new AzureDevOpsServerOptions { Toolsets = toolsets, ReadOnly = readOnly };
         var expectedToolCount = ToolRegistration.AddTools(new ServiceCollection(), options);
