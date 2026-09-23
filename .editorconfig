@@ -11,6 +11,9 @@ insert_final_newline = true
 [*.{yml,yaml,json}]
 indent_size = 2
 
+[{Dockerfile,.dockerignore}]
+end_of_line = lf
+
 [*.cs]
 csharp_new_line_before_open_brace = all
 csharp_prefer_braces = true:warning
