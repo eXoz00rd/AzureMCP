@@ -15,8 +15,18 @@ public sealed class AzureDevOpsServerOptions
     public const string ToolsetsVariable = "ADOS_TOOLSETS";
     public const string ReadOnlyVariable = "ADOS_READ_ONLY";
     public const string LogLevelVariable = "ADOS_LOG_LEVEL";
+    public const string TransportVariable = "ADOS_TRANSPORT";
+    public const string HttpUrlVariable = "ADOS_HTTP_URL";
+    public const string HttpPathVariable = "ADOS_HTTP_PATH";
+    public const string HttpTokenVariable = "ADOS_HTTP_TOKEN";
+    public const string HttpAllowAnonymousVariable = "ADOS_HTTP_ALLOW_ANONYMOUS";
+    public const string HttpAllowedOriginsVariable = "ADOS_HTTP_ALLOWED_ORIGINS";
     public const string DefaultApiVersion = "7.0";
     public const string DefaultWorkItemCommentsApiVersion = "7.0-preview.3";
+
+    // Loopback, so exposing a PAT-backed endpoint on a routable interface is always an explicit choice.
+    public const string DefaultHttpUrl = "http://127.0.0.1:8080";
+    public const string DefaultHttpPath = "/mcp";
 
     public string CollectionUrl { get; set; } = string.Empty;
 
@@ -42,6 +52,18 @@ public sealed class AzureDevOpsServerOptions
 
     public bool ReadOnly { get; set; }
 
+    public string? Transport { get; set; }
+
+    public string HttpUrl { get; set; } = DefaultHttpUrl;
+
+    public string HttpPath { get; set; } = DefaultHttpPath;
+
+    public string? HttpToken { get; set; }
+
+    public bool HttpAllowAnonymous { get; set; }
+
+    public string? HttpAllowedOrigins { get; set; }
+
     public void LoadFromEnvironment()
     {
         CollectionUrl = Environment.GetEnvironmentVariable(CollectionUrlVariable) ?? string.Empty;
@@ -57,6 +79,12 @@ public sealed class AzureDevOpsServerOptions
             DefaultWorkItemCommentsApiVersion;
         Toolsets = Environment.GetEnvironmentVariable(ToolsetsVariable);
         ReadOnly = ParseBoolean(Environment.GetEnvironmentVariable(ReadOnlyVariable));
+        Transport = Environment.GetEnvironmentVariable(TransportVariable);
+        HttpUrl = Environment.GetEnvironmentVariable(HttpUrlVariable) ?? DefaultHttpUrl;
+        HttpPath = Environment.GetEnvironmentVariable(HttpPathVariable) ?? DefaultHttpPath;
+        HttpToken = Environment.GetEnvironmentVariable(HttpTokenVariable);
+        HttpAllowAnonymous = ParseBoolean(Environment.GetEnvironmentVariable(HttpAllowAnonymousVariable));
+        HttpAllowedOrigins = Environment.GetEnvironmentVariable(HttpAllowedOriginsVariable);
     }
 
     private static bool ParseBoolean(string? value)

@@ -75,4 +75,33 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
         Assert.True(result.Failed);
         Assert.Contains(AzureDevOpsServerOptions.ApiVersionVariable, result.FailureMessage);
     }
+
+    [Fact]
+    public void Validate_WithHttpTransportAndNoToken_Fails()
+    {
+        var options = CreateValidOptions();
+        options.Transport = "http";
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Failed);
+        Assert.Contains(AzureDevOpsServerOptions.HttpTokenVariable, result.FailureMessage);
+    }
+
+    [Theory]
+    [InlineData("http", "shared-token", false)]
+    [InlineData("http", null, true)]
+    [InlineData("stdio", null, false)]
+    [InlineData(null, null, false)]
+    public void Validate_WithTokenAnonymousOptInOrStdio_Succeeds(string? transport, string? token, bool allowAnonymous)
+    {
+        var options = CreateValidOptions();
+        options.Transport = transport;
+        options.HttpToken = token;
+        options.HttpAllowAnonymous = allowAnonymous;
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Succeeded);
+    }
 }
