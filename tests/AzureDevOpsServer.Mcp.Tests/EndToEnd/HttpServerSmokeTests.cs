@@ -75,6 +75,11 @@ public sealed class HttpServerSmokeTests
             var result = await nobody.CallToolAsync("list_projects", cancellationToken: cancellationToken);
             Assert.True(result.IsError);
             Assert.Contains(RequestCredentialProvider.HeaderName, System.Text.Json.JsonSerializer.Serialize(result.Content));
+
+            // A tool that never calls Azure DevOps needs no PAT at all.
+            var info = await nobody.CallToolAsync("server_info", cancellationToken: cancellationToken);
+            Assert.True(info.IsError is null or false, $"Expected server_info to succeed without a PAT, but IsError was {info.IsError}.");
+            Assert.Contains(azureDevOps.CollectionUrl, info.StructuredContent?.ToString());
         }
 
         // Each caller reached Azure DevOps as themselves, and the caller without a PAT never reached it at all.
