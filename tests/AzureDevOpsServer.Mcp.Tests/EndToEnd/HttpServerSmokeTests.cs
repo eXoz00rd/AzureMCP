@@ -24,21 +24,19 @@ public sealed class HttpServerSmokeTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var azureDevOps = new StubAzureDevOpsServer();
-        var port = FreeLoopbackPort();
-        var endpoint = new Uri($"http://127.0.0.1:{port}{AzureDevOpsServerOptions.DefaultHttpPath}");
 
-        using var server = ServerProcess.Start(
+        using var server = await ServerProcess.StartListeningAsync(
             new Dictionary<string, string>
             {
                 [AzureDevOpsServerOptions.CollectionUrlVariable] = azureDevOps.CollectionUrl,
                 [AzureDevOpsServerOptions.PersonalAccessTokenVariable] = PersonalAccessToken,
                 [AzureDevOpsServerOptions.TransportVariable] = "http",
-                [AzureDevOpsServerOptions.HttpUrlVariable] = $"http://127.0.0.1:{port}",
                 [AzureDevOpsServerOptions.HttpTokenVariable] = HttpToken,
                 [AzureDevOpsServerOptions.LogLevelVariable] = "Trace"
-            }
+            },
+            cancellationToken
         );
-        await server.WaitUntilListeningAsync(endpoint, cancellationToken);
+        var endpoint = server.Endpoint;
 
         using (var http = new HttpClient())
         {
@@ -119,6 +117,7 @@ public sealed class HttpServerSmokeTests
     {
         private readonly Process _process;
         private readonly ConcurrentQueue<string> _standardError = new();
+        private Uri? _endpoint;
 
         private ServerProcess(Process process)
         {
@@ -126,6 +125,34 @@ public sealed class HttpServerSmokeTests
         }
 
         public IReadOnlyCollection<string> StandardError => _standardError;
+
+        public Uri Endpoint => _endpoint ?? throw new InvalidOperationException("The server was not started with a listening endpoint.");
+
+        // Another process can take a free port between choosing it and the server binding it, so a lost port is retried with a new one.
+        public static async Task<ServerProcess> StartListeningAsync(
+            Dictionary<string, string> environment,
+            CancellationToken cancellationToken)
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                var port = FreeLoopbackPort();
+                environment[AzureDevOpsServerOptions.HttpUrlVariable] = $"http://127.0.0.1:{port}";
+                var server = Start(environment);
+                server._endpoint = new Uri($"http://127.0.0.1:{port}{AzureDevOpsServerOptions.DefaultHttpPath}");
+
+                if (await server.TryWaitUntilListeningAsync(cancellationToken))
+                {
+                    return server;
+                }
+
+                var output = string.Join(Environment.NewLine, server._standardError);
+                server.Dispose();
+                if (attempt == 3 || !output.Contains("address already in use", StringComparison.OrdinalIgnoreCase))
+                {
+                    Assert.Fail($"The server exited before listening:{Environment.NewLine}{output}");
+                }
+            }
+        }
 
         public static ServerProcess Start(IReadOnlyDictionary<string, string> environment)
         {
@@ -164,7 +191,7 @@ public sealed class HttpServerSmokeTests
             return server;
         }
 
-        public async Task WaitUntilListeningAsync(Uri endpoint, CancellationToken cancellationToken)
+        private async Task<bool> TryWaitUntilListeningAsync(CancellationToken cancellationToken)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(30));
@@ -174,18 +201,26 @@ public sealed class HttpServerSmokeTests
             {
                 if (_process.HasExited)
                 {
-                    Assert.Fail($"The server exited before listening:{Environment.NewLine}{string.Join(Environment.NewLine, _standardError)}");
+                    _process.WaitForExit();
+                    return false;
                 }
 
+                // A socket that accepts a connection but never answers must not stall the wait, so each probe gets its own deadline.
+                using var probe = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+                probe.CancelAfter(TimeSpan.FromSeconds(1));
                 try
                 {
-                    using var response = await http.GetAsync(endpoint, timeout.Token);
-                    return;
+                    using var response = await http.GetAsync(Endpoint, probe.Token);
+                    return !_process.HasExited;
                 }
                 catch (HttpRequestException)
                 {
-                    await Task.Delay(TimeSpan.FromMilliseconds(100), timeout.Token);
                 }
+                catch (OperationCanceledException) when (!timeout.IsCancellationRequested)
+                {
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(100), timeout.Token);
             }
         }
 
