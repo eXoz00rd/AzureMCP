@@ -2,10 +2,10 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace OpenWebUiPluginGenerator;
 
-internal sealed record GeneratorArguments(string Output, string? Toolsets, bool ReadOnly, string DownloadUrl, string Sha256)
+internal sealed record GeneratorArguments(string Output, string? Toolsets, bool ReadOnly, string ServerUrl)
 {
     public const string Usage =
-        "Usage: OpenWebUiPluginGenerator --output <file.py> [--toolsets <a,b>] [--read-only] [--download-url <url> --sha256 <hex>]";
+        "Usage: OpenWebUiPluginGenerator --output <file.py> [--toolsets <a,b>] [--read-only] [--server-url <url>]";
 
     public static bool TryParse(
         IReadOnlyList<string> args,
@@ -16,8 +16,7 @@ internal sealed record GeneratorArguments(string Output, string? Toolsets, bool 
         string? output = null;
         string? toolsets = null;
         var readOnly = false;
-        var downloadUrl = string.Empty;
-        var sha256 = string.Empty;
+        var serverUrl = string.Empty;
 
         for (var index = 0; index < args.Count; index++)
         {
@@ -28,7 +27,7 @@ internal sealed record GeneratorArguments(string Output, string? Toolsets, bool 
                 continue;
             }
 
-            if (name is not ("--output" or "--toolsets" or "--download-url" or "--sha256"))
+            if (name is not ("--output" or "--toolsets" or "--server-url"))
             {
                 error = $"Unknown argument '{name}'.";
                 return false;
@@ -49,47 +48,34 @@ internal sealed record GeneratorArguments(string Output, string? Toolsets, bool 
                 case "--toolsets":
                     toolsets = value;
                     break;
-                case "--download-url":
-                    downloadUrl = value;
-                    break;
                 default:
-                    sha256 = value.ToLowerInvariant();
+                    serverUrl = value;
                     break;
             }
         }
 
-        error = Validate(output, downloadUrl, sha256);
+        error = Validate(output, serverUrl);
         if (error is not null)
         {
             return false;
         }
 
-        arguments = new GeneratorArguments(output!, toolsets, readOnly, downloadUrl, sha256);
+        arguments = new GeneratorArguments(output!, toolsets, readOnly, serverUrl);
         return true;
     }
 
-    private static string? Validate(string? output, string downloadUrl, string sha256)
+    private static string? Validate(string? output, string serverUrl)
     {
         if (string.IsNullOrWhiteSpace(output))
         {
             return "--output is required.";
         }
 
-        if (string.IsNullOrEmpty(downloadUrl) != string.IsNullOrEmpty(sha256))
-        {
-            return "--download-url and --sha256 must be given together.";
-        }
-
-        if (downloadUrl.Length > 0 &&
-            !(Uri.TryCreate(downloadUrl, UriKind.Absolute, out var uri) &&
+        if (serverUrl.Length > 0 &&
+            !(Uri.TryCreate(serverUrl, UriKind.Absolute, out var uri) &&
                 (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)))
         {
-            return "--download-url must be an absolute http or https URL.";
-        }
-
-        if (sha256.Length > 0 && (sha256.Length != 64 || !sha256.All(char.IsAsciiHexDigitLower)))
-        {
-            return "--sha256 must be 64 hexadecimal characters.";
+            return "--server-url must be an absolute http or https URL.";
         }
 
         return null;
