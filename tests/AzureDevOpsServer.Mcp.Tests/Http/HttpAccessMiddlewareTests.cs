@@ -94,6 +94,20 @@ public sealed class HttpAccessMiddlewareTests
         Assert.Equal(1, server.Calls.Count);
     }
 
+    [Theory]
+    [InlineData("/mcp/", "/mcp")]
+    [InlineData("/mcp", "/mcp/")]
+    [InlineData("/mcp", "/MCP")]
+    public async Task Request_ThatRoutingSendsToMcp_IsGuardedWhateverItsSpelling(string configuredPath, string requestPath)
+    {
+        await using var server = await ProbeServer.StartAsync(new AzureDevOpsServerOptions { HttpToken = Token, HttpPath = configuredPath });
+
+        using var response = await server.PostToolCallAsync(authorization: null, origin: null, requestPath);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(0, server.Calls.Count);
+    }
+
     private sealed class ProbeServer : IAsyncDisposable
     {
         private readonly WebApplication _app;
@@ -125,9 +139,10 @@ public sealed class HttpAccessMiddlewareTests
             return new ProbeServer(app, new Uri(app.Urls.First() + options.HttpPath));
         }
 
-        public Task<HttpResponseMessage> PostToolCallAsync(string? authorization, string? origin)
+        public Task<HttpResponseMessage> PostToolCallAsync(string? authorization, string? origin, string? path = null)
         {
-            var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+            var target = path is null ? Endpoint : new Uri(Endpoint, path);
+            var request = new HttpRequestMessage(HttpMethod.Post, target)
             {
                 Content = new StringContent(
                     JsonSerializer.Serialize(

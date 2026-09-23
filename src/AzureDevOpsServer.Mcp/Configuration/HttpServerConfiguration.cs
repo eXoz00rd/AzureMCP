@@ -1,6 +1,5 @@
 using AzureDevOpsServer.Mcp.Http;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 
 namespace AzureDevOpsServer.Mcp.Configuration;
 
@@ -13,14 +12,10 @@ public static class HttpServerConfiguration
             throw new InvalidOperationException($"{AzureDevOpsServerOptions.HttpPathVariable} must start with '/'.");
         }
 
-        var path = new PathString(options.HttpPath);
+        // Routing runs first, so the guard protects whichever endpoint it picked, however the request spelled the path.
+        app.UseRouting();
+        app.UseMiddleware<HttpAccessMiddleware>(options);
 
-        // Only the MCP endpoint is guarded, so endpoints such as health probes can be reached without the token.
-        app.UseWhen(
-            context => context.Request.Path.StartsWithSegments(path),
-            branch => branch.UseMiddleware<HttpAccessMiddleware>(options)
-        );
-
-        return app.MapMcp(options.HttpPath);
+        return app.MapMcp(options.HttpPath).WithMetadata(new HttpAccessGuardMetadata());
     }
 }

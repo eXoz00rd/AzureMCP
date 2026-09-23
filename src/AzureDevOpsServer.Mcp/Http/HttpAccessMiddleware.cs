@@ -27,6 +27,11 @@ public sealed class HttpAccessMiddleware
 
     public Task InvokeAsync(HttpContext context)
     {
+        if (context.GetEndpoint()?.Metadata.GetMetadata<HttpAccessGuardMetadata>() is null)
+        {
+            return _next(context);
+        }
+
         // Browsers always send Origin and server-side callers such as Open WebUI do not; rejecting unknown ones blocks DNS rebinding.
         var origin = context.Request.Headers.Origin.ToString();
         if (origin.Length > 0 && !_allowedOrigins.Contains(origin.TrimEnd('/')))

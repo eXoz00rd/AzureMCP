@@ -42,7 +42,12 @@ public sealed class HttpServerSmokeTests
 
         using (var http = new HttpClient())
         {
-            using var anonymous = await http.PostAsync(endpoint, new StringContent("{}"), cancellationToken);
+            // A well-formed MCP request, so routing selects the endpoint and the guard is what answers.
+            using var anonymous = await http.PostAsync(
+                endpoint,
+                new StringContent("{}", System.Text.Encoding.UTF8, "application/json"),
+                cancellationToken
+            );
             Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
         }
 
@@ -203,6 +208,7 @@ public sealed class HttpServerSmokeTests
             }
 
             await _process.WaitForExitAsync(TestContext.Current.CancellationToken);
+            _process.WaitForExit();
         }
 
         public void Dispose()
