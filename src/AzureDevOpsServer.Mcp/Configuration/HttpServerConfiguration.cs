@@ -5,7 +5,9 @@ namespace AzureDevOpsServer.Mcp.Configuration;
 
 public static class HttpServerConfiguration
 {
-    public static IEndpointConventionBuilder MapAzureDevOpsMcp(this WebApplication app, AzureDevOpsServerOptions options)
+    public const string HealthPath = "/healthz";
+
+    public static void MapAzureDevOpsHttpEndpoints(this WebApplication app, AzureDevOpsServerOptions options)
     {
         if (!options.HttpPath.StartsWith('/'))
         {
@@ -13,9 +15,11 @@ public static class HttpServerConfiguration
         }
 
         // Routing runs first, so the guard protects whichever endpoint it picked, however the request spelled the path.
+        // The health endpoint carries no guard metadata, so probes reach it without a token.
         app.UseRouting();
         app.UseMiddleware<HttpAccessMiddleware>(options);
 
-        return app.MapMcp(options.HttpPath).WithMetadata(new HttpAccessGuardMetadata());
+        app.MapHealthChecks(HealthPath);
+        app.MapMcp(options.HttpPath).WithMetadata(new HttpAccessGuardMetadata());
     }
 }
