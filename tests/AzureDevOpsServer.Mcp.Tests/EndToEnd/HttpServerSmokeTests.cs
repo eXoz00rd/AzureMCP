@@ -189,6 +189,9 @@ public sealed class HttpServerSmokeTests
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(30));
             await _process.WaitForExitAsync(timeout.Token);
+
+            // The parameterless overload also waits until every redirected line has reached the handlers.
+            _process.WaitForExit();
             return _process.ExitCode;
         }
 
