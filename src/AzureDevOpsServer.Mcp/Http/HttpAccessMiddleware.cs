@@ -58,7 +58,7 @@ public sealed class HttpAccessMiddleware
             return false;
         }
 
-        // Hashing first makes the comparison take the same time whatever the length of the presented token.
+        // Fixed-size hashes keep FixedTimeEquals from returning early on a length mismatch, so timing reveals neither the configured token nor its length.
         return CryptographicOperations.FixedTimeEquals(Hash(header[BearerPrefix.Length..].Trim()), expected);
     }
 
