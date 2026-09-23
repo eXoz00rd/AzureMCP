@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -52,6 +53,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
                 {
                   "id": "0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb",
                   "name": "Alpha",
+                  "description": "seen with PAT __CALLER__",
                   "state": "wellFormed",
                   "url": "{{CollectionUrl}}/_apis/projects/0fa87caa-7f30-4f8c-9e33-63b06f4a2fdb"
                 }
@@ -84,6 +86,23 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
                 return [.. _requestPaths];
             }
         }
+    }
+
+    // Tells tests whose PAT reached the server without the response ever containing the PAT itself.
+    public static string Fingerprint(string personalAccessToken)
+    {
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(personalAccessToken)))[..8];
+    }
+
+    private static string CallerFingerprint(string? authorization)
+    {
+        if (authorization is null || !authorization.StartsWith("Basic ", StringComparison.Ordinal))
+        {
+            return "none";
+        }
+
+        var credentials = Encoding.UTF8.GetString(Convert.FromBase64String(authorization["Basic ".Length..]));
+        return Fingerprint(credentials[(credentials.IndexOf(':') + 1)..]);
     }
 
     public IReadOnlyList<string?> AuthorizationHeaders
@@ -128,7 +147,8 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
             context.Response.StatusCode = isKnownProjectsRequest || isKnownWorkItemRequest ?
                 (int)HttpStatusCode.OK :
                 (int)HttpStatusCode.NotFound;
-            var responseText = isKnownProjectsRequest ? _projectsResponse :
+            var responseText = isKnownProjectsRequest ?
+                _projectsResponse.Replace("__CALLER__", CallerFingerprint(context.Request.Headers["Authorization"]), StringComparison.Ordinal) :
                 isKnownWorkItemRequest ? _workItemResponse :
                 "{}";
             if (path.EndsWith("_apis/wit/workitems/42", StringComparison.Ordinal))

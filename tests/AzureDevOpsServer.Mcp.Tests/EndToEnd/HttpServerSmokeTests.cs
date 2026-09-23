@@ -107,6 +107,53 @@ public sealed class HttpServerSmokeTests
     }
 
     [Fact]
+    public async Task Server_OverHttp_KeepsConcurrentCallersApart()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var azureDevOps = new StubAzureDevOpsServer();
+
+        using var server = await ServerProcess.StartListeningAsync(
+            new Dictionary<string, string>
+            {
+                [AzureDevOpsServerOptions.CollectionUrlVariable] = azureDevOps.CollectionUrl,
+                [AzureDevOpsServerOptions.TransportVariable] = "http",
+                [AzureDevOpsServerOptions.HttpTokenVariable] = HttpToken
+            },
+            cancellationToken
+        );
+        var endpoint = server.Endpoint;
+
+        var callers = Enumerable.Range(1, 4).Select(number => $"concurrent-caller-{number}-pat").ToArray();
+        var clients = await Task.WhenAll(callers.Select(pat => ConnectAsync(endpoint, pat, cancellationToken)));
+        try
+        {
+            // Every caller asks several times at once, so requests from different people overlap inside the server.
+            var calls = callers
+                        .Zip(clients)
+                        .SelectMany(caller => Enumerable.Range(0, 5).Select(async _ =>
+                                {
+                                    var result = await caller.Second.CallToolAsync("list_projects", cancellationToken: cancellationToken);
+                                    return (Pat: caller.First, Text: result.StructuredContent?.ToString() ?? string.Empty);
+                                }
+                            )
+                        )
+                        .ToList();
+
+            foreach (var (pat, text) in await Task.WhenAll(calls))
+            {
+                Assert.Contains($"seen with PAT {StubAzureDevOpsServer.Fingerprint(pat)}", text);
+            }
+        }
+        finally
+        {
+            foreach (var client in clients)
+            {
+                await client.DisposeAsync();
+            }
+        }
+    }
+
+    [Fact]
     public async Task Server_OverHttpAtDefaultLogLevel_WritesNothing()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
