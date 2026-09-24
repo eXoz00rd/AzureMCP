@@ -60,6 +60,9 @@ public static class ServerConfiguration
                        httpClient.BaseAddress = new Uri(options.CollectionUrl.TrimEnd('/') + "/");
                    }
                )
+               // Every caller shares the pooled handler, so a cookie Azure DevOps issued to one caller would be sent
+               // with the next caller's requests. The PAT on each request is the only identity the server may carry.
+               .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseCookies = false })
                .AddAzureDevOpsHandlers();
 
         var toolCount = ToolRegistration.AddTools(builder.Services, startupOptions);
