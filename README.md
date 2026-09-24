@@ -230,7 +230,7 @@ Open WebUI ── Bearer token + X-Azure-DevOps-Pat ──▶ AzureMCP (HTTP) �
 ```
 
 - **Transport** — `ADOS_TRANSPORT=http` serves a stateless Streamable HTTP endpoint. stdio stays the default, so Copilot, Claude Code, and every existing client are unaffected
-- **Access** — every request must present `Authorization: Bearer <ADOS_HTTP_TOKEN>`. A request with a browser `Origin` outside `ADOS_HTTP_ALLOWED_ORIGINS` gets `403`
+- **Access** — every request to the MCP endpoint must present `Authorization: Bearer <ADOS_HTTP_TOKEN>`, and one with a browser `Origin` outside `ADOS_HTTP_ALLOWED_ORIGINS` gets `403`. The exceptions: `/healthz` needs no token, `ADOS_HTTP_ALLOW_ANONYMOUS` lifts the token for loopback development, and a request routing rejects before choosing the endpoint — a wrong method or content type — gets `405` or `415` without reaching MCP
 - **Identity** — every request carries `X-Azure-DevOps-Pat: <the caller's PAT>`. Tools that never call Azure DevOps, such as `server_info`, work without it
 - **Health** — `GET /healthz` answers `200 Healthy` without a token, for liveness and readiness probes
 - **Scaling** — the endpoint keeps no sessions, so any number of replicas can run behind one service without affinity
