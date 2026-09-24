@@ -16,8 +16,10 @@ RUN dotnet publish src/AzureDevOpsServer.Mcp \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled
 WORKDIR /app
 COPY --from=build /app .
+# The base image's ASPNETCORE_HTTP_PORTS would compete with ADOS_HTTP_URL and log a warning at every start.
 ENV ADOS_TRANSPORT=http \
-    ADOS_HTTP_URL=http://+:8080
+    ADOS_HTTP_URL=http://+:8080 \
+    ASPNETCORE_HTTP_PORTS=
 EXPOSE 8080
 USER $APP_UID
 ENTRYPOINT ["dotnet", "AzureDevOpsServer.Mcp.dll"]

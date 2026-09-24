@@ -6,6 +6,8 @@ which also publishes to [NuGet.org](https://www.nuget.org/packages/AzureDevOpsSe
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-24
+
 ### Added
 - **Streamable HTTP transport** — `ADOS_TRANSPORT=http` serves MCP over a stateless HTTP endpoint behind a shared bearer token, so Open WebUI and other shared front ends can use the server. The access guard runs on the endpoint that routing has selected, rejects unknown browser origins, and allows anonymous access only on loopback ([#55](https://github.com/eXoz00rd/AzureMCP/pull/55))
 - **Each HTTP caller's own PAT** — over HTTP every request carries its caller's PAT in `X-Azure-DevOps-Pat`, so Azure DevOps attributes every comment, vote, and queued build to the person who asked. `ADOS_PAT` is refused over HTTP so no request can fall back to a shared identity ([#56](https://github.com/eXoz00rd/AzureMCP/pull/56))
@@ -140,7 +142,8 @@ First public preview.
 - 16 tools across projects, work items, repositories, pull requests, and builds
 - CI on GitHub Actions plus a tag-triggered release workflow publishing through NuGet Trusted Publishing
 
-[Unreleased]: https://github.com/eXoz00rd/AzureMCP/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/eXoz00rd/AzureMCP/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.2.0
 [0.1.3]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.1.3
 [0.1.2]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.1.2
 [0.1.1]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.1.1

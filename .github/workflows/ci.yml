@@ -112,6 +112,14 @@ jobs:
           done
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/healthz)" = 200
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST --header 'Content-Type: application/json' --data '{}' http://127.0.0.1:8080/mcp)" = 401
+      - name: Check that a healthy start logs nothing
+        run: |
+          logs=$(docker logs azuremcp 2>&1)
+          if [ -n "$logs" ]; then
+            echo "::error::The container logged at the default level while starting and answering probes:"
+            echo "$logs"
+            exit 1
+          fi
       - name: Talk MCP to the container
         run: .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8080/mcp --token ci-token
       - name: Serve stub collections over TLS from two certificate authorities
