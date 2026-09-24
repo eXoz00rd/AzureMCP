@@ -180,12 +180,23 @@ jobs:
           helm lint charts/azuremcp --strict
           --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection
           --set http.tokenSecret.name=azuremcp-token
-      - name: Refuse to render without the required values
+      - name: Refuse to render incomplete or unsafe values
         run: |
           if helm template charts/azuremcp > /dev/null 2>&1; then
             echo "::error::The chart rendered without azureDevOps.collectionUrl and http.tokenSecret.name"
             exit 1
           fi
+          # An empty "from" in a NetworkPolicy admits every source, so an empty list must not render either.
+          if helm template charts/azuremcp --set-json 'networkPolicy.ingressFrom=[]' \
+            --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection \
+            --set http.tokenSecret.name=azuremcp-token > /dev/null 2>&1; then
+            echo "::error::The chart rendered a NetworkPolicy with no sources, which admits everything"
+            exit 1
+          fi
+          # With the policy disabled on purpose, the same values render.
+          helm template charts/azuremcp --set networkPolicy.enabled=false --set-json 'networkPolicy.ingressFrom=[]' \
+            --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection \
+            --set http.tokenSecret.name=azuremcp-token > /dev/null
       - uses: helm/kind-action@v1
       - name: Build the image into the cluster
         run: |
