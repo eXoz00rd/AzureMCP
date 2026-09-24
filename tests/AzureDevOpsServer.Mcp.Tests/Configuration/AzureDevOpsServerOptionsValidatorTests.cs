@@ -157,6 +157,9 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
     [InlineData("http://0.0.0.0:70000")]
     [InlineData("http://127.0.0.1:8080;garbage")]
     [InlineData(" ; ")]
+    [InlineData("http://::1:8080")]
+    [InlineData("http://[not-an-address]:8080")]
+    [InlineData("http://two words:8080")]
     public void Validate_OverHttpWithAddressKestrelCannotUse_Fails(string httpUrl)
     {
         var options = CreateValidHttpOptions();

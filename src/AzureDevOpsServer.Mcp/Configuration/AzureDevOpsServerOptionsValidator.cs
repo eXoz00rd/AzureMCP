@@ -109,7 +109,7 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
             var host = hasPort ? authority[..portSeparator] : authority;
             var port = hasPort ? authority[(portSeparator + 1)..] : "80";
 
-            if (host.Length == 0 ||
+            if (!IsBindableHost(host) ||
                 authority.Contains('/', StringComparison.Ordinal) ||
                 !int.TryParse(port, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ||
                 number > 65535)
@@ -119,6 +119,14 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
         }
 
         return null;
+    }
+
+    // Kestrel's wildcards, a name or an IPv4 address, or an IPv6 address inside the brackets Kestrel requires.
+    private static bool IsBindableHost(string host)
+    {
+        return host is "+" or "*" ||
+            (host.StartsWith('[') && host.EndsWith(']') && Uri.CheckHostName(host[1..^1]) == UriHostNameType.IPv6) ||
+            Uri.CheckHostName(host) is UriHostNameType.Dns or UriHostNameType.IPv4;
     }
 
     // Kestrel accepts several addresses separated by ';', and each of them has to stay on this machine.
