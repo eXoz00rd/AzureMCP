@@ -108,6 +108,36 @@ public sealed class HttpAccessMiddlewareTests
         Assert.Equal(0, server.Calls.Count);
     }
 
+    [Fact]
+    public async Task HealthEndpoint_NeedsNoTokenEvenWhenMcpIsServedAtTheRoot()
+    {
+        await using var server = await ProbeServer.StartAsync(new AzureDevOpsServerOptions { HttpToken = Token, HttpPath = "/" });
+        using var http = new HttpClient();
+
+        using var health = await http.GetAsync(
+            new Uri(server.Endpoint, HttpServerConfiguration.HealthPath),
+            TestContext.Current.CancellationToken
+        );
+        using var mcp = await server.PostToolCallAsync(authorization: null, origin: null);
+
+        Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+        Assert.Equal("Healthy", await health.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(HttpStatusCode.Unauthorized, mcp.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/healthz")]
+    [InlineData("/HEALTHZ/")]
+    public async Task McpPath_ThatWouldShareTheHealthProbeRoute_IsRejected(string httpPath)
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ProbeServer.StartAsync(new AzureDevOpsServerOptions { HttpToken = Token, HttpPath = httpPath })
+        );
+
+        Assert.Contains(AzureDevOpsServerOptions.HttpPathVariable, exception.Message);
+        Assert.Contains(HttpServerConfiguration.HealthPath, exception.Message);
+    }
+
     private sealed class ProbeServer : IAsyncDisposable
     {
         private readonly WebApplication _app;
@@ -130,10 +160,11 @@ public sealed class HttpAccessMiddlewareTests
             builder.WebHost.UseUrls("http://127.0.0.1:0");
             builder.Services.AddSingleton<CallCounter>();
             ToolRegistration.AddTools(builder.Services, [typeof(CountingTool)], readOnly: false);
+            builder.Services.AddHealthChecks();
             builder.Services.AddMcpServer().WithHttpTransport(transport => transport.Stateless = true);
 
             var app = builder.Build();
-            app.MapAzureDevOpsMcp(options);
+            app.MapAzureDevOpsHttpEndpoints(options);
             await app.StartAsync(TestContext.Current.CancellationToken);
 
             return new ProbeServer(app, new Uri(app.Urls.First() + options.HttpPath));

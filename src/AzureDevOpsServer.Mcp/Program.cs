@@ -14,8 +14,18 @@ if (ServerTransports.Resolve(startupOptions.Transport) == ServerTransport.Http)
     webBuilder.AddAzureDevOpsMcpServer(startupOptions).WithHttpTransport(options => options.Stateless = true);
 
     var app = webBuilder.Build();
-    app.MapAzureDevOpsMcp(startupOptions);
-    await app.RunAsync();
+    app.MapAzureDevOpsHttpEndpoints(startupOptions);
+
+    try
+    {
+        await app.RunAsync();
+    }
+    catch (IOException exception)
+    {
+        // Kestrel reports an address it cannot bind this way, and its message already names the address and the reason.
+        await Console.Error.WriteLineAsync(exception.Message);
+        return 1;
+    }
 }
 else
 {
@@ -23,3 +33,5 @@ else
     builder.AddAzureDevOpsMcpServer(startupOptions).WithStdioServerTransport();
     await builder.Build().RunAsync();
 }
+
+return 0;

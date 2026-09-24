@@ -48,6 +48,9 @@ public sealed class HttpServerSmokeTests
                 cancellationToken
             );
             Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+            using var health = await http.GetAsync(new Uri(endpoint, HttpServerConfiguration.HealthPath), cancellationToken);
+            Assert.Equal(HttpStatusCode.OK, health.StatusCode);
         }
 
         await using (var alice = await ConnectAsync(endpoint, AlicePersonalAccessToken, cancellationToken))
@@ -93,11 +96,68 @@ public sealed class HttpServerSmokeTests
         );
 
         await server.StopAsync();
-        Assert.NotEmpty(server.StandardError);
+
+        // Over HTTP logging is ordinary console output; only stdio has to keep stdout free for the protocol.
+        Assert.NotEmpty(server.StandardOutput);
+        Assert.Empty(server.StandardError);
         foreach (var secret in new[] { HttpToken, AlicePersonalAccessToken, BobPersonalAccessToken })
         {
-            Assert.DoesNotContain(server.StandardError, line => line.Contains(secret, StringComparison.Ordinal));
+            Assert.DoesNotContain(server.StandardOutput, line => line.Contains(secret, StringComparison.Ordinal));
         }
+    }
+
+    [Fact]
+    public async Task Server_OverHttpAtDefaultLogLevel_WritesNothing()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var azureDevOps = new StubAzureDevOpsServer();
+
+        using var server = await ServerProcess.StartListeningAsync(
+            new Dictionary<string, string>
+            {
+                [AzureDevOpsServerOptions.CollectionUrlVariable] = azureDevOps.CollectionUrl,
+                [AzureDevOpsServerOptions.TransportVariable] = "http",
+                [AzureDevOpsServerOptions.HttpTokenVariable] = HttpToken
+            },
+            cancellationToken
+        );
+        var endpoint = server.Endpoint;
+
+        await using (var client = await ConnectAsync(endpoint, AlicePersonalAccessToken, cancellationToken))
+        {
+            var result = await client.CallToolAsync("list_projects", cancellationToken: cancellationToken);
+            Assert.True(result.IsError is null or false, $"Expected a successful tool call, but IsError was {result.IsError}.");
+        }
+
+        await server.StopAsync();
+
+        Assert.Empty(server.StandardOutput);
+        Assert.Empty(server.StandardError);
+    }
+
+    [Fact]
+    public async Task Server_OverHttpOnAnOccupiedPort_ExitsWithAReadableError()
+    {
+        using var occupant = new TcpListener(IPAddress.Loopback, 0);
+        occupant.Start();
+        var port = ((IPEndPoint)occupant.LocalEndpoint).Port;
+
+        using var server = ServerProcess.Start(
+            new Dictionary<string, string>
+            {
+                [AzureDevOpsServerOptions.CollectionUrlVariable] = "https://devops.example.local/DefaultCollection",
+                [AzureDevOpsServerOptions.TransportVariable] = "http",
+                [AzureDevOpsServerOptions.HttpUrlVariable] = $"http://127.0.0.1:{port}",
+                [AzureDevOpsServerOptions.HttpTokenVariable] = HttpToken
+            }
+        );
+
+        var exitCode = await server.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+        // Exit code 1 comes from the handler in Program.cs; an unhandled exception would exit differently.
+        Assert.Equal(1, exitCode);
+        var line = Assert.Single(server.StandardError);
+        Assert.Contains($"Failed to bind to address http://127.0.0.1:{port}", line);
     }
 
     [Theory]
@@ -166,6 +226,7 @@ public sealed class HttpServerSmokeTests
     {
         private readonly Process _process;
         private readonly ConcurrentQueue<string> _standardError = new();
+        private readonly ConcurrentQueue<string> _standardOutput = new();
         private Uri? _endpoint;
 
         private ServerProcess(Process process)
@@ -174,6 +235,8 @@ public sealed class HttpServerSmokeTests
         }
 
         public IReadOnlyCollection<string> StandardError => _standardError;
+
+        public IReadOnlyCollection<string> StandardOutput => _standardOutput;
 
         public Uri Endpoint => _endpoint ?? throw new InvalidOperationException("The server was not started with a listening endpoint.");
 
@@ -194,7 +257,7 @@ public sealed class HttpServerSmokeTests
                     return server;
                 }
 
-                var output = string.Join(Environment.NewLine, server._standardError);
+                var output = string.Join(Environment.NewLine, server._standardError.Concat(server._standardOutput));
                 server.Dispose();
                 if (attempt == 3 || !output.Contains("address already in use", StringComparison.OrdinalIgnoreCase))
                 {
@@ -233,7 +296,13 @@ public sealed class HttpServerSmokeTests
                     server._standardError.Enqueue(line.Data);
                 }
             };
-            process.OutputDataReceived += (_, _) => { };
+            process.OutputDataReceived += (_, line) =>
+            {
+                if (line.Data is not null)
+                {
+                    server._standardOutput.Enqueue(line.Data);
+                }
+            };
             process.Start();
             process.BeginErrorReadLine();
             process.BeginOutputReadLine();

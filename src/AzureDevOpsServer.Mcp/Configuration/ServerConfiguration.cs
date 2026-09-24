@@ -13,8 +13,19 @@ public static class ServerConfiguration
         this IHostApplicationBuilder builder,
         AzureDevOpsServerOptions startupOptions)
     {
+        var overHttp = ServerTransports.Resolve(startupOptions.Transport) == ServerTransport.Http;
+
         builder.Logging.ClearProviders();
-        builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
+        if (overHttp)
+        {
+            builder.Logging.AddConsole();
+        }
+        else
+        {
+            // stdout carries the protocol over stdio, so every log record has to go to stderr.
+            builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
+        }
+
         builder.Logging.SetMinimumLevel(
             Enum.TryParse<LogLevel>(
                 Environment.GetEnvironmentVariable(AzureDevOpsServerOptions.LogLevelVariable),
@@ -31,10 +42,11 @@ public static class ServerConfiguration
                .Configure(options => options.LoadFromEnvironment())
                .ValidateOnStart();
 
-        if (ServerTransports.Resolve(startupOptions.Transport) == ServerTransport.Http)
+        if (overHttp)
         {
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddSingleton<IAzureDevOpsCredentialProvider, RequestCredentialProvider>();
+            builder.Services.AddHealthChecks();
         }
         else
         {
