@@ -124,6 +124,19 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
     }
 
     [Fact]
+    public void Validate_OverHttpWithShortTokenPaddedByWhitespace_Fails()
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpToken = new string(' ', 31) + "a" + new string('\t', 8);
+
+        var result = _validator.Validate(null, options);
+
+        // The access guard trims the token, so the padding would not protect anything.
+        Assert.True(result.Failed);
+        Assert.Contains($"{AzureDevOpsServerOptions.HttpTokenVariable} must be at least 32 characters", result.FailureMessage);
+    }
+
+    [Fact]
     public void Validate_OverHttpWithTokenOfMinimumLength_Succeeds()
     {
         var options = CreateValidHttpOptions();

@@ -51,7 +51,8 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
             );
         }
 
-        if (overHttp && !string.IsNullOrWhiteSpace(options.HttpToken) && options.HttpToken.Length < MinimumHttpTokenLength)
+        // Measured after trimming, because the access guard compares the trimmed value.
+        if (overHttp && !string.IsNullOrWhiteSpace(options.HttpToken) && options.HttpToken.Trim().Length < MinimumHttpTokenLength)
         {
             failures.Add(
                 $"{AzureDevOpsServerOptions.HttpTokenVariable} must be at least {MinimumHttpTokenLength} characters long, because anyone who guesses it can call the server. " +

@@ -343,7 +343,7 @@ cosign verify ghcr.io/exoz00rd/azuremcp:<version> --certificate-oidc-issuer http
 - **"did not answer within … seconds"** — nothing refused the connection to Azure DevOps, so a firewall or proxy between the server and Azure DevOps drops it. Open the route from where the server runs — in Kubernetes, from the pods — to the collection's host and port
 - **"with a web page instead of API data"** — `ADOS_COLLECTION_URL` points to a site rather than to a collection, or a proxy or sign-in page answered instead of Azure DevOps. Use the collection's own address, as the browser shows it when that collection is open
 - **`415` or `405` instead of `401`** — the request was not a well-formed MCP request, so routing rejected it before choosing the endpoint; no MCP code ran
-- **The server exits at startup** — it ends with exit code 1 and the reason as the last line: a missing token or one shorter than 32 characters, `ADOS_PAT` set over HTTP, anonymous access on a routable address, a path that is not absolute or is `/healthz` or the plugin's `/openwebui/azure_devops.py`, or an address already in use
+- **The server exits at startup** — it ends with exit code 1 and the reason as the last line: a missing token or one shorter than 32 characters, `ADOS_PAT` set over HTTP, anonymous access on a routable address, an unknown transport or toolset, a path that is not absolute or is `/healthz` or the plugin's `/openwebui/azure_devops.py`, or an address already in use
 
 ## Security
 

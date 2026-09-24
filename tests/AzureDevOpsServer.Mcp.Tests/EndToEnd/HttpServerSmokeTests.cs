@@ -271,6 +271,33 @@ public sealed class HttpServerSmokeTests
         Assert.Contains(expectedMessage, server.StandardError.Last(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("http", AzureDevOpsServerOptions.HttpPathVariable, "mcp", "ADOS_HTTP_PATH must start with '/'.")]
+    [InlineData("http", AzureDevOpsServerOptions.ToolsetsVariable, "nope", "ADOS_TOOLSETS contains unknown toolsets: nope.")]
+    [InlineData("stdio", AzureDevOpsServerOptions.ToolsetsVariable, "nope", "ADOS_TOOLSETS contains unknown toolsets: nope.")]
+    public async Task Server_WithSettingsItCannotWireUp_RefusesToStart(
+        string transport,
+        string variable,
+        string value,
+        string expectedMessage)
+    {
+        var environment = new Dictionary<string, string>
+        {
+            [AzureDevOpsServerOptions.CollectionUrlVariable] = "https://devops.example.local/DefaultCollection",
+            [AzureDevOpsServerOptions.TransportVariable] = transport,
+            [AzureDevOpsServerOptions.HttpUrlVariable] = $"http://127.0.0.1:{FreeLoopbackPort()}",
+            [AzureDevOpsServerOptions.HttpTokenVariable] = HttpToken,
+            [variable] = value
+        };
+
+        using var server = ServerProcess.Start(environment);
+
+        var exitCode = await server.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains(expectedMessage, server.StandardError.Last(), StringComparison.Ordinal);
+    }
+
     private static Task<McpClient> ConnectAsync(Uri endpoint, string? personalAccessToken, CancellationToken cancellationToken)
     {
         var headers = new Dictionary<string, string> { ["Authorization"] = $"Bearer {HttpToken}" };
