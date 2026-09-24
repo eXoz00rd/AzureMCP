@@ -17,6 +17,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
     private readonly Task _acceptLoop;
     private readonly object _requestsGate = new();
     private readonly List<string> _requestPaths = [];
+    private readonly List<string> _requestTargets = [];
     private readonly List<string?> _authorizationHeaders = [];
     private readonly List<string?> _cookieHeaders = [];
     private readonly string _projectsResponse;
@@ -89,6 +90,18 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
         }
     }
 
+    // Path and query of every request, for tests that need to see which parameters reached the server.
+    public IReadOnlyList<string> RequestTargets
+    {
+        get
+        {
+            lock (_requestsGate)
+            {
+                return [.. _requestTargets];
+            }
+        }
+    }
+
     // Tells tests whose PAT reached the server without the response ever containing the PAT itself.
     public static string Fingerprint(string personalAccessToken)
     {
@@ -148,6 +161,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
             lock (_requestsGate)
             {
                 _requestPaths.Add(path);
+                _requestTargets.Add(context.Request.Url.PathAndQuery);
                 _authorizationHeaders.Add(context.Request.Headers["Authorization"]);
                 _cookieHeaders.Add(context.Request.Headers["Cookie"]);
             }
@@ -207,7 +221,9 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
     }
 
     // Models larger-than-a-small-model's-context answers for the tools that bound their responses: a wiki
-    // of twelve pages in three sections and a twelve-line page.
+    // of twelve pages in three sections and a twelve-line page, six pull request threads that alternate
+    // between server-written and human, and ten changed files. The changes route honours $top, as the
+    // real one is documented to, so the client's request shows up in what comes back.
     private static bool TryBuildReadToolResponse(HttpListenerRequest request, out string body)
     {
         var path = request.Url!.AbsolutePath;
@@ -218,6 +234,31 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
             body = request.QueryString["recursionLevel"] == "full" ?
                 WikiTreeJson() :
                 $$"""{ "path": "{{request.QueryString["path"]}}", "content": {{JsonSerializer.Serialize(WikiPageText())}} }""";
+            return true;
+        }
+
+        if (path.EndsWith("/pullRequests/7/threads", StringComparison.Ordinal))
+        {
+            var threads = Enumerable.Range(1, 6).Select(number =>
+                $$"""{ "id": {{number}}, "status": "active", "comments": [ { "id": 1, "content": "comment {{number}}", "commentType": "{{(number % 2 == 1 ? "system" : "text")}}" } ] }"""
+            );
+            body = $$"""{ "count": 6, "value": [ {{string.Join(", ", threads)}} ] }""";
+            return true;
+        }
+
+        if (path.EndsWith("/pullRequests/7/iterations", StringComparison.Ordinal))
+        {
+            body = """{ "count": 1, "value": [ { "id": 1 } ] }""";
+            return true;
+        }
+
+        if (path.EndsWith("/pullRequests/7/iterations/1/changes", StringComparison.Ordinal))
+        {
+            var count = int.TryParse(request.QueryString["$top"], out var top) ? Math.Min(top, 10) : 10;
+            var changes = Enumerable.Range(1, count).Select(number =>
+                $$"""{ "changeTrackingId": {{number}}, "changeType": "edit", "item": { "path": "/src/File{{number:00}}.cs" } }"""
+            );
+            body = $$"""{ "changeEntries": [ {{string.Join(", ", changes)}} ] }""";
             return true;
         }
 

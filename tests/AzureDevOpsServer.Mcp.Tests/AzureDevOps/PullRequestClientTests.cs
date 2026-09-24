@@ -720,19 +720,76 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         var result = await client.GetPullRequestChangesAsync(
             "WebApp",
             7,
+            ResponseLimits.DefaultListTop,
             "Alpha",
             TestContext.Current.CancellationToken
         );
 
-        Assert.Equal(2, result.Count);
-        Assert.Equal("edit", result[0].ChangeType);
-        Assert.Equal("/src/Program.cs", result[0].Item.Path);
+        Assert.Equal(2, result.Items.Count);
+        Assert.False(result.Truncated);
+        Assert.Equal("edit", result.Items[0].ChangeType);
+        Assert.Equal("/src/Program.cs", result.Items[0].Item.Path);
         Assert.Equal(2, handler.Requests.Count);
         Assert.EndsWith(
             "Alpha/_apis/git/repositories/WebApp/pullRequests/7/iterations?api-version=7.0",
             handler.Requests[0].RequestUri!.AbsoluteUri
         );
         Assert.Contains("/iterations/2/changes", handler.Requests[1].RequestUri!.AbsoluteUri);
+        Assert.Contains($"$top={ResponseLimits.DefaultListTop + 1}", handler.Requests[1].RequestUri!.AbsoluteUri);
+    }
+
+    [Theory]
+    [InlineData(2, 1, true)]
+    [InlineData(2, 2, false)]
+    [InlineData(2, 3, false)]
+    public async Task GetPullRequestChangesAsync_ReportsTruncationOnlyWhenMoreChangesExistThanTop(
+        int available,
+        int top,
+        bool expectedTruncated)
+    {
+        using var iterations = JsonResponse("""{ "count": 1, "value": [ { "id": 1 } ] }""");
+        using var changes = JsonResponse(ChangesJson(available));
+        var client = CreateClient(out _, iterations, changes);
+
+        var result = await client.GetPullRequestChangesAsync(
+            "WebApp",
+            7,
+            top,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(Math.Min(available, top), result.Items.Count);
+        Assert.Equal(expectedTruncated, result.Truncated);
+    }
+
+    [Fact]
+    public async Task GetPullRequestChangesAsync_WhenServerIgnoresTop_StillTrimsToTop()
+    {
+        using var iterations = JsonResponse("""{ "count": 1, "value": [ { "id": 1 } ] }""");
+        using var changes = JsonResponse(ChangesJson(50));
+        var client = CreateClient(out _, iterations, changes);
+
+        var result = await client.GetPullRequestChangesAsync(
+            "WebApp",
+            7,
+            10,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(10, result.Items.Count);
+        Assert.True(result.Truncated);
+        Assert.Equal("/src/File1.cs", result.Items[0].Item.Path);
+    }
+
+    private static string ChangesJson(int count)
+    {
+        var entries = Enumerable.Range(1, count)
+                                .Select(number =>
+                                    $$"""{ "changeTrackingId": {{number}}, "changeType": "edit", "item": { "path": "/src/File{{number}}.cs" } }"""
+                                );
+        return $$"""{ "changeEntries": [ {{string.Join(", ", entries)}} ] }""";
     }
 
     [Fact]
@@ -744,11 +801,13 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         var result = await client.GetPullRequestChangesAsync(
             "WebApp",
             7,
+            ResponseLimits.DefaultListTop,
             "Alpha",
             TestContext.Current.CancellationToken
         );
 
-        Assert.Empty(result);
+        Assert.Empty(result.Items);
+        Assert.False(result.Truncated);
         Assert.Single(handler.Requests);
     }
 
@@ -783,11 +842,14 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         var threads = await client.GetPullRequestThreadsAsync(
             "WebApp",
             7,
+            false,
+            ResponseLimits.DefaultListTop,
             "Alpha",
             TestContext.Current.CancellationToken
         );
 
-        var thread = Assert.Single(threads);
+        Assert.False(threads.Truncated);
+        var thread = Assert.Single(threads.Items);
         Assert.Equal("active", thread.Status);
         Assert.Equal("/src/Program.cs", thread.ThreadContext!.FilePath);
         var comment = Assert.Single(thread.Comments!);
@@ -797,6 +859,128 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
             "Alpha/_apis/git/repositories/WebApp/pullRequests/7/threads?api-version=7.0",
             Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
         );
+    }
+
+    [Theory]
+    [InlineData(3, 2, true)]
+    [InlineData(3, 3, false)]
+    [InlineData(3, 4, false)]
+    public async Task GetPullRequestThreadsAsync_ReportsTruncationOnlyWhenMoreThreadsExistThanTop(
+        int available,
+        int top,
+        bool expectedTruncated)
+    {
+        using var response = JsonResponse(ThreadsJson(Enumerable.Repeat("text", available).ToArray()));
+        var client = CreateClient(out _, response);
+
+        var threads = await client.GetPullRequestThreadsAsync(
+            "WebApp",
+            7,
+            false,
+            top,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(Math.Min(available, top), threads.Items.Count);
+        Assert.Equal(expectedTruncated, threads.Truncated);
+        Assert.Equal(1, threads.Items[0].Id);
+    }
+
+    [Fact]
+    public async Task GetPullRequestThreadsAsync_WithSystemThreadsExcluded_KeepsOnlyThreadsPeopleWrote()
+    {
+        using var response = JsonResponse(ThreadsJson("system", "text", "system", "text"));
+        var client = CreateClient(out _, response);
+
+        var threads = await client.GetPullRequestThreadsAsync(
+            "WebApp",
+            7,
+            true,
+            ResponseLimits.DefaultListTop,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal([2, 4], threads.Items.Select(thread => thread.Id));
+        Assert.False(threads.Truncated);
+    }
+
+    [Fact]
+    public async Task GetPullRequestThreadsAsync_WithSystemThreadsIncluded_KeepsEveryThread()
+    {
+        using var response = JsonResponse(ThreadsJson("system", "text", "system"));
+        var client = CreateClient(out _, response);
+
+        var threads = await client.GetPullRequestThreadsAsync(
+            "WebApp",
+            7,
+            false,
+            ResponseLimits.DefaultListTop,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal([1, 2, 3], threads.Items.Select(thread => thread.Id));
+        Assert.Equal("system", threads.Items[0].Comments![0].CommentType);
+    }
+
+    [Fact]
+    public async Task GetPullRequestThreadsAsync_WithSystemThreadsExcluded_AppliesTopAfterTheFilter()
+    {
+        using var response = JsonResponse(ThreadsJson("system", "system", "system", "text", "text"));
+        var client = CreateClient(out _, response);
+
+        var threads = await client.GetPullRequestThreadsAsync(
+            "WebApp",
+            7,
+            true,
+            2,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal([4, 5], threads.Items.Select(thread => thread.Id));
+        Assert.False(threads.Truncated);
+    }
+
+    [Fact]
+    public async Task GetPullRequestThreadsAsync_WithSystemThreadsExcluded_KeepsAThreadThatMixesCommentTypes()
+    {
+        const string json =
+            """
+            {
+              "value": [
+                {
+                  "id": 1,
+                  "comments": [ { "id": 1, "commentType": "system" }, { "id": 2, "commentType": "text" } ]
+                },
+                { "id": 2, "comments": [] },
+                { "id": 3 }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var threads = await client.GetPullRequestThreadsAsync(
+            "WebApp",
+            7,
+            true,
+            ResponseLimits.DefaultListTop,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal([1, 2, 3], threads.Items.Select(thread => thread.Id));
+    }
+
+    private static string ThreadsJson(params string[] commentTypes)
+    {
+        var threads = commentTypes.Select((commentType, index) =>
+            $$"""{ "id": {{index + 1}}, "status": "active", "comments": [ { "id": 1, "content": "c{{index + 1}}", "commentType": "{{commentType}}" } ] }"""
+        );
+        return $$"""{ "count": {{commentTypes.Length}}, "value": [ {{string.Join(", ", threads)}} ] }""";
     }
 
     [Fact]

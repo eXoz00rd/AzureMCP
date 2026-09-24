@@ -86,10 +86,14 @@ public sealed class PullRequestTools
     }
 
     [McpServerTool(Name = "get_pull_request_changes", ReadOnly = true, UseStructuredContent = true)]
-    [Description("Lists the files changed in a pull request, based on its latest iteration.")]
-    public Task<IReadOnlyList<PullRequestChange>> GetPullRequestChangesAsync(
+    [Description(
+        "Lists the files changed in a pull request, based on its latest iteration. The result reports whether it was truncated, so raise the limit when it was."
+    )]
+    public Task<LimitedList<PullRequestChange>> GetPullRequestChangesAsync(
         [Description("Repository name or id.")] string repository,
         [Description("Pull request id.")] int pullRequestId,
+        [Description("Maximum number of changed files to return. Defaults to 25. Valid range 1-1000.")]
+        int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project = null,
         CancellationToken cancellationToken = default)
@@ -97,16 +101,25 @@ public sealed class PullRequestTools
         return _client.GetPullRequestChangesAsync(
             repository,
             pullRequestId,
+            ResponseLimits.ResolveTop(top),
             EffectiveProject(project),
             cancellationToken
         );
     }
 
     [McpServerTool(Name = "list_pull_request_threads", ReadOnly = true, UseStructuredContent = true)]
-    [Description("Lists the comment threads of a pull request, including file context and authors.")]
-    public Task<IReadOnlyList<PullRequestThread>> ListPullRequestThreadsAsync(
+    [Description(
+        "Lists the comment threads of a pull request, including file context and authors. The result reports whether it was truncated, so raise the limit when it was."
+    )]
+    public Task<LimitedList<PullRequestThread>> ListPullRequestThreadsAsync(
         [Description("Repository name or id.")] string repository,
         [Description("Pull request id.")] int pullRequestId,
+        [Description(
+            "Set to true to leave out the threads the server wrote itself, such as vote and policy notices, and keep only what people wrote."
+        )]
+        bool? excludeSystemThreads = null,
+        [Description("Maximum number of threads to return. Defaults to 25. Valid range 1-1000.")]
+        int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project = null,
         CancellationToken cancellationToken = default)
@@ -114,6 +127,8 @@ public sealed class PullRequestTools
         return _client.GetPullRequestThreadsAsync(
             repository,
             pullRequestId,
+            excludeSystemThreads ?? false,
+            ResponseLimits.ResolveTop(top),
             EffectiveProject(project),
             cancellationToken
         );

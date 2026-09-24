@@ -149,4 +149,95 @@ public sealed class PullRequestToolsTests : ToolTestsBase
 
         Assert.Contains("artifact link cannot be built", exception.Message);
     }
+
+    [Fact]
+    public async Task GetPullRequestChangesAsync_WithoutTop_AsksForTheDefaultAndOneMore()
+    {
+        using var iterations = JsonResponse("""{ "count": 1, "value": [ { "id": 3 } ] }""");
+        using var changes = JsonResponse("""{ "changeEntries": [] }""");
+        var harness = CreateHarness("FallbackProject", iterations, changes);
+        var tools = new PullRequestTools(harness.Client, harness.Options);
+
+        var result = await tools.GetPullRequestChangesAsync("WebApp", 7, null, null, TestContext.Current.CancellationToken);
+
+        Assert.Empty(result.Items);
+        Assert.False(result.Truncated);
+        Assert.Contains($"/iterations/3/changes?$top={ResponseLimits.DefaultListTop + 1}", harness.Handler.Requests[1].RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task ListPullRequestThreadsAsync_WithoutArguments_ReturnsTheDefaultNumberOfThreads()
+    {
+        var threads = string.Join(", ", Enumerable.Range(1, ResponseLimits.DefaultListTop + 1).Select(n => $$"""{ "id": {{n}} }"""));
+        using var response = JsonResponse($$"""{ "value": [ {{threads}} ] }""");
+        var harness = CreateHarness("FallbackProject", response);
+        var tools = new PullRequestTools(harness.Client, harness.Options);
+
+        var result = await tools.ListPullRequestThreadsAsync("WebApp", 7, null, null, null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ResponseLimits.DefaultListTop, result.Items.Count);
+        Assert.True(result.Truncated);
+        Assert.Contains("/FallbackProject/_apis/git/repositories/WebApp/pullRequests/7/threads", harness.RequestUri);
+    }
+
+    [Fact]
+    public async Task ListPullRequestThreadsAsync_WithoutExcludeSystemThreads_KeepsSystemThreads()
+    {
+        using var response = JsonResponse(
+            """{ "value": [ { "id": 1, "comments": [ { "id": 1, "commentType": "system" } ] } ] }"""
+        );
+        var harness = CreateHarness("FallbackProject", response);
+        var tools = new PullRequestTools(harness.Client, harness.Options);
+
+        var result = await tools.ListPullRequestThreadsAsync("WebApp", 7, null, null, null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, Assert.Single(result.Items).Id);
+    }
+
+    [Fact]
+    public async Task ListPullRequestThreadsAsync_WithExcludeSystemThreads_DropsSystemThreads()
+    {
+        using var response = JsonResponse(
+            """{ "value": [ { "id": 1, "comments": [ { "id": 1, "commentType": "system" } ] } ] }"""
+        );
+        var harness = CreateHarness("FallbackProject", response);
+        var tools = new PullRequestTools(harness.Client, harness.Options);
+
+        var result = await tools.ListPullRequestThreadsAsync("WebApp", 7, true, null, null, TestContext.Current.CancellationToken);
+
+        Assert.Empty(result.Items);
+        Assert.False(result.Truncated);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(ResponseLimits.MaxTop + 1)]
+    public async Task GetPullRequestChangesAsync_WithInvalidTop_FailsBeforeSendingRequest(int top)
+    {
+        var harness = CreateHarness("FallbackProject");
+        var tools = new PullRequestTools(harness.Client, harness.Options);
+
+        await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => tools.GetPullRequestChangesAsync("WebApp", 7, top, null, TestContext.Current.CancellationToken)
+        );
+
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(ResponseLimits.MaxTop + 1)]
+    public async Task ListPullRequestThreadsAsync_WithInvalidTop_FailsBeforeSendingRequest(int top)
+    {
+        var harness = CreateHarness("FallbackProject");
+        var tools = new PullRequestTools(harness.Client, harness.Options);
+
+        await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => tools.ListPullRequestThreadsAsync("WebApp", 7, null, top, null, TestContext.Current.CancellationToken)
+        );
+
+        Assert.Empty(harness.Handler.Requests);
+    }
 }
