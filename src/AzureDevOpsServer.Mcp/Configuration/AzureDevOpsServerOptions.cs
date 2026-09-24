@@ -21,6 +21,7 @@ public sealed class AzureDevOpsServerOptions
     public const string HttpTokenVariable = "ADOS_HTTP_TOKEN";
     public const string HttpAllowAnonymousVariable = "ADOS_HTTP_ALLOW_ANONYMOUS";
     public const string HttpAllowedOriginsVariable = "ADOS_HTTP_ALLOWED_ORIGINS";
+    public const string HttpServePluginVariable = "ADOS_HTTP_SERVE_PLUGIN";
     public const string DefaultApiVersion = "7.0";
     public const string DefaultWorkItemCommentsApiVersion = "7.0-preview.3";
 
@@ -64,6 +65,8 @@ public sealed class AzureDevOpsServerOptions
 
     public string? HttpAllowedOrigins { get; set; }
 
+    public bool HttpServePlugin { get; set; } = true;
+
     public void LoadFromEnvironment()
     {
         CollectionUrl = Environment.GetEnvironmentVariable(CollectionUrlVariable) ?? string.Empty;
@@ -85,6 +88,7 @@ public sealed class AzureDevOpsServerOptions
         HttpToken = Environment.GetEnvironmentVariable(HttpTokenVariable);
         HttpAllowAnonymous = ParseBoolean(Environment.GetEnvironmentVariable(HttpAllowAnonymousVariable));
         HttpAllowedOrigins = Environment.GetEnvironmentVariable(HttpAllowedOriginsVariable);
+        HttpServePlugin = !ParseFalse(Environment.GetEnvironmentVariable(HttpServePluginVariable));
     }
 
     private static bool ParseBoolean(string? value)
@@ -93,6 +97,14 @@ public sealed class AzureDevOpsServerOptions
             (value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                 value.Equals("1", StringComparison.Ordinal) ||
                 value.Equals("yes", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ParseFalse(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value) &&
+            (value.Equals("false", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("0", StringComparison.Ordinal) ||
+                value.Equals("no", StringComparison.OrdinalIgnoreCase));
     }
 
     public string ApiVersionFor(ApiArea area)
