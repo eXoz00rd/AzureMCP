@@ -258,21 +258,28 @@ Generate the bearer token into a file only you can read, so it never appears on 
 (umask 077 && printf 'ADOS_HTTP_TOKEN=%s\n' "$(openssl rand -hex 32)" > azuremcp.env)
 ```
 
-Run the server on the Docker network Open WebUI already uses, and publish no port:
+Give the server and Open WebUI a network of their own. Docker's default `bridge` network, where a plain `docker run` of Open WebUI lands, does not resolve container names, so Open WebUI could not find `azuremcp` there:
 
 ```bash
-docker run --detach --name azuremcp --network <open-webui-network> --read-only --tmpfs /tmp \
+docker network create azuremcp
+docker network connect azuremcp <open-webui-container>
+```
+
+Run the server on that network, and publish no port:
+
+```bash
+docker run --detach --name azuremcp --network azuremcp --read-only --tmpfs /tmp \
   --env ADOS_COLLECTION_URL=https://devops.example.local/DefaultCollection \
   --env-file azuremcp.env \
   ghcr.io/exoz00rd/azuremcp:<version>
 ```
 
-Open WebUI then reaches it at `http://azuremcp:8080/mcp` with the token from `azuremcp.env`, and nothing outside that network can connect — which matters, because the PAT travels in every request. `docker inspect <open-webui-container> --format '{{json .NetworkSettings.Networks}}'` shows the network's name. To try the server from the host alone, add `--publish 127.0.0.1:8080:8080` and use `http://127.0.0.1:8080/mcp`.
+Open WebUI then reaches it at `http://azuremcp:8080/mcp` with the token from `azuremcp.env`, and nothing outside that network can connect — which matters, because the PAT travels in every request. When Open WebUI runs under Docker Compose, add the server as a service of the same project instead: Compose networks resolve service names. To try the server from the host alone, add `--publish 127.0.0.1:8080:8080` and use `http://127.0.0.1:8080/mcp`.
 
 When Azure DevOps Server uses a certificate from an internal certificate authority, mount the authority's PEM and add its directory to the trust store. The public roots stay trusted:
 
 ```bash
-docker run --detach --name azuremcp --network <open-webui-network> --read-only --tmpfs /tmp \
+docker run --detach --name azuremcp --network azuremcp --read-only --tmpfs /tmp \
   --env ADOS_COLLECTION_URL=https://devops.example.local/DefaultCollection \
   --env-file azuremcp.env \
   --volume "$PWD/company-ca.crt:/etc/azuremcp/ca/ca.crt:ro" \
@@ -329,9 +336,9 @@ cosign verify ghcr.io/exoz00rd/azuremcp:<version> --certificate-oidc-issuer http
 
 ### Troubleshooting HTTP
 
-- **"The AzureMCP server rejected the plugin's token"** — the plugin's `server_token` differs from the server's `ADOS_HTTP_TOKEN`
+- **"The AzureMCP server rejected the plugin's token"** — the plugin's `server_token` differs from the AzureMCP server's `ADOS_HTTP_TOKEN`, often by a character pasted along with it. The users' PATs play no part
 - **"This request carries no Azure DevOps PAT"** — the user has not entered a PAT in the plugin's valves, or a caller does not send `X-Azure-DevOps-Pat`
-- **"could not be reached"** from the plugin — `server_url` is wrong, or a network policy does not admit the Open WebUI pods
+- **"could not be reached"** from the plugin — `server_url` is wrong, Open WebUI and the server share no Docker network other than the default `bridge`, or a network policy does not admit the Open WebUI pods
 - **`415` or `405` instead of `401`** — the request was not a well-formed MCP request, so routing rejected it before choosing the endpoint; no MCP code ran
 - **The server exits at startup** — the message names the setting: a missing token, `ADOS_PAT` set over HTTP, anonymous access on a routable address, a path that is not absolute or is `/healthz`, or an address already in use
 

@@ -84,8 +84,9 @@ class Tools:
         cause = _innermost(error)
         if isinstance(cause, httpx.HTTPStatusError) and cause.response.status_code == 401:
             return (
-                "The AzureMCP server rejected the plugin's token: an administrator must set server_token "
-                "to the server's ADOS_HTTP_TOKEN."
+                "The AzureMCP server rejected the plugin's token. This is not about your PAT: an Open WebUI "
+                "administrator must set this tool's server_token valve to the ADOS_HTTP_TOKEN configured on "
+                "the AzureMCP server."
             )
         if isinstance(cause, httpx.TransportError):
             return f"The AzureMCP server at {self.valves.server_url} could not be reached: {_describe(cause)}"
