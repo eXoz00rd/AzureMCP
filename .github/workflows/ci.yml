@@ -212,10 +212,15 @@ jobs:
           # kind enforces NetworkPolicy, so the ready pods above also show that probes pass under an enforcing implementation.
           for attempt in 1 2 3; do docker pull --quiet curlimages/curl:8.22.0 && break; sleep 10; done
           kind load docker-image curlimages/curl:8.22.0 --name chart-testing
+          # Attaching races a container that answers in milliseconds, so each probe runs to completion and is read from its log.
           reach() {
-            kubectl run "$1" --rm --stdin --quiet --restart=Never --labels="$2" \
-              --image=curlimages/curl:8.22.0 --image-pull-policy=Never --command -- \
-              curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 http://azuremcp:8080/healthz || true
+            kubectl run "$1" --restart=Never --labels="$2" --image=curlimages/curl:8.22.0 --image-pull-policy=Never --command -- \
+              curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 http://azuremcp:8080/healthz > /dev/null
+            for attempt in $(seq 1 60); do
+              case "$(kubectl get pod "$1" --output jsonpath='{.status.phase}')" in Succeeded|Failed) break ;; esac
+              sleep 1
+            done
+            kubectl logs "$1"
           }
           allowed=$(reach from-open-webui app.kubernetes.io/name=open-webui)
           blocked=$(reach from-elsewhere app.kubernetes.io/name=something-else)
