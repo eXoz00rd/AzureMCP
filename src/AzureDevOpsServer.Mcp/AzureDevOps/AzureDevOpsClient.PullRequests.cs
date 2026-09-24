@@ -104,9 +104,10 @@ public sealed partial class AzureDevOpsClient
             throw new AzureDevOpsClientException("The create pull request response could not be parsed.");
     }
 
-    public async Task<IReadOnlyList<PullRequestChange>> GetPullRequestChangesAsync(
+    public async Task<LimitedList<PullRequestChange>> GetPullRequestChangesAsync(
         string repository,
         int pullRequestId,
+        int top,
         string? project,
         CancellationToken cancellationToken)
     {
@@ -126,11 +127,11 @@ public sealed partial class AzureDevOpsClient
         var latestIteration = iterations?.Value.MaxBy(iteration => iteration.Id);
         if (latestIteration is null)
         {
-            return [];
+            return new LimitedList<PullRequestChange>([], false);
         }
 
         using var changesResponse = await _httpClient.GetAsync(
-            $"{pullRequestPath}/iterations/{latestIteration.Id}/changes?api-version={ApiVersion(ApiArea.Git)}",
+            $"{pullRequestPath}/iterations/{latestIteration.Id}/changes?$top={top + 1}&api-version={ApiVersion(ApiArea.Git)}",
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken
         );
@@ -138,12 +139,14 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(changesResponse, cancellationToken);
 
         var changes = await changesResponse.Content.ReadFromJsonAsync<PullRequestIterationChanges>(cancellationToken);
-        return changes?.ChangeEntries ?? [];
+        return LimitTo(changes?.ChangeEntries ?? [], top);
     }
 
-    public async Task<IReadOnlyList<PullRequestThread>> GetPullRequestThreadsAsync(
+    public async Task<LimitedList<PullRequestThread>> GetPullRequestThreadsAsync(
         string repository,
         int pullRequestId,
+        bool excludeSystemThreads,
+        int top,
         string? project,
         CancellationToken cancellationToken)
     {
@@ -156,7 +159,17 @@ public sealed partial class AzureDevOpsClient
         await EnsureSuccessAsync(response, cancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ListResult<PullRequestThread>>(cancellationToken);
-        return result?.Value ?? [];
+        IReadOnlyList<PullRequestThread> threads = result?.Value ?? [];
+        // The threads endpoint takes no limit, so the cap is applied after the filter that decides what counts.
+        return LimitTo(excludeSystemThreads ? threads.Where(thread => !IsSystemThread(thread)).ToList() : threads, top);
+    }
+
+    // The server writes vote, policy, and reference-update notices itself, as threads whose comments
+    // are all of the system type; a thread with any comment a person wrote is a discussion.
+    private static bool IsSystemThread(PullRequestThread thread)
+    {
+        return thread.Comments is { Count: > 0 } comments &&
+            comments.All(comment => string.Equals(comment.CommentType, "system", StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<PullRequestThread> CreatePullRequestThreadAsync(

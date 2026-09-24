@@ -8,8 +8,8 @@ using Xunit;
 namespace AzureDevOpsServer.Mcp.Tests.EndToEnd;
 
 /// <summary>
-/// Calls the wiki read tools that bound their responses through a real stdio process, so their
-/// registration, their new parameters, and their truncation reporting are proven
+/// Calls the wiki and pull request read tools that bound their responses through a real stdio
+/// process, so their registration, their new parameters, and their truncation reporting are proven
 /// across the MCP boundary and not only through direct C# calls. The stub models large answers; it
 /// does not prove how a real Azure DevOps Server pages or filters them.
 /// </summary>
@@ -102,6 +102,95 @@ public sealed class BoundedReadToolsSmokeTests
         );
         Assert.True(invalid.IsError);
         Assert.Contains("must not be less than", JsonSerializer.Serialize(invalid));
+    }
+
+    [Fact]
+    public async Task PullRequestTools_OverStdio_BoundTheirResponsesAndReportTruncation()
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        cancellation.CancelAfter(TimeSpan.FromSeconds(30));
+        var cancellationToken = cancellation.Token;
+        await using var azureDevOps = new StubAzureDevOpsServer();
+        await using var client = await StartClientAsync(azureDevOps, cancellationToken);
+        var tools = await client.ListToolsAsync(cancellationToken: cancellationToken);
+
+        AssertOptionalParameters(tools, "get_pull_request_changes", "top");
+        AssertOptionalParameters(tools, "list_pull_request_threads", "top", "excludeSystemThreads");
+
+        var limitedChanges = await CallAsync(
+            client,
+            tools,
+            "get_pull_request_changes",
+            new Dictionary<string, object?>
+            {
+                ["repository"] = "WebApp",
+                ["pullRequestId"] = 7,
+                ["project"] = "Alpha",
+                ["top"] = 4
+            },
+            cancellationToken
+        );
+        Assert.True(limitedChanges.GetProperty("truncated").GetBoolean());
+        Assert.Equal(4, limitedChanges.GetProperty("items").GetArrayLength());
+        Assert.Contains(
+            azureDevOps.RequestTargets,
+            target => target.Contains("/iterations/1/changes", StringComparison.Ordinal) &&
+                target.Contains("$top=5", StringComparison.Ordinal)
+        );
+
+        var allChanges = await CallAsync(
+            client,
+            tools,
+            "get_pull_request_changes",
+            new Dictionary<string, object?>
+            {
+                ["repository"] = "WebApp",
+                ["pullRequestId"] = 7,
+                ["project"] = "Alpha",
+                ["top"] = 10
+            },
+            cancellationToken
+        );
+        Assert.False(allChanges.GetProperty("truncated").GetBoolean());
+        Assert.Equal(10, allChanges.GetProperty("items").GetArrayLength());
+
+        var limitedThreads = await CallAsync(
+            client,
+            tools,
+            "list_pull_request_threads",
+            new Dictionary<string, object?>
+            {
+                ["repository"] = "WebApp",
+                ["pullRequestId"] = 7,
+                ["project"] = "Alpha",
+                ["top"] = 2
+            },
+            cancellationToken
+        );
+        Assert.True(limitedThreads.GetProperty("truncated").GetBoolean());
+        Assert.Equal([1, 2], ThreadIds(limitedThreads));
+
+        var peopleThreads = await CallAsync(
+            client,
+            tools,
+            "list_pull_request_threads",
+            new Dictionary<string, object?>
+            {
+                ["repository"] = "WebApp",
+                ["pullRequestId"] = 7,
+                ["project"] = "Alpha",
+                ["excludeSystemThreads"] = true,
+                ["top"] = 10
+            },
+            cancellationToken
+        );
+        Assert.False(peopleThreads.GetProperty("truncated").GetBoolean());
+        Assert.Equal([2, 4, 6], ThreadIds(peopleThreads));
+    }
+
+    private static int[] ThreadIds(JsonElement threads)
+    {
+        return [.. threads.GetProperty("items").EnumerateArray().Select(thread => thread.GetProperty("id").GetInt32())];
     }
 
     private static async Task<McpClient> StartClientAsync(StubAzureDevOpsServer azureDevOps, CancellationToken cancellationToken)
