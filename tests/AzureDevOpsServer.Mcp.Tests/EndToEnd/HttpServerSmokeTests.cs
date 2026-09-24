@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.Configuration;
 using AzureDevOpsServer.Mcp.Tests.Infrastructure;
 using ModelContextProtocol.Client;
@@ -16,11 +17,12 @@ namespace AzureDevOpsServer.Mcp.Tests.EndToEnd;
 /// </summary>
 public sealed class HttpServerSmokeTests
 {
-    private const string PersonalAccessToken = "http-smoke-pat";
+    private const string AlicePersonalAccessToken = "http-smoke-pat-alice";
+    private const string BobPersonalAccessToken = "http-smoke-pat-bob";
     private const string HttpToken = "http-smoke-token-7f3a";
 
     [Fact]
-    public async Task Server_OverHttp_InitializesListsToolsAndCallsAReadTool()
+    public async Task Server_OverHttp_CallsAzureDevOpsWithEachCallersOwnPersonalAccessToken()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var azureDevOps = new StubAzureDevOpsServer();
@@ -29,7 +31,6 @@ public sealed class HttpServerSmokeTests
             new Dictionary<string, string>
             {
                 [AzureDevOpsServerOptions.CollectionUrlVariable] = azureDevOps.CollectionUrl,
-                [AzureDevOpsServerOptions.PersonalAccessTokenVariable] = PersonalAccessToken,
                 [AzureDevOpsServerOptions.TransportVariable] = "http",
                 [AzureDevOpsServerOptions.HttpTokenVariable] = HttpToken,
                 [AzureDevOpsServerOptions.LogLevelVariable] = "Trace"
@@ -49,61 +50,109 @@ public sealed class HttpServerSmokeTests
             Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
         }
 
-        await using (var client = await McpClient.CreateAsync(
-                         new HttpClientTransport(
-                             new HttpClientTransportOptions
-                             {
-                                 Endpoint = endpoint,
-                                 TransportMode = HttpTransportMode.StreamableHttp,
-                                 AdditionalHeaders = new Dictionary<string, string> { ["Authorization"] = $"Bearer {HttpToken}" }
-                             }
-                         ),
-                         cancellationToken: cancellationToken
-                     ))
+        await using (var alice = await ConnectAsync(endpoint, AlicePersonalAccessToken, cancellationToken))
         {
-            Assert.False(string.IsNullOrWhiteSpace(client.ServerInstructions));
+            Assert.False(string.IsNullOrWhiteSpace(alice.ServerInstructions));
 
-            var tools = await client.ListToolsAsync(cancellationToken: cancellationToken);
+            var tools = await alice.ListToolsAsync(cancellationToken: cancellationToken);
             var listProjects = Assert.Single(tools, tool => tool.Name == "list_projects");
             Assert.True(listProjects.ProtocolTool.Annotations?.ReadOnlyHint);
 
-            var result = await client.CallToolAsync("list_projects", cancellationToken: cancellationToken);
+            var result = await alice.CallToolAsync("list_projects", cancellationToken: cancellationToken);
             Assert.True(result.IsError is null or false, $"Expected a successful tool call, but IsError was {result.IsError}.");
             Assert.NotNull(result.StructuredContent);
             Assert.Contains("Alpha", result.StructuredContent.ToString());
         }
 
-        Assert.NotEmpty(azureDevOps.AuthorizationHeaders);
-        Assert.All(
-            azureDevOps.AuthorizationHeaders,
-            header => Assert.Equal(StubCredentialProvider.ExpectedAuthorization(PersonalAccessToken), header)
+        await using (var bob = await ConnectAsync(endpoint, BobPersonalAccessToken, cancellationToken))
+        {
+            var result = await bob.CallToolAsync("list_projects", cancellationToken: cancellationToken);
+            Assert.True(result.IsError is null or false, $"Expected a successful tool call, but IsError was {result.IsError}.");
+        }
+
+        await using (var nobody = await ConnectAsync(endpoint, personalAccessToken: null, cancellationToken))
+        {
+            var result = await nobody.CallToolAsync("list_projects", cancellationToken: cancellationToken);
+            Assert.True(result.IsError);
+            Assert.Contains(RequestCredentialProvider.HeaderName, System.Text.Json.JsonSerializer.Serialize(result.Content));
+
+            // A tool that never calls Azure DevOps needs no PAT at all.
+            var info = await nobody.CallToolAsync("server_info", cancellationToken: cancellationToken);
+            Assert.True(info.IsError is null or false, $"Expected server_info to succeed without a PAT, but IsError was {info.IsError}.");
+            Assert.Contains(azureDevOps.CollectionUrl, info.StructuredContent?.ToString());
+        }
+
+        // Each caller reached Azure DevOps as themselves, and the caller without a PAT never reached it at all.
+        Assert.Equal(
+            new[]
+            {
+                StubCredentialProvider.ExpectedAuthorization(AlicePersonalAccessToken),
+                StubCredentialProvider.ExpectedAuthorization(BobPersonalAccessToken)
+            },
+            azureDevOps.AuthorizationHeaders.Distinct()
         );
 
         await server.StopAsync();
         Assert.NotEmpty(server.StandardError);
-        Assert.DoesNotContain(server.StandardError, line => line.Contains(HttpToken, StringComparison.Ordinal));
-        Assert.DoesNotContain(server.StandardError, line => line.Contains(PersonalAccessToken, StringComparison.Ordinal));
+        foreach (var secret in new[] { HttpToken, AlicePersonalAccessToken, BobPersonalAccessToken })
+        {
+            Assert.DoesNotContain(server.StandardError, line => line.Contains(secret, StringComparison.Ordinal));
+        }
     }
 
     [Theory]
-    [InlineData("sse", "Valid values are: stdio, http.")]
-    [InlineData("http", AzureDevOpsServerOptions.HttpTokenVariable)]
-    public async Task Server_WithUnusableTransportSettings_RefusesToStart(string transport, string expectedMessage)
+    [InlineData("sse", false, false, "Valid values are: stdio, http.")]
+    [InlineData("http", false, false, AzureDevOpsServerOptions.HttpTokenVariable)]
+    [InlineData("http", true, true, "ADOS_PAT is not used when ADOS_TRANSPORT is http")]
+    public async Task Server_WithUnusableTransportSettings_RefusesToStart(
+        string transport,
+        bool withHttpToken,
+        bool withSharedPersonalAccessToken,
+        string expectedMessage)
     {
-        using var server = ServerProcess.Start(
-            new Dictionary<string, string>
-            {
-                [AzureDevOpsServerOptions.CollectionUrlVariable] = "https://devops.example.local/DefaultCollection",
-                [AzureDevOpsServerOptions.PersonalAccessTokenVariable] = PersonalAccessToken,
-                [AzureDevOpsServerOptions.TransportVariable] = transport,
-                [AzureDevOpsServerOptions.HttpUrlVariable] = $"http://127.0.0.1:{FreeLoopbackPort()}"
-            }
-        );
+        var environment = new Dictionary<string, string>
+        {
+            [AzureDevOpsServerOptions.CollectionUrlVariable] = "https://devops.example.local/DefaultCollection",
+            [AzureDevOpsServerOptions.TransportVariable] = transport,
+            [AzureDevOpsServerOptions.HttpUrlVariable] = $"http://127.0.0.1:{FreeLoopbackPort()}"
+        };
+        if (withHttpToken)
+        {
+            environment[AzureDevOpsServerOptions.HttpTokenVariable] = HttpToken;
+        }
+
+        if (withSharedPersonalAccessToken)
+        {
+            environment[AzureDevOpsServerOptions.PersonalAccessTokenVariable] = AlicePersonalAccessToken;
+        }
+
+        using var server = ServerProcess.Start(environment);
 
         var exitCode = await server.WaitForExitAsync(TestContext.Current.CancellationToken);
 
         Assert.NotEqual(0, exitCode);
         Assert.Contains(server.StandardError, line => line.Contains(expectedMessage, StringComparison.Ordinal));
+    }
+
+    private static Task<McpClient> ConnectAsync(Uri endpoint, string? personalAccessToken, CancellationToken cancellationToken)
+    {
+        var headers = new Dictionary<string, string> { ["Authorization"] = $"Bearer {HttpToken}" };
+        if (personalAccessToken is not null)
+        {
+            headers[RequestCredentialProvider.HeaderName] = personalAccessToken;
+        }
+
+        return McpClient.CreateAsync(
+            new HttpClientTransport(
+                new HttpClientTransportOptions
+                {
+                    Endpoint = endpoint,
+                    TransportMode = HttpTransportMode.StreamableHttp,
+                    AdditionalHeaders = headers
+                }
+            ),
+            cancellationToken: cancellationToken
+        );
     }
 
     private static int FreeLoopbackPort()

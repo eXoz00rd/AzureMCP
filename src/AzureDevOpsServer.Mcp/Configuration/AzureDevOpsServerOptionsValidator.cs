@@ -1,3 +1,4 @@
+using AzureDevOpsServer.Mcp.AzureDevOps;
 using Microsoft.Extensions.Options;
 
 namespace AzureDevOpsServer.Mcp.Configuration;
@@ -18,9 +19,20 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
             failures.Add($"{AzureDevOpsServerOptions.CollectionUrlVariable} must be an absolute http(s) URL.");
         }
 
-        if (string.IsNullOrWhiteSpace(options.PersonalAccessToken))
+        var overHttp = ServerTransports.TryResolve(options.Transport, out var transport) && transport == ServerTransport.Http;
+
+        if (!overHttp && string.IsNullOrWhiteSpace(options.PersonalAccessToken))
         {
             failures.Add($"{AzureDevOpsServerOptions.PersonalAccessTokenVariable} is required.");
+        }
+
+        if (overHttp && !string.IsNullOrWhiteSpace(options.PersonalAccessToken))
+        {
+            failures.Add(
+                $"{AzureDevOpsServerOptions.PersonalAccessTokenVariable} is not used when {AzureDevOpsServerOptions.TransportVariable} is http: " +
+                $"every request carries its caller's own PAT in the {RequestCredentialProvider.HeaderName} header. " +
+                $"Remove {AzureDevOpsServerOptions.PersonalAccessTokenVariable} so no request can fall back to a shared identity."
+            );
         }
 
         if (string.IsNullOrWhiteSpace(options.ApiVersion))
@@ -28,10 +40,7 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
             failures.Add($"{AzureDevOpsServerOptions.ApiVersionVariable} must not be empty when set.");
         }
 
-        if (ServerTransports.TryResolve(options.Transport, out var transport) &&
-            transport == ServerTransport.Http &&
-            string.IsNullOrWhiteSpace(options.HttpToken) &&
-            !options.HttpAllowAnonymous)
+        if (overHttp && string.IsNullOrWhiteSpace(options.HttpToken) && !options.HttpAllowAnonymous)
         {
             failures.Add(
                 $"{AzureDevOpsServerOptions.HttpTokenVariable} is required when {AzureDevOpsServerOptions.TransportVariable} is http. " +
@@ -39,8 +48,7 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
             );
         }
 
-        if (ServerTransports.TryResolve(options.Transport, out var anonymousTransport) &&
-            anonymousTransport == ServerTransport.Http &&
+        if (overHttp &&
             string.IsNullOrWhiteSpace(options.HttpToken) &&
             options.HttpAllowAnonymous &&
             !ListensOnLoopbackOnly(options.HttpUrl))

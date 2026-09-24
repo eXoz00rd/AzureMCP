@@ -31,7 +31,15 @@ public static class ServerConfiguration
                .Configure(options => options.LoadFromEnvironment())
                .ValidateOnStart();
 
-        builder.Services.AddSingleton<IAzureDevOpsCredentialProvider, ConfiguredCredentialProvider>();
+        if (ServerTransports.Resolve(startupOptions.Transport) == ServerTransport.Http)
+        {
+            builder.Services.AddHttpContextAccessor();
+            builder.Services.AddSingleton<IAzureDevOpsCredentialProvider, RequestCredentialProvider>();
+        }
+        else
+        {
+            builder.Services.AddSingleton<IAzureDevOpsCredentialProvider, ConfiguredCredentialProvider>();
+        }
 
         builder.Services
                .AddHttpClient<AzureDevOpsClient>((serviceProvider, httpClient) =>
