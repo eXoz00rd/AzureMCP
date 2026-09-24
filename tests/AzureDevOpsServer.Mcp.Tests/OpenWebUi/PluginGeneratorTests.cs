@@ -7,7 +7,7 @@ namespace AzureDevOpsServer.Mcp.Tests.OpenWebUi;
 
 public sealed class PluginGeneratorTests
 {
-    private static readonly PluginSettings Settings = new("1.2.3", "all", string.Empty, string.Empty);
+    private static readonly PluginSettings Settings = new("1.2.3", "all", string.Empty);
 
     [Fact]
     public void Generate_EmitsOneMethodPerRegisteredTool()
@@ -86,7 +86,7 @@ public sealed class PluginGeneratorTests
     [Fact]
     public void Generate_EscapesFrontmatterValuesAndKeepsThemOnOneLine()
     {
-        var plugin = PluginGenerator.Generate([], new PluginSettings("1.2.3", "a\"\"\"b\nc", string.Empty, string.Empty));
+        var plugin = PluginGenerator.Generate([], new PluginSettings("1.2.3", "a\"\"\"b\nc", string.Empty));
 
         Assert.Contains("Toolsets: a\\\"\\\"\\\"b c.\n", plugin);
         Assert.DoesNotContain("a\"\"\"b", plugin);
@@ -121,18 +121,25 @@ public sealed class PluginGeneratorTests
     }
 
     [Fact]
-    public void Generate_WithDownloadSettings_FillsValveDefaults()
+    public void Generate_WithServerUrl_FillsTheValveDefault()
     {
-        var sha256 = new string('a', 64);
+        var plugin = PluginGenerator.Generate([], new PluginSettings("1.2.3", "all", "http://azuremcp.tools.svc.cluster.local:8080/mcp"));
 
-        var plugin = PluginGenerator.Generate(
-            [],
-            new PluginSettings("1.2.3", "all", "https://artifacts.example/AzureDevOpsServer.Mcp", sha256)
-        );
-
-        Assert.Contains("default=\"https://artifacts.example/AzureDevOpsServer.Mcp\",", plugin);
-        Assert.Contains($"default=\"{sha256}\",", plugin);
+        Assert.Contains("default=\"http://azuremcp.tools.svc.cluster.local:8080/mcp\",", plugin);
         Assert.Contains("version: 1.2.3\n", plugin);
+    }
+
+    [Fact]
+    public void Generate_CallsTheServerOverHttpWithTheCallersPat()
+    {
+        var plugin = PluginGenerator.Generate([], Settings);
+
+        // The plugin must never start or download a server of its own any more.
+        Assert.Contains("streamablehttp_client(", plugin);
+        Assert.Contains("_PAT_HEADER = \"X-Azure-DevOps-Pat\"", plugin);
+        Assert.DoesNotContain("stdio_client", plugin);
+        Assert.DoesNotContain("CACHE_DIR", plugin);
+        Assert.DoesNotContain("%%", plugin);
     }
 
     private static string MethodSource(string plugin, string toolName)

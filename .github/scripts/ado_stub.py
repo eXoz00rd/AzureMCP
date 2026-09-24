@@ -1,5 +1,7 @@
 """HTTPS stand-in for an Azure DevOps Server collection, serving one project list."""
 
+import base64
+import hashlib
 import json
 import ssl
 import sys
@@ -14,13 +16,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
 
+        # Names the PAT it was called with, so tests can tell whose credential reached it without ever seeing it.
+        credentials = self.headers.get("Authorization", "")
+        pat = base64.b64decode(credentials[6:]).decode().split(":", 1)[-1] if credentials.startswith("Basic ") else ""
         body = json.dumps(
             {
                 "count": 1,
                 "value": [
                     {
                         "id": PROJECT_ID,
-                        "name": "Alpha",
+                        "name": f"Alpha seen with PAT {hashlib.sha256(pat.encode()).hexdigest()[:8]}",
                         "description": None,
                         "state": "wellFormed",
                         "url": f"https://{self.headers['Host']}/DefaultCollection/_apis/projects/{PROJECT_ID}",

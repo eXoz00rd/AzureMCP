@@ -72,21 +72,19 @@ jobs:
           name: nuget-package
           path: artifacts/*.nupkg
       # Exercises the release-only steps on every change so they cannot break unnoticed until a tag is pushed.
-      - name: Publish self-contained linux-x64 server
-        run: >-
-          dotnet publish src/AzureDevOpsServer.Mcp --configuration Release --runtime linux-x64
-          --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
-          -p:PackAsTool=false --output publish/linux-x64
       - name: Generate and compile the Open WebUI plugin
         run: |
-          sha=$(sha256sum publish/linux-x64/AzureDevOpsServer.Mcp | cut -d' ' -f1)
           dotnet run --project tools/OpenWebUiPluginGenerator --configuration Release --no-build -- \
-            --output azure_devops_openwebui.py \
-            --download-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/ci/AzureDevOpsServer.Mcp-linux-x64" \
-            --sha256 "$sha"
+            --output azure_devops_openwebui.py
           python3 -c "import sys; compile(open(sys.argv[1]).read(), sys.argv[1], 'exec')" azure_devops_openwebui.py
+      - name: Upload the Open WebUI plugin
+        uses: actions/upload-artifact@v7
+        with:
+          name: openwebui-plugin
+          path: azure_devops_openwebui.py
 
   container:
+    needs: build-and-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -157,6 +155,13 @@ jobs:
           .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8082/mcp --token ci-token --tool list_projects --expect-error --expect "TLS connection"
           # ...and mounting it keeps the system store, where the public roots live.
           .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8083/mcp --token ci-token --tool list_projects --expect Alpha
+      - uses: actions/download-artifact@v8
+        with:
+          name: openwebui-plugin
+      - name: Drive the generated plugin through the container, as Open WebUI would
+        run: >-
+          .venv/bin/python .github/scripts/plugin_check.py --plugin azure_devops_openwebui.py
+          --url http://127.0.0.1:8081/mcp --token ci-token
       - name: Container logs
         if: always()
         run: |

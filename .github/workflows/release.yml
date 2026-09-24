@@ -22,22 +22,11 @@ jobs:
         run: dotnet build AzureDevOpsServer.Mcp.slnx --configuration Release -p:Version=${{ env.VERSION }}
       - name: Test
         run: dotnet run --project tests/AzureDevOpsServer.Mcp.Tests --configuration Release --no-build
-      - name: Publish self-contained linux-x64 server
-        run: >-
-          dotnet publish src/AzureDevOpsServer.Mcp --configuration Release --runtime linux-x64
-          --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
-          -p:PackAsTool=false -p:Version=${{ env.VERSION }} --output publish/linux-x64
       - name: Generate Open WebUI plugin
         run: |
           mkdir -p release
-          asset=AzureDevOpsServer.Mcp-linux-x64
-          cp publish/linux-x64/AzureDevOpsServer.Mcp "release/$asset"
-          sha=$(sha256sum "release/$asset" | cut -d' ' -f1)
-          echo "$sha  $asset" > "release/$asset.sha256"
           dotnet run --project tools/OpenWebUiPluginGenerator --configuration Release --no-build -- \
-            --output release/azure_devops_openwebui.py \
-            --download-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$asset" \
-            --sha256 "$sha"
+            --output release/azure_devops_openwebui.py
           python3 -c "import sys; compile(open(sys.argv[1]).read(), sys.argv[1], 'exec')" release/azure_devops_openwebui.py
       - name: Pack
         run: dotnet pack src/AzureDevOpsServer.Mcp --configuration Release --no-build --output artifacts -p:Version=${{ env.VERSION }}

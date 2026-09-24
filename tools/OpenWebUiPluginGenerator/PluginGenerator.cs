@@ -9,7 +9,7 @@ using ModelContextProtocol.Server;
 
 namespace OpenWebUiPluginGenerator;
 
-internal sealed record PluginSettings(string Version, string Toolsets, string DownloadUrl, string Sha256);
+internal sealed record PluginSettings(string Version, string Toolsets, string ServerUrl);
 
 internal static partial class PluginGenerator
 {
@@ -38,8 +38,7 @@ internal static partial class PluginGenerator
         return ReadTemplate()
                .Replace("%%VERSION%%", FrontmatterValue(settings.Version))
                .Replace("%%TOOLSETS%%", FrontmatterValue(settings.Toolsets))
-               .Replace("%%DOWNLOAD_URL%%", PythonString(settings.DownloadUrl))
-               .Replace("%%SHA256%%", PythonString(settings.Sha256))
+               .Replace("%%SERVER_URL%%", PythonString(settings.ServerUrl))
                .Replace("%%TOOL_METHODS%%", string.Join("\n", tools.Select(GenerateMethod)).TrimEnd('\n'));
     }
 
