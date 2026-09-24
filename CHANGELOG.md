@@ -6,6 +6,30 @@ which also publishes to [NuGet.org](https://www.nuget.org/packages/AzureDevOpsSe
 
 ## [Unreleased]
 
+### Added
+- **Streamable HTTP transport** — `ADOS_TRANSPORT=http` serves MCP over a stateless HTTP endpoint behind a shared bearer token, so Open WebUI and other shared front ends can use the server. The guard follows the endpoint routing selects, rejects unknown browser origins, and allows anonymous access only on loopback ([#55](https://github.com/eXoz00rd/AzureMCP/pull/55))
+- **Each HTTP caller's own PAT** — over HTTP every request carries its caller's PAT in `X-Azure-DevOps-Pat`, so Azure DevOps attributes every comment, vote, and queued build to the person who asked. `ADOS_PAT` is refused over HTTP so no request can fall back to a shared identity ([#56](https://github.com/eXoz00rd/AzureMCP/pull/56))
+- **Health endpoint and container logging** — `/healthz` answers probes without a token, logs go to the ordinary console over HTTP, and an address that cannot be bound ends with one readable line ([#57](https://github.com/eXoz00rd/AzureMCP/pull/57))
+- **Container image** — `ghcr.io/exoz00rd/azuremcp` for `linux/amd64` and `linux/arm64` on the chiseled ASP.NET 10 runtime, non-root, signed with cosign, with a build provenance attestation and an SBOM ([#58](https://github.com/eXoz00rd/AzureMCP/pull/58))
+- **Helm chart** — `oci://ghcr.io/exoz00rd/charts/azuremcp` with a hardened pod, a `NetworkPolicy` admitting only Open WebUI, and an internal certificate authority from a ConfigMap that keeps the public roots ([#59](https://github.com/eXoz00rd/AzureMCP/pull/59))
+
+### Changed
+- **The Open WebUI plugin calls the server over HTTP** instead of downloading and starting it inside Open WebUI. Its valves are now the server URL, its token, and the timeout; the collection and certificate settings moved to the server. Releases no longer attach the self-contained linux-x64 server ([#60](https://github.com/eXoz00rd/AzureMCP/pull/60))
+- **The package needs the ASP.NET Core runtime** in every mode, stdio included. The .NET 10 SDK already ships it ([#55](https://github.com/eXoz00rd/AzureMCP/pull/55))
+
+## [0.1.3] — 2026-09-23
+
+### Added
+- **Open WebUI plugin** (`azure_devops_openwebui.py`) — generated from the tools this server registers; it downloads the self-contained linux-x64 server attached to the release, verifies its SHA-256, and starts it for each call with the calling user's own PAT ([#49](https://github.com/eXoz00rd/AzureMCP/pull/49), [#51](https://github.com/eXoz00rd/AzureMCP/pull/51))
+- **Support for an internal certificate authority** in the plugin — its PEM is merged with the container's system roots into the trust bundle handed to the server ([#52](https://github.com/eXoz00rd/AzureMCP/pull/52))
+
+### Changed
+- **A server that cannot be reached is explained instead of surfacing a raw socket or SSL failure.** An untrusted certificate is reported on the first attempt, because retrying it can only produce the same answer ([#53](https://github.com/eXoz00rd/AzureMCP/pull/53))
+
+62 tools.
+
+**Full changelog:** https://github.com/eXoz00rd/AzureMCP/compare/v0.1.2...v0.1.3
+
 ## [0.1.2] — 2026-09-14
 
 Eight changes since v0.1.1, all additive or defensive — no breaking changes.
