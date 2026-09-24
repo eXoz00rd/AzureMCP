@@ -58,14 +58,28 @@ public static class HttpServerConfiguration
             PluginPath,
             context =>
             {
-                var serverUrl = context.Request.Host.HasValue ?
-                    UriHelper.BuildAbsolute(context.Request.Scheme, context.Request.Host, context.Request.PathBase, options.HttpPath) :
-                    string.Empty;
-                var settings = PluginSettings.For(options.Toolsets, options.ReadOnly, serverUrl);
+                var settings = PluginSettings.For(options.Toolsets, options.ReadOnly, CallerFacingMcpUrl(context.Request, options.HttpPath));
 
                 context.Response.ContentType = "text/x-python; charset=utf-8";
                 return context.Response.WriteAsync(PluginGenerator.Generate(tools.Value, settings), context.RequestAborted);
             }
         );
+    }
+
+    // Behind a TLS-terminating proxy the request arrives as plain HTTP, and a plugin pointing there would send the token and PATs
+    // unencrypted. Trusting the forwarded headers is safe here because they only shape the answer to the caller who sent them.
+    private static string CallerFacingMcpUrl(HttpRequest request, string httpPath)
+    {
+        var forwardedProto = FirstForwardedValue(request, "X-Forwarded-Proto");
+        var scheme = forwardedProto is "http" or "https" ? forwardedProto : request.Scheme;
+        var forwardedHost = FirstForwardedValue(request, "X-Forwarded-Host");
+        var host = string.IsNullOrEmpty(forwardedHost) ? request.Host : new HostString(forwardedHost);
+
+        return host.HasValue ? UriHelper.BuildAbsolute(scheme, host, request.PathBase, httpPath) : string.Empty;
+    }
+
+    private static string? FirstForwardedValue(HttpRequest request, string header)
+    {
+        return request.Headers[header].ToString().Split(',')[0].Trim().ToLowerInvariant() is { Length: > 0 } value ? value : null;
     }
 }

@@ -29,6 +29,31 @@ public sealed class PluginEndpointTests
     }
 
     [Fact]
+    public async Task Plugin_BehindATlsTerminatingProxy_PointsAtTheAddressTheCallerUsed()
+    {
+        await using var server = await PluginServer.StartAsync(new AzureDevOpsServerOptions { HttpToken = Token });
+
+        using var response = await server.GetPluginAsync(
+            ("X-Forwarded-Proto", "https, http"),
+            ("X-Forwarded-Host", "azuremcp.example.local")
+        );
+        var plugin = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Contains("default=\"https://azuremcp.example.local/mcp\",", plugin);
+    }
+
+    [Fact]
+    public async Task Plugin_WithAnUnknownForwardedScheme_KeepsTheRequestScheme()
+    {
+        await using var server = await PluginServer.StartAsync(new AzureDevOpsServerOptions { HttpToken = Token });
+
+        using var response = await server.GetPluginAsync(("X-Forwarded-Proto", "javascript"));
+        var plugin = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Contains($"default=\"{server.McpEndpoint}\",", plugin);
+    }
+
+    [Fact]
     public async Task Plugin_OffersExactlyTheToolsTheServerLists()
     {
         await using var server = await PluginServer.StartAsync(
@@ -119,9 +144,15 @@ public sealed class PluginEndpointTests
             return new PluginServer(app, new Uri(app.Urls.First()), options.HttpPath);
         }
 
-        public Task<HttpResponseMessage> GetPluginAsync()
+        public Task<HttpResponseMessage> GetPluginAsync(params (string Name, string Value)[] headers)
         {
-            return _http.GetAsync(new Uri(BaseAddress, HttpServerConfiguration.PluginPath), TestContext.Current.CancellationToken);
+            var request = new HttpRequestMessage(HttpMethod.Get, new Uri(BaseAddress, HttpServerConfiguration.PluginPath));
+            foreach (var (name, value) in headers)
+            {
+                request.Headers.TryAddWithoutValidation(name, value);
+            }
+
+            return _http.SendAsync(request, TestContext.Current.CancellationToken);
         }
 
         public Task<McpClient> ConnectAsync()
