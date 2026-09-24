@@ -58,7 +58,7 @@ Ready-made workflows that chain the tools:
 
 ## Requirements
 
-- .NET 10 SDK
+- .NET 10 SDK, which includes the ASP.NET Core runtime the package needs in every mode — or the [container image](#docker), which needs neither
 - A reachable Azure DevOps Server (on-premises) collection URL
 - A PAT created in that collection, with the minimal scopes required for the tools you use
 
@@ -206,7 +206,7 @@ Try these prompts in Copilot agent mode and watch which tool gets called:
 | Variable | Required | Description |
 |---|---|---|
 | `ADOS_COLLECTION_URL` | yes | Full collection URL, e.g. `https://devops.example.local/DefaultCollection` |
-| `ADOS_PAT` | yes | Personal Access Token used for all REST calls |
+| `ADOS_PAT` | stdio only | Personal Access Token used for all REST calls over stdio. Over HTTP each request carries its caller's own PAT instead, and setting this variable stops the server from starting |
 | `ADOS_DEFAULT_PROJECT` | no | Default project used when a tool call does not specify one |
 | `ADOS_API_VERSION` | no | Override the REST API version for every area (defaults to `7.0`) |
 | `ADOS_API_VERSION_WIT` | no | REST API version for work item and query calls |
@@ -217,11 +217,132 @@ Try these prompts in Copilot agent mode and watch which tool gets called:
 | `ADOS_API_VERSION_WIT_COMMENTS` | no | REST API version for the work item comments API (defaults to `7.0-preview.3`) |
 | `ADOS_TOOLSETS` | no | Comma-separated toolsets to expose: `projects`, `workitems`, `queries`, `repositories`, `pullrequests`, `builds`, `releases`, `wiki`. All are enabled by default; `server_info` is always available |
 | `ADOS_READ_ONLY` | no | Set to `true` to expose only read-only tools; every create, update, and delete tool disappears from the tool list |
-| `ADOS_LOG_LEVEL` | no | Minimum level of logs written to stderr (defaults to `Warning`; use `Information` or `Debug` for diagnostics) |
+| `ADOS_LOG_LEVEL` | no | Minimum level of logs (defaults to `Warning`; use `Information` or `Debug` for diagnostics). Over stdio they go to stderr, over HTTP to the console |
+
+The variables for serving over HTTP are listed in [HTTP configuration](#http-configuration).
+
+## Running over HTTP
+
+For shared deployments — Open WebUI, containers, Kubernetes — the server can serve MCP over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#streamable-http) instead of stdio. It then holds no PAT of its own: every request carries the caller's own PAT, so Azure DevOps attributes every comment, vote, and queued build to the person who asked.
+
+```
+Open WebUI ── Bearer token + X-Azure-DevOps-Pat ──▶ AzureMCP (HTTP) ── caller's PAT ──▶ Azure DevOps Server
+```
+
+- **Transport** — `ADOS_TRANSPORT=http` serves a stateless Streamable HTTP endpoint. stdio stays the default, so Copilot, Claude Code, and every existing client are unaffected
+- **Access** — every request to the MCP endpoint must present `Authorization: Bearer <ADOS_HTTP_TOKEN>`, and one with a browser `Origin` outside `ADOS_HTTP_ALLOWED_ORIGINS` gets `403`. The exceptions: `/healthz` needs no token, `ADOS_HTTP_ALLOW_ANONYMOUS` lifts the token for loopback development, and a request that routing rejects before it chooses an endpoint — a wrong method or content type — gets `405` or `415` without reaching MCP
+- **Identity** — every request carries `X-Azure-DevOps-Pat: <the caller's PAT>`. Tools that never call Azure DevOps, such as `server_info`, work without it
+- **Health** — `GET /healthz` answers `200 Healthy` without a token, for liveness and readiness probes
+- **Scaling** — the endpoint keeps no sessions, so any number of replicas can run behind one service without affinity
+
+### HTTP configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `ADOS_TRANSPORT` | `stdio` | `stdio` or `http` |
+| `ADOS_HTTP_URL` | `http://127.0.0.1:8080` | Listen address. Loopback by default, so exposing the endpoint is always a deliberate choice; the container image sets `http://+:8080` |
+| `ADOS_HTTP_PATH` | `/mcp` | Endpoint path. Must start with `/` and cannot be `/healthz` |
+| `ADOS_HTTP_TOKEN` | — | Bearer token every request must present. Required over HTTP, except for loopback development with `ADOS_HTTP_ALLOW_ANONYMOUS` |
+| `ADOS_HTTP_ALLOW_ANONYMOUS` | `false` | Serve without a token for local development. Refused unless every listen address is loopback |
+| `ADOS_HTTP_ALLOWED_ORIGINS` | — | Comma-separated browser origins allowed to call the endpoint. Server-side callers such as Open WebUI send no `Origin` and are unaffected |
+
+`ADOS_COLLECTION_URL` and the API version, toolset, read-only, and log level variables from [Configuration](#configuration) apply as well. The server refuses to start over HTTP without a token, with `ADOS_PAT` set, or with anonymous access on a routable address.
+
+### Docker
+
+Every release publishes `ghcr.io/exoz00rd/azuremcp` for `linux/amd64` and `linux/arm64`, built on the chiseled ASP.NET 10 runtime: no shell, no package manager, non-root.
+
+Generate the bearer token into a file only you can read, so it never appears on a command line or in shell history:
+
+```bash
+(umask 077 && printf 'ADOS_HTTP_TOKEN=%s\n' "$(openssl rand -hex 32)" > azuremcp.env)
+```
+
+Run the server on the Docker network Open WebUI already uses, and publish no port:
+
+```bash
+docker run --detach --name azuremcp --network <open-webui-network> --read-only --tmpfs /tmp \
+  --env ADOS_COLLECTION_URL=https://devops.example.local/DefaultCollection \
+  --env-file azuremcp.env \
+  ghcr.io/exoz00rd/azuremcp:<version>
+```
+
+Open WebUI then reaches it at `http://azuremcp:8080/mcp` with the token from `azuremcp.env`, and nothing outside that network can connect — which matters, because the PAT travels in every request. `docker inspect <open-webui-container> --format '{{json .NetworkSettings.Networks}}'` shows the network's name. To try the server from the host alone, add `--publish 127.0.0.1:8080:8080` and use `http://127.0.0.1:8080/mcp`.
+
+When Azure DevOps Server uses a certificate from an internal certificate authority, mount the authority's PEM and add its directory to the trust store. The public roots stay trusted:
+
+```bash
+docker run --detach --name azuremcp --network <open-webui-network> --read-only --tmpfs /tmp \
+  --env ADOS_COLLECTION_URL=https://devops.example.local/DefaultCollection \
+  --env-file azuremcp.env \
+  --volume "$PWD/company-ca.crt:/etc/azuremcp/ca/ca.crt:ro" \
+  --env SSL_CERT_DIR=/etc/ssl/certs:/etc/azuremcp/ca \
+  ghcr.io/exoz00rd/azuremcp:<version>
+```
+
+### Kubernetes
+
+Every release publishes a Helm chart to `oci://ghcr.io/exoz00rd/charts/azuremcp`:
+
+```bash
+kubectl create secret generic azuremcp-token --from-file=token=<(printf %s "$(openssl rand -hex 32)")
+# Only when the Azure DevOps certificate comes from an internal certificate authority:
+kubectl create configmap company-ca --from-file=ca.crt=./company-ca.crt
+helm install azuremcp oci://ghcr.io/exoz00rd/charts/azuremcp --version <version> \
+  --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection \
+  --set http.tokenSecret.name=azuremcp-token \
+  --set caBundle.configMap=company-ca
+```
+
+The token is generated and handed over as a file, so it never appears in a command line; read it back for the Open WebUI plugin with `kubectl get secret azuremcp-token --output jsonpath='{.data.token}' | base64 --decode`. Leave out the ConfigMap and `caBundle.configMap` when the Azure DevOps certificate is publicly trusted. The chart runs two stateless replicas as non-root on a read-only root filesystem with no service account token, probes `/healthz`, exposes only a `ClusterIP` service, and adds a `NetworkPolicy` that admits pods labelled `app.kubernetes.io/name: open-webui` — adjust `networkPolicy.ingressFrom` to match your Open WebUI pods. Every setting is described in [`values.yaml`](charts/azuremcp/values.yaml).
+
+Pin the chart and image version and raise it deliberately, for example with Renovate: with `latest`, nodes can run different versions and there is nothing to roll back to. Organizations usually mirror the image into an internal registry, verify it there, and deploy from the mirror.
+
+### Open WebUI
+
+Open WebUI reaches the server through a tool plugin that keeps each user's PAT in Open WebUI's per-user valves and sends it with every request. Every release attaches `azure_devops_openwebui.py`, generated from the tools this server registers.
+
+1. As an administrator, open **Workspace → Tools → +** and paste the plugin, or use **Import From Link** with the release asset's URL, then save
+2. In the tool's **Valves**, set `server_url` — for example `http://azuremcp.<namespace>.svc.cluster.local:8080/mcp` — and `server_token` to the value of `ADOS_HTTP_TOKEN`
+3. Grant access to the users or groups that should see the tool
+4. Each user opens **Integrations → Tools → Valves** in a chat and enters their own PAT
+
+Open WebUI stores valve values in its database in plain text unless `ENABLE_VALVE_ENCRYPTION=true` is set together with a pinned `WEBUI_SECRET_KEY`; enable both before rolling out. The plugin is tested with the `mcp` 1.27.2 client that Open WebUI 0.11.3 ships. The model has to support tool calling; for one that does not, set **Function Calling** to **Legacy** in the model's advanced parameters.
+
+To expose fewer tools, or to fill in the server URL in advance, generate the plugin from source:
+
+```bash
+dotnet run --project tools/OpenWebUiPluginGenerator -- --output azure_devops_openwebui.py --toolsets projects,workitems --read-only --server-url http://azuremcp.tools.svc.cluster.local:8080/mcp
+```
+
+### Verifying the image
+
+Every image is signed with cosign keyless signing and carries a GitHub build provenance attestation, an SBOM, and BuildKit provenance, so you can check that it was built by this repository's release workflow before deploying it:
+
+```bash
+gh attestation verify oci://ghcr.io/exoz00rd/azuremcp:<version> --repo eXoz00rd/AzureMCP
+```
+
+```bash
+cosign verify ghcr.io/exoz00rd/azuremcp:<version> --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github.com/eXoz00rd/AzureMCP/.github/workflows/release.yml@refs/tags/v'
+```
+
+### Troubleshooting HTTP
+
+- **"The AzureMCP server rejected the plugin's token"** — the plugin's `server_token` differs from the server's `ADOS_HTTP_TOKEN`
+- **"This request carries no Azure DevOps PAT"** — the user has not entered a PAT in the plugin's valves, or a caller does not send `X-Azure-DevOps-Pat`
+- **"could not be reached"** from the plugin — `server_url` is wrong, or a network policy does not admit the Open WebUI pods
+- **`415` or `405` instead of `401`** — the request was not a well-formed MCP request, so routing rejected it before choosing the endpoint; no MCP code ran
+- **The server exits at startup** — the message names the setting: a missing token, `ADOS_PAT` set over HTTP, anonymous access on a routable address, a path that is not absolute or is `/healthz`, or an address already in use
 
 ## Security
 
-- The PAT is read **only** from environment variables — never from command-line arguments, committed configuration files, or source code
+- Over stdio, the PAT is read **only** from environment variables — never from command-line arguments, committed configuration files, or source code
+- Over HTTP, the server keeps no PAT: each request carries its caller's own in `X-Azure-DevOps-Pat`, and `ADOS_PAT` is refused so no request can fall back to a shared identity
+- The HTTP endpoint requires a bearer token, compared in constant time. The access guard runs on the endpoint that routing has selected, so no spelling of the path reaches MCP without it, and anonymous access is allowed only on loopback
+- Keep the HTTP endpoint on a private network — a Docker network or the chart's `NetworkPolicy` — because a PAT crosses it with every request
+- Neither the PAT nor the bearer token is ever logged, at any log level
+- Container images are signed and attested; [verify them](#verifying-the-image) before deploying
 - No secrets are ever stored in this repository
 - Failed authentication (including TFS sign-in page responses with status 203) surfaces a clear error instead of confusing parse failures
 - Use a PAT with the minimal scopes needed and a short expiration date
@@ -251,7 +372,7 @@ Releases are published to NuGet.org by the [release workflow](.github/workflows/
    git push origin v0.1.0-preview.2
    ```
 
-3. The workflow builds, tests, packs with the version taken from the tag (also synced into `.mcp/server.json`), and pushes the package to NuGet.org
+3. The workflow builds, tests, packs with the version taken from the tag (also synced into `.mcp/server.json`), and pushes the package to NuGet.org. It then builds the multi-architecture container image, signs and attests it, pushes it and the Helm chart to GHCR, and attaches the Open WebUI plugin to the GitHub release
 
 ## Changelog
 
