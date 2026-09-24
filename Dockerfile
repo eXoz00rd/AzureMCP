@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # The build stage runs natively on the build machine and cross-compiles for each target architecture.
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH
