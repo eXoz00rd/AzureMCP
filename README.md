@@ -341,7 +341,7 @@ cosign verify ghcr.io/exoz00rd/azuremcp:<version> --certificate-oidc-issuer http
 - **"This request carries no Azure DevOps PAT"** — the user has not entered a PAT in the plugin's valves, or a caller does not send `X-Azure-DevOps-Pat`
 - **"could not be reached"** from the plugin — `server_url` is wrong, Open WebUI and the server share no Docker network other than the default `bridge`, or a network policy does not admit the Open WebUI pods
 - **`415` or `405` instead of `401`** — the request was not a well-formed MCP request, so routing rejected it before choosing the endpoint; no MCP code ran
-- **The server exits at startup** — the message names the setting: a missing token, `ADOS_PAT` set over HTTP, anonymous access on a routable address, a path that is not absolute or is `/healthz`, or an address already in use
+- **The server exits at startup** — the message names the setting: a missing token, `ADOS_PAT` set over HTTP, anonymous access on a routable address, a path that is not absolute or is `/healthz` or the plugin's `/openwebui/azure_devops.py`, or an address already in use
 
 ## Security
 

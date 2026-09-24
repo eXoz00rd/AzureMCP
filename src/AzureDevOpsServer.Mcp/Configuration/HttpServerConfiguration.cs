@@ -26,6 +26,14 @@ public static class HttpServerConfiguration
             );
         }
 
+        if (options.HttpServePlugin && string.Equals(options.HttpPath.TrimEnd('/'), PluginPath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"{AzureDevOpsServerOptions.HttpPathVariable} must not be {PluginPath}, which serves the Open WebUI plugin. " +
+                $"Choose another path or set {AzureDevOpsServerOptions.HttpServePluginVariable}=false."
+            );
+        }
+
         // Routing runs first, so the guard protects whichever endpoint it picked, however the request spelled the path.
         // The health and plugin endpoints carry no guard metadata, so they are reachable without a token.
         app.UseRouting();

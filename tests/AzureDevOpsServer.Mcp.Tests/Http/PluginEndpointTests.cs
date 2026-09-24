@@ -62,6 +62,32 @@ public sealed class PluginEndpointTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("/openwebui/azure_devops.py")]
+    [InlineData("/OPENWEBUI/azure_devops.py/")]
+    public async Task McpPath_ThatWouldShareThePluginRoute_IsRejected(string httpPath)
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => PluginServer.StartAsync(new AzureDevOpsServerOptions { HttpToken = Token, HttpPath = httpPath })
+        );
+
+        Assert.Contains(AzureDevOpsServerOptions.HttpPathVariable, exception.Message);
+        Assert.Contains(AzureDevOpsServerOptions.HttpServePluginVariable, exception.Message);
+    }
+
+    [Fact]
+    public async Task McpPath_OnThePluginRoute_IsAllowedOnceThePluginIsNotServed()
+    {
+        await using var server = await PluginServer.StartAsync(
+            new AzureDevOpsServerOptions { HttpToken = Token, HttpPath = HttpServerConfiguration.PluginPath, HttpServePlugin = false }
+        );
+        await using var client = await server.ConnectAsync();
+
+        var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.NotEmpty(tools);
+    }
+
     private sealed class PluginServer : IAsyncDisposable
     {
         private readonly WebApplication _app;
