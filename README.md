@@ -252,14 +252,16 @@ Open WebUI ── Bearer token + X-Azure-DevOps-Pat ──▶ AzureMCP (HTTP) �
 
 Every release publishes `ghcr.io/exoz00rd/azuremcp` for `linux/amd64` and `linux/arm64`, built on the chiseled ASP.NET 10 runtime: no shell, no package manager, non-root.
 
+Run it on the Docker network Open WebUI already uses, and publish no port:
+
 ```bash
-docker run --detach --name azuremcp --read-only --tmpfs /tmp --publish 127.0.0.1:8080:8080 \
+docker run --detach --name azuremcp --network <open-webui-network> --read-only --tmpfs /tmp \
   --env ADOS_COLLECTION_URL=https://devops.example.local/DefaultCollection \
   --env ADOS_HTTP_TOKEN=<a long random token> \
   ghcr.io/exoz00rd/azuremcp:<version>
 ```
 
-Put the container on the same Docker network as Open WebUI and do not publish its port any further: the PAT travels in every request.
+Open WebUI then reaches it at `http://azuremcp:8080/mcp`, and nothing outside that network can connect — which matters, because the PAT travels in every request. `docker inspect <open-webui-container> --format '{{json .NetworkSettings.Networks}}'` shows the network's name. To try the server from the host alone, add `--publish 127.0.0.1:8080:8080` and use `http://127.0.0.1:8080/mcp`.
 
 When Azure DevOps Server uses a certificate from an internal certificate authority, mount the authority's PEM and add its directory to the trust store. The public roots stay trusted:
 
@@ -325,7 +327,7 @@ cosign verify ghcr.io/exoz00rd/azuremcp:<version> --certificate-oidc-issuer http
 
 - Over stdio, the PAT is read **only** from environment variables — never from command-line arguments, committed configuration files, or source code
 - Over HTTP, the server keeps no PAT: each request carries its caller's own in `X-Azure-DevOps-Pat`, and `ADOS_PAT` is refused so no request can fall back to a shared identity
-- The HTTP endpoint requires a bearer token, compared in constant time, and a guard bound to the endpoint routing selects; anonymous access is allowed only on loopback
+- The HTTP endpoint requires a bearer token, compared in constant time. The access guard runs on whichever endpoint routing has selected, so no spelling of the path reaches MCP without it, and anonymous access is allowed only on loopback
 - Keep the HTTP endpoint on a private network — a Docker network or the chart's `NetworkPolicy` — because a PAT crosses it with every request
 - Neither the PAT nor the bearer token is ever logged, at any log level
 - Container images are signed and attested; [verify them](#verifying-the-image) before deploying

@@ -7,7 +7,7 @@ which also publishes to [NuGet.org](https://www.nuget.org/packages/AzureDevOpsSe
 ## [Unreleased]
 
 ### Added
-- **Streamable HTTP transport** — `ADOS_TRANSPORT=http` serves MCP over a stateless HTTP endpoint behind a shared bearer token, so Open WebUI and other shared front ends can use the server. The guard follows the endpoint routing selects, rejects unknown browser origins, and allows anonymous access only on loopback ([#55](https://github.com/eXoz00rd/AzureMCP/pull/55))
+- **Streamable HTTP transport** — `ADOS_TRANSPORT=http` serves MCP over a stateless HTTP endpoint behind a shared bearer token, so Open WebUI and other shared front ends can use the server. The access guard runs on whichever endpoint routing has selected, rejects unknown browser origins, and allows anonymous access only on loopback ([#55](https://github.com/eXoz00rd/AzureMCP/pull/55))
 - **Each HTTP caller's own PAT** — over HTTP every request carries its caller's PAT in `X-Azure-DevOps-Pat`, so Azure DevOps attributes every comment, vote, and queued build to the person who asked. `ADOS_PAT` is refused over HTTP so no request can fall back to a shared identity ([#56](https://github.com/eXoz00rd/AzureMCP/pull/56))
 - **Health endpoint and container logging** — `/healthz` answers probes without a token, logs go to the ordinary console over HTTP, and an address that cannot be bound ends with one readable line ([#57](https://github.com/eXoz00rd/AzureMCP/pull/57))
 - **Container image** — `ghcr.io/exoz00rd/azuremcp` for `linux/amd64` and `linux/arm64` on the chiseled ASP.NET 10 runtime, non-root, signed with cosign, with a build provenance attestation and an SBOM ([#58](https://github.com/eXoz00rd/AzureMCP/pull/58))
