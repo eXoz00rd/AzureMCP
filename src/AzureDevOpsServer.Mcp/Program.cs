@@ -3,11 +3,22 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 var startupOptions = new AzureDevOpsServerOptions();
 startupOptions.LoadFromEnvironment();
 
-if (ServerTransports.Resolve(startupOptions.Transport) == ServerTransport.Http)
+ServerTransport transport;
+try
+{
+    transport = ServerTransports.Resolve(startupOptions.Transport);
+}
+catch (InvalidOperationException exception)
+{
+    return await RefuseToStartAsync(exception.Message);
+}
+
+if (transport == ServerTransport.Http)
 {
     var webBuilder = WebApplication.CreateSlimBuilder(args);
     webBuilder.WebHost.UseUrls(startupOptions.HttpUrl);
@@ -26,12 +37,30 @@ if (ServerTransports.Resolve(startupOptions.Transport) == ServerTransport.Http)
         await Console.Error.WriteLineAsync(exception.Message);
         return 1;
     }
+    catch (OptionsValidationException exception)
+    {
+        return await RefuseToStartAsync(string.Join(Environment.NewLine, exception.Failures));
+    }
 }
 else
 {
     var builder = Host.CreateApplicationBuilder(args);
     builder.AddAzureDevOpsMcpServer(startupOptions).WithStdioServerTransport();
-    await builder.Build().RunAsync();
+    try
+    {
+        await builder.Build().RunAsync();
+    }
+    catch (OptionsValidationException exception)
+    {
+        return await RefuseToStartAsync(string.Join(Environment.NewLine, exception.Failures));
+    }
 }
 
 return 0;
+
+// A setting that makes the server unsafe or unusable ends it with the reason and a plain exit code, not a crash.
+static async Task<int> RefuseToStartAsync(string reason)
+{
+    await Console.Error.WriteLineAsync(reason);
+    return 1;
+}

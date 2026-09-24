@@ -19,7 +19,7 @@ public sealed class HttpServerSmokeTests
 {
     private const string AlicePersonalAccessToken = "http-smoke-pat-alice";
     private const string BobPersonalAccessToken = "http-smoke-pat-bob";
-    private const string HttpToken = "http-smoke-token-7f3a";
+    private const string HttpToken = "http-smoke-token-7f3a0c19e2b84d6a95f1";
 
     [Fact]
     public async Task Server_OverHttp_CallsAzureDevOpsWithEachCallersOwnPersonalAccessToken()
@@ -236,12 +236,13 @@ public sealed class HttpServerSmokeTests
     }
 
     [Theory]
-    [InlineData("sse", false, false, "Valid values are: stdio, http.")]
-    [InlineData("http", false, false, AzureDevOpsServerOptions.HttpTokenVariable)]
-    [InlineData("http", true, true, "ADOS_PAT is not used when ADOS_TRANSPORT is http")]
+    [InlineData("sse", null, false, "Valid values are: stdio, http.")]
+    [InlineData("http", null, false, AzureDevOpsServerOptions.HttpTokenVariable)]
+    [InlineData("http", HttpToken, true, "ADOS_PAT is not used when ADOS_TRANSPORT is http")]
+    [InlineData("http", "token", false, "ADOS_HTTP_TOKEN must be at least 32 characters")]
     public async Task Server_WithUnusableTransportSettings_RefusesToStart(
         string transport,
-        bool withHttpToken,
+        string? httpToken,
         bool withSharedPersonalAccessToken,
         string expectedMessage)
     {
@@ -251,9 +252,9 @@ public sealed class HttpServerSmokeTests
             [AzureDevOpsServerOptions.TransportVariable] = transport,
             [AzureDevOpsServerOptions.HttpUrlVariable] = $"http://127.0.0.1:{FreeLoopbackPort()}"
         };
-        if (withHttpToken)
+        if (httpToken is not null)
         {
-            environment[AzureDevOpsServerOptions.HttpTokenVariable] = HttpToken;
+            environment[AzureDevOpsServerOptions.HttpTokenVariable] = httpToken;
         }
 
         if (withSharedPersonalAccessToken)
@@ -265,8 +266,9 @@ public sealed class HttpServerSmokeTests
 
         var exitCode = await server.WaitForExitAsync(TestContext.Current.CancellationToken);
 
-        Assert.NotEqual(0, exitCode);
-        Assert.Contains(server.StandardError, line => line.Contains(expectedMessage, StringComparison.Ordinal));
+        // A refusal is a deliberate exit with the reason as the last line, not a crash an orchestrator reports as one.
+        Assert.Equal(1, exitCode);
+        Assert.Contains(expectedMessage, server.StandardError.Last(), StringComparison.Ordinal);
     }
 
     private static Task<McpClient> ConnectAsync(Uri endpoint, string? personalAccessToken, CancellationToken cancellationToken)

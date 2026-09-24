@@ -5,6 +5,9 @@ namespace AzureDevOpsServer.Mcp.Configuration;
 
 public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDevOpsServerOptions>
 {
+    // The token is the only thing between the network and every caller's PAT, so it has to be a generated secret.
+    public const int MinimumHttpTokenLength = 32;
+
     public ValidateOptionsResult Validate(string? name, AzureDevOpsServerOptions options)
     {
         var failures = new List<string>();
@@ -45,6 +48,14 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
             failures.Add(
                 $"{AzureDevOpsServerOptions.HttpTokenVariable} is required when {AzureDevOpsServerOptions.TransportVariable} is http. " +
                 $"Set {AzureDevOpsServerOptions.HttpAllowAnonymousVariable}=true only for a loopback development endpoint."
+            );
+        }
+
+        if (overHttp && !string.IsNullOrWhiteSpace(options.HttpToken) && options.HttpToken.Length < MinimumHttpTokenLength)
+        {
+            failures.Add(
+                $"{AzureDevOpsServerOptions.HttpTokenVariable} must be at least {MinimumHttpTokenLength} characters long, because anyone who guesses it can call the server. " +
+                "Generate one, for example with: openssl rand -hex 32"
             );
         }
 

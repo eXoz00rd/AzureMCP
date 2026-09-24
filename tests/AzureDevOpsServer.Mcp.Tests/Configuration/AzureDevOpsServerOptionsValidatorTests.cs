@@ -109,6 +109,31 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
         Assert.Contains(AzureDevOpsServerOptions.HttpTokenVariable, result.FailureMessage);
     }
 
+    [Theory]
+    [InlineData("token")]
+    [InlineData("0123456789abcdef0123456789abcde")]
+    public void Validate_OverHttpWithGuessableToken_Fails(string token)
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpToken = token;
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Failed);
+        Assert.Contains($"{AzureDevOpsServerOptions.HttpTokenVariable} must be at least 32 characters", result.FailureMessage);
+    }
+
+    [Fact]
+    public void Validate_OverHttpWithTokenOfMinimumLength_Succeeds()
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpToken = new string('a', AzureDevOpsServerOptionsValidator.MinimumHttpTokenLength);
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Succeeded);
+    }
+
     [Fact]
     public void Validate_OverHttpWithSharedPersonalAccessToken_Fails()
     {
@@ -189,7 +214,7 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
         var options = CreateValidOptions();
         options.Transport = "http";
         options.PersonalAccessToken = string.Empty;
-        options.HttpToken = "shared-token";
+        options.HttpToken = "shared-token-0123456789abcdef0123456789";
         return options;
     }
 }
