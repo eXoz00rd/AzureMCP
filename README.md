@@ -230,7 +230,7 @@ Open WebUI ── Bearer token + X-Azure-DevOps-Pat ──▶ AzureMCP (HTTP) �
 ```
 
 - **Transport** — `ADOS_TRANSPORT=http` serves a stateless Streamable HTTP endpoint. stdio stays the default, so Copilot, Claude Code, and every existing client are unaffected
-- **Access** — every request to the MCP endpoint must present `Authorization: Bearer <ADOS_HTTP_TOKEN>`, and one with a browser `Origin` outside `ADOS_HTTP_ALLOWED_ORIGINS` gets `403`. The exceptions: `/healthz` needs no token, `ADOS_HTTP_ALLOW_ANONYMOUS` lifts the token for loopback development, and a request routing rejects before choosing the endpoint — a wrong method or content type — gets `405` or `415` without reaching MCP
+- **Access** — every request to the MCP endpoint must present `Authorization: Bearer <ADOS_HTTP_TOKEN>`, and one with a browser `Origin` outside `ADOS_HTTP_ALLOWED_ORIGINS` gets `403`. The exceptions: `/healthz` needs no token, `ADOS_HTTP_ALLOW_ANONYMOUS` lifts the token for loopback development, and a request that routing rejects before it chooses an endpoint — a wrong method or content type — gets `405` or `415` without reaching MCP
 - **Identity** — every request carries `X-Azure-DevOps-Pat: <the caller's PAT>`. Tools that never call Azure DevOps, such as `server_info`, work without it
 - **Health** — `GET /healthz` answers `200 Healthy` without a token, for liveness and readiness probes
 - **Scaling** — the endpoint keeps no sessions, so any number of replicas can run behind one service without affinity
@@ -338,7 +338,7 @@ cosign verify ghcr.io/exoz00rd/azuremcp:<version> --certificate-oidc-issuer http
 
 - Over stdio, the PAT is read **only** from environment variables — never from command-line arguments, committed configuration files, or source code
 - Over HTTP, the server keeps no PAT: each request carries its caller's own in `X-Azure-DevOps-Pat`, and `ADOS_PAT` is refused so no request can fall back to a shared identity
-- The HTTP endpoint requires a bearer token, compared in constant time. The access guard runs on whichever endpoint routing has selected, so no spelling of the path reaches MCP without it, and anonymous access is allowed only on loopback
+- The HTTP endpoint requires a bearer token, compared in constant time. The access guard runs on the endpoint that routing has selected, so no spelling of the path reaches MCP without it, and anonymous access is allowed only on loopback
 - Keep the HTTP endpoint on a private network — a Docker network or the chart's `NetworkPolicy` — because a PAT crosses it with every request
 - Neither the PAT nor the bearer token is ever logged, at any log level
 - Container images are signed and attested; [verify them](#verifying-the-image) before deploying
