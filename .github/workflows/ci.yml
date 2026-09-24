@@ -85,3 +85,58 @@ jobs:
             --download-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/ci/AzureDevOpsServer.Mcp-linux-x64" \
             --sha256 "$sha"
           python3 -c "import sys; compile(open(sys.argv[1]).read(), sys.argv[1], 'exec')" azure_devops_openwebui.py
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image
+        run: docker build --tag azuremcp:ci .
+      - name: Start the container read-only
+        run: >-
+          docker run --detach --name azuremcp --read-only --tmpfs /tmp
+          --publish 127.0.0.1:8080:8080
+          --env ADOS_COLLECTION_URL=https://devops.example.local/DefaultCollection
+          --env ADOS_HTTP_TOKEN=ci-token
+          azuremcp:ci
+      - name: Check the user and the HTTP surface
+        run: |
+          user=$(docker inspect --format '{{.Config.User}}' azuremcp:ci)
+          echo "Image user: $user"
+          test -n "$user" && test "$user" != root && test "$user" != 0
+          for attempt in $(seq 1 30); do
+            curl --fail --silent --output /dev/null http://127.0.0.1:8080/healthz && break
+            sleep 1
+          done
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/healthz)" = 200
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST --header 'Content-Type: application/json' --data '{}' http://127.0.0.1:8080/mcp)" = 401
+      - name: Talk MCP to the container with the Python client Open WebUI 0.11 uses
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet mcp==1.27.2
+          .venv/bin/python - <<'PY'
+          import asyncio
+
+          from mcp import ClientSession
+          from mcp.client.streamable_http import streamablehttp_client
+
+          HEADERS = {"Authorization": "Bearer ci-token", "X-Azure-DevOps-Pat": "ci-pat"}
+
+
+          async def main() -> None:
+              async with streamablehttp_client("http://127.0.0.1:8080/mcp", headers=HEADERS) as (read, write, _):
+                  async with ClientSession(read, write) as session:
+                      initialized = await session.initialize()
+                      assert initialized.instructions, "the server sent no instructions"
+                      tools = (await session.list_tools()).tools
+                      assert any(tool.name == "list_projects" for tool in tools), [tool.name for tool in tools]
+                      result = await session.call_tool("server_info", {})
+                      assert not result.isError, result
+                      print(f"{len(tools)} tools; server_info: {result.structuredContent}")
+
+
+          asyncio.run(main())
+          PY
+      - name: Container logs
+        if: always()
+        run: docker logs azuremcp

@@ -1,1 +1,5 @@
 * text=auto eol=crlf
+
+# Read inside Linux build containers, where a carriage return would end up in shell commands and ignore patterns.
+Dockerfile text eol=lf
+.dockerignore text eol=lf
