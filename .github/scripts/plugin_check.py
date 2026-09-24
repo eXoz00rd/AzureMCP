@@ -41,7 +41,9 @@ async def check(arguments: argparse.Namespace) -> None:
 
     tools.valves.server_token = "not-the-token"
     answer = await tools.list_projects(__user__=user(pats[0]))
-    assert "rejected the plugin's token" in answer, answer
+    # A model relays this to the user, so it must say whose token is wrong and that their PAT is not.
+    for phrase in ("rejected the plugin's token", "not about your PAT", "server_token", "on the AzureMCP server"):
+        assert phrase in answer, (phrase, answer)
     print("A missing PAT and a wrong token are both explained to the user")
 
 
