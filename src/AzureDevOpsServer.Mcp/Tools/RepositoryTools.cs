@@ -37,7 +37,7 @@ public sealed class RepositoryTools
     )]
     public Task<LimitedList<GitRef>> ListBranchesAsync(
         [Description("Repository name or id.")] string repository,
-        [Description("Maximum number of branches to return. Defaults to 100. Valid range 1-1000.")]
+        [Description("Maximum number of branches to return. Defaults to 25. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]
         string? project = null,
@@ -61,7 +61,7 @@ public sealed class RepositoryTools
         string path,
         [Description("Optional branch name.")] string? branch = null,
         [Description(
-            "Maximum number of characters to return. Defaults to 30000, valid range 1-1000000; the result reports whether it was truncated."
+            "Maximum number of characters to return. Defaults to 8000, valid range 1-1000000; the result reports whether it was truncated."
         )]
         int? maxChars = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT.")]

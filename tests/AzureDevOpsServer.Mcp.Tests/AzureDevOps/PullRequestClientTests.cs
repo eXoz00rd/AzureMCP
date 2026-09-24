@@ -44,7 +44,7 @@ public sealed class PullRequestClientTests : AzureDevOpsClientTestsBase
         Assert.Equal("refs/heads/develop", pullRequest.SourceRefName);
         Assert.Equal("Sebastian", pullRequest.CreatedBy!.DisplayName);
         Assert.EndsWith(
-            "Alpha/_apis/git/repositories/WebApp/pullrequests?searchCriteria.status=active&$top=101&api-version=7.0",
+            "Alpha/_apis/git/repositories/WebApp/pullrequests?searchCriteria.status=active&$top=26&api-version=7.0",
             Assert.Single(handler.Requests).RequestUri!.AbsoluteUri
         );
     }

@@ -44,7 +44,7 @@ Both can be combined, and an unknown toolset name fails at startup with the list
 
 The server also sends MCP `instructions` on connect: the default project, whether it runs read-only, and how to use the tools well (field lists for work items, timeline before logs, raising limits instead of assuming something is missing). Tools publish output schemas, so clients receive structured results rather than opaque JSON, and failures carry the Azure DevOps error message instead of the raw error envelope.
 
-Responses are bounded so a single call cannot flood an agent's context: build logs and file contents are capped (30 000 characters by default) and report their total length and whether they were truncated, binary files are detected instead of dumped, list tools take an explicit limit, and work item tools accept a field list instead of returning every field.
+Responses are bounded so a single call cannot flood an agent's context: build logs and file contents are capped (8 000 characters by default) and report their total length and whether they were truncated, binary files are detected instead of dumped, list tools take an explicit limit (branch, pull request, release approval, work item comment, and revision lists return 25 items by default, build, release, and commit lists 20), and work item tools accept a field list instead of returning every field.
 
 ## Prompts
 

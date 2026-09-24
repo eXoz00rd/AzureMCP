@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.Configuration;
 using AzureDevOpsServer.Mcp.Tools;
 using ModelContextProtocol.Server;
@@ -107,6 +108,52 @@ public sealed partial class ToolSchemaTests
         Assert.Empty(offenders);
     }
 
+    [Fact]
+    public void LimitParameters_StateTheDefaultTheServerAppliesToThatTool()
+    {
+        string[] limitNames = ["top", "maxChars", "maxItems", "depth"];
+        var offenders = new List<string>();
+
+        foreach (var toolType in Toolsets.Resolve(null))
+        {
+            foreach (var method in ToolMethods(toolType))
+            {
+                var tool = method.GetCustomAttribute<McpServerToolAttribute>()!.Name;
+                offenders.AddRange(
+                    method.GetParameters()
+                          .Where(parameter => limitNames.Contains(parameter.Name))
+                          .Where(parameter =>
+                          {
+                              var text = parameter.GetCustomAttribute<DescriptionAttribute>()?.Description ?? string.Empty;
+                              var stated = DefaultsToPattern().Match(text);
+                              return !stated.Success ||
+                                  int.Parse(stated.Groups[1].Value) != EffectiveDefault(tool, parameter.Name!);
+                          })
+                          .Select(parameter => $"{tool}.{parameter.Name}")
+                );
+            }
+        }
+
+        Assert.Empty(offenders);
+    }
+
+    private static int EffectiveDefault(string? tool, string parameter)
+    {
+        return parameter switch
+        {
+            "maxChars" => ResponseLimits.DefaultMaxChars,
+            "maxItems" => ResponseLimits.DefaultMaxItems,
+            "depth" => tool == "list_queries" ? ResponseLimits.DefaultQueryDepth : ResponseLimits.DefaultNodeDepth,
+            _ => tool switch
+            {
+                "list_builds" => ResponseLimits.DefaultBuildCount,
+                "list_releases" => ResponseLimits.DefaultReleaseCount,
+                "list_commits" => ResponseLimits.DefaultCommitCount,
+                _ => ResponseLimits.DefaultListTop
+            }
+        };
+    }
+
     private static IEnumerable<MethodInfo> ToolMethods(Type toolType)
     {
         return toolType
@@ -124,4 +171,7 @@ public sealed partial class ToolSchemaTests
 
     [GeneratedRegex(@"\bvalid range\b", RegexOptions.IgnoreCase)]
     private static partial Regex ValidRangePattern();
+
+    [GeneratedRegex(@"\bDefaults to (\d+)\b")]
+    private static partial Regex DefaultsToPattern();
 }

@@ -12,6 +12,20 @@ public sealed class ResponseLimitsTests
         Assert.Equal(ResponseLimits.DefaultBuildCount, ResponseLimits.ResolveTop(null, ResponseLimits.DefaultBuildCount));
     }
 
+    [Fact]
+    public void Defaults_FitASmallModelContextWindow()
+    {
+        Assert.Equal(25, ResponseLimits.ResolveTop(null));
+        Assert.Equal(8_000, ResponseLimits.ResolveMaxChars(null));
+    }
+
+    [Fact]
+    public void LoweringDefaults_KeepsTheMaximumsAvailableToCallers()
+    {
+        Assert.Equal(1_000, ResponseLimits.ResolveTop(1_000));
+        Assert.Equal(1_000_000, ResponseLimits.ResolveMaxChars(1_000_000));
+    }
+
     [Theory]
     [InlineData(ResponseLimits.MinTop)]
     [InlineData(ResponseLimits.MaxTop)]

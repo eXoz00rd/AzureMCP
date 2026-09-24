@@ -15,7 +15,7 @@ public sealed class RepositoryToolsTests : ToolTestsBase
         await tools.ListBranchesAsync("WebApp", null, null, TestContext.Current.CancellationToken);
 
         Assert.Contains("/FallbackProject/_apis/git/repositories/WebApp/refs", harness.RequestUri);
-        Assert.Contains("$top=101", harness.RequestUri);
+        Assert.Contains("$top=26", harness.RequestUri);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public sealed class RepositoryToolsTests : ToolTestsBase
             null,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(30_000, file.Content!.Length);
+        Assert.Equal(8_000, file.Content!.Length);
         Assert.True(file.Truncated);
         Assert.Equal(40_000, file.TotalChars);
     }
