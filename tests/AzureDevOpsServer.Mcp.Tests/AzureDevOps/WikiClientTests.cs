@@ -129,12 +129,18 @@ public sealed class WikiClientTests : AzureDevOpsClientTestsBase
         var page = await client.GetWikiPageAsync(
             "Alpha.wiki",
             "/Onboarding/Setup",
+            null,
+            null,
+            ResponseLimits.DefaultMaxChars,
             "Alpha",
             TestContext.Current.CancellationToken
         );
 
         Assert.Equal("/Onboarding/Setup", page.Path);
-        Assert.StartsWith("# Setup", page.Content);
+        Assert.Equal("# Setup\nInstall the SDK first.", page.Content);
+        Assert.Equal(30, page.TotalChars);
+        Assert.Equal(2, page.TotalLines);
+        Assert.False(page.Truncated);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("wikis/Alpha.wiki/pages", requestUri);
         Assert.Contains("path=%2FOnboarding%2FSetup", requestUri);
@@ -157,12 +163,166 @@ public sealed class WikiClientTests : AzureDevOpsClientTestsBase
         using var response = JsonResponse(json);
         var client = CreateClient(out var handler, response);
 
-        var root = await client.GetWikiPageTreeAsync("Alpha.wiki", "Alpha", TestContext.Current.CancellationToken);
+        var root = await client.GetWikiPageTreeAsync(
+            "Alpha.wiki",
+            ResponseLimits.DefaultListTop,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("/", root.Path);
+        Assert.Equal(3, root.TotalPages);
+        Assert.False(root.Truncated);
         Assert.Equal(2, root.SubPages!.Count);
         Assert.Equal("/Onboarding/Setup", Assert.Single(root.SubPages[0].SubPages!).Path);
         var requestUri = Assert.Single(handler.Requests).RequestUri!.AbsoluteUri;
         Assert.Contains("path=%2F&recursionLevel=full", requestUri);
+    }
+    [Fact]
+    public async Task GetWikiPageAsync_WhenContentExceedsMaxChars_ReturnsPrefixAndReportsTruncated()
+    {
+        using var response = JsonResponse("""{ "path": "/Big", "content": "0123456789ABCDEFGHIJ" }""");
+        var client = CreateClient(out _, response);
+
+        var page = await client.GetWikiPageAsync(
+            "Alpha.wiki",
+            "/Big",
+            null,
+            null,
+            10,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("0123456789", page.Content);
+        Assert.Equal(20, page.TotalChars);
+        Assert.True(page.Truncated);
+    }
+
+    [Fact]
+    public async Task GetWikiPageAsync_WhenContentEqualsMaxChars_IsNotTruncated()
+    {
+        using var response = JsonResponse("""{ "path": "/Exact", "content": "0123456789" }""");
+        var client = CreateClient(out _, response);
+
+        var page = await client.GetWikiPageAsync(
+            "Alpha.wiki",
+            "/Exact",
+            null,
+            null,
+            10,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("0123456789", page.Content);
+        Assert.Equal(10, page.TotalChars);
+        Assert.False(page.Truncated);
+    }
+
+    [Fact]
+    public async Task GetWikiPageAsync_WithLineRange_ReturnsThoseLinesAndTheWholePageLineCount()
+    {
+        using var response = JsonResponse("""{ "path": "/Lines", "content": "one\ntwo\nthree\nfour\nfive\n" }""");
+        var client = CreateClient(out _, response);
+
+        var page = await client.GetWikiPageAsync(
+            "Alpha.wiki",
+            "/Lines",
+            2,
+            3,
+            ResponseLimits.DefaultMaxChars,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("two\nthree\n", page.Content);
+        Assert.Equal(10, page.TotalChars);
+        Assert.Equal(5, page.TotalLines);
+        Assert.False(page.Truncated);
+    }
+
+    [Fact]
+    public async Task GetWikiPageAsync_WhenLineRangeExceedsMaxChars_ReportsTruncated()
+    {
+        using var response = JsonResponse("""{ "path": "/Lines", "content": "one\ntwo\nthree\nfour\n" }""");
+        var client = CreateClient(out _, response);
+
+        var page = await client.GetWikiPageAsync(
+            "Alpha.wiki",
+            "/Lines",
+            2,
+            null,
+            6,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal("two\nth", page.Content);
+        Assert.Equal(15, page.TotalChars);
+        Assert.True(page.Truncated);
+    }
+
+    [Fact]
+    public async Task GetWikiPageAsync_WithoutContent_ReturnsNoContent()
+    {
+        using var response = JsonResponse("""{ "path": "/Onboarding" }""");
+        var client = CreateClient(out _, response);
+
+        var page = await client.GetWikiPageAsync(
+            "Alpha.wiki",
+            "/Onboarding",
+            null,
+            null,
+            ResponseLimits.DefaultMaxChars,
+            "Alpha",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Null(page.Content);
+        Assert.Equal(0, page.TotalChars);
+        Assert.False(page.Truncated);
+    }
+
+    [Fact]
+    public async Task GetWikiPageTreeAsync_WhenTreeExceedsTop_KeepsPagesLevelByLevelAndReportsTruncated()
+    {
+        const string json =
+            """
+            {
+              "path": "/",
+              "subPages": [
+                { "path": "/A", "subPages": [ { "path": "/A/1" }, { "path": "/A/2" }, { "path": "/A/3" } ] },
+                { "path": "/B", "subPages": [ { "path": "/B/1" } ] },
+                { "path": "/C" }
+              ]
+            }
+            """;
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var tree = await client.GetWikiPageTreeAsync("Alpha.wiki", 4, "Alpha", TestContext.Current.CancellationToken);
+
+        Assert.True(tree.Truncated);
+        Assert.Equal(7, tree.TotalPages);
+        Assert.Equal(["/A", "/B", "/C"], tree.SubPages!.Select(page => page.Path));
+        Assert.Equal(["/A/1"], tree.SubPages![0].SubPages!.Select(page => page.Path));
+        Assert.Empty(tree.SubPages[1].SubPages!);
+        Assert.Null(tree.SubPages[2].SubPages);
+    }
+
+    [Fact]
+    public async Task GetWikiPageTreeAsync_WhenTreeHasExactlyTopPages_IsNotTruncated()
+    {
+        const string json =
+            """{ "path": "/", "subPages": [ { "path": "/A", "subPages": [ { "path": "/A/1" } ] }, { "path": "/B" } ] }""";
+        using var response = JsonResponse(json);
+        var client = CreateClient(out _, response);
+
+        var tree = await client.GetWikiPageTreeAsync("Alpha.wiki", 3, "Alpha", TestContext.Current.CancellationToken);
+
+        Assert.False(tree.Truncated);
+        Assert.Equal(3, tree.TotalPages);
+        Assert.Equal("/A/1", Assert.Single(tree.SubPages![0].SubPages!).Path);
     }
 }
