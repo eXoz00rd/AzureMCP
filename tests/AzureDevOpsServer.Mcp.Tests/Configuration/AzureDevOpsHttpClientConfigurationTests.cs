@@ -119,6 +119,86 @@ public sealed class AzureDevOpsHttpClientConfigurationTests
         );
     }
 
+    [Fact]
+    public async Task SilentServer_IsRetriedAndThenReportedAsATimeout()
+    {
+        var primary = new SilentHandler();
+        var services = new ServiceCollection();
+        services.AddSingleton<IAzureDevOpsCredentialProvider>(new StubCredentialProvider("pat"));
+        services
+            .AddHttpClient("test")
+            .ConfigurePrimaryHttpMessageHandler(() => primary)
+            .AddAzureDevOpsHandlers(options =>
+            {
+                options.Retry.Delay = TimeSpan.Zero;
+                options.Retry.UseJitter = false;
+                options.Retry.MaxRetryAttempts = 2;
+                options.AttemptTimeout.Timeout = TimeSpan.FromMilliseconds(100);
+            });
+        using var provider = services.BuildServiceProvider();
+        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("test");
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetAsync("https://devops.example.local/_apis/projects", TestContext.Current.CancellationToken)
+        );
+
+        // The timeout surfaces through the resilience pipeline as the exception diagnostics explain.
+        Assert.Equal(3, primary.Attempts);
+        Assert.Contains("https://devops.example.local did not answer within", exception.Message);
+    }
+
+    [Fact]
+    public async Task WebPageAnswer_IsReportedWithoutRetrying()
+    {
+        var primary = new WebPageHandler();
+        var services = new ServiceCollection();
+        services.AddSingleton<IAzureDevOpsCredentialProvider>(new StubCredentialProvider("pat"));
+        services
+            .AddHttpClient("test")
+            .ConfigurePrimaryHttpMessageHandler(() => primary)
+            .AddAzureDevOpsHandlers(options => options.Retry.Delay = TimeSpan.Zero);
+        using var provider = services.BuildServiceProvider();
+        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("test");
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetAsync("https://devops.example.local/_apis/projects", TestContext.Current.CancellationToken)
+        );
+
+        Assert.Equal(1, primary.Attempts);
+        Assert.Contains("with a web page instead of API data", exception.Message);
+    }
+
+    private sealed class SilentHandler : HttpMessageHandler
+    {
+        public int Attempts { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Attempts++;
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Unreachable: the delay only ends by cancellation.");
+        }
+    }
+
+    private sealed class WebPageHandler : HttpMessageHandler
+    {
+        public int Attempts { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Attempts++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("<html><body>Sign in</body></html>", System.Text.Encoding.UTF8, "text/html"),
+                RequestMessage = request
+            });
+        }
+    }
+
     private sealed class CountingThrowingHandler : HttpMessageHandler
     {
         private readonly Exception _exception;

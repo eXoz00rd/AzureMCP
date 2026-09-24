@@ -1,3 +1,4 @@
+using System.Globalization;
 using AzureDevOpsServer.Mcp.AzureDevOps;
 using Microsoft.Extensions.Options;
 
@@ -5,6 +6,9 @@ namespace AzureDevOpsServer.Mcp.Configuration;
 
 public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDevOpsServerOptions>
 {
+    // The token is the only thing between the network and every caller's PAT, so it has to be a generated secret.
+    public const int MinimumHttpTokenLength = 32;
+
     public ValidateOptionsResult Validate(string? name, AzureDevOpsServerOptions options)
     {
         var failures = new List<string>();
@@ -48,6 +52,23 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
             );
         }
 
+        // Measured after trimming, because the access guard compares the trimmed value.
+        if (overHttp && !string.IsNullOrWhiteSpace(options.HttpToken) && options.HttpToken.Trim().Length < MinimumHttpTokenLength)
+        {
+            failures.Add(
+                $"{AzureDevOpsServerOptions.HttpTokenVariable} must be at least {MinimumHttpTokenLength} characters long, because anyone who guesses it can call the server. " +
+                "Generate one, for example with: openssl rand -hex 32"
+            );
+        }
+
+        if (overHttp && UnusableAddress(options.HttpUrl) is { } address)
+        {
+            failures.Add(
+                $"{AzureDevOpsServerOptions.HttpUrlVariable} contains '{address}', which is not a plain http:// address with a host and a numeric port. " +
+                "Use addresses such as http://0.0.0.0:8080 or http://+:8080, separated by ';'; the server serves HTTP and leaves TLS to whatever runs in front of it."
+            );
+        }
+
         if (overHttp &&
             string.IsNullOrWhiteSpace(options.HttpToken) &&
             options.HttpAllowAnonymous &&
@@ -62,6 +83,50 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
         return failures.Count > 0 ?
             ValidateOptionsResult.Fail(failures) :
             ValidateOptionsResult.Success;
+    }
+
+    // Kestrel binds wildcard hosts such as + and * that Uri rejects, and binds port 80 when it cannot read a port,
+    // so each address is checked by the parts Kestrel uses rather than parsed as a Uri.
+    private static string? UnusableAddress(string urls)
+    {
+        var addresses = urls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (addresses.Length == 0)
+        {
+            // Kestrel would fall back to its own default address instead of the one this server documents.
+            return urls;
+        }
+
+        foreach (var address in addresses)
+        {
+            if (!address.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            {
+                return address;
+            }
+
+            var authority = address["http://".Length..].TrimEnd('/');
+            var portSeparator = authority.LastIndexOf(':');
+            var hasPort = portSeparator > authority.LastIndexOf(']');
+            var host = hasPort ? authority[..portSeparator] : authority;
+            var port = hasPort ? authority[(portSeparator + 1)..] : "80";
+
+            if (!IsBindableHost(host) ||
+                authority.Contains('/', StringComparison.Ordinal) ||
+                !int.TryParse(port, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ||
+                number > 65535)
+            {
+                return address;
+            }
+        }
+
+        return null;
+    }
+
+    // Kestrel's wildcards, a name or an IPv4 address, or an IPv6 address inside the brackets Kestrel requires.
+    private static bool IsBindableHost(string host)
+    {
+        return host is "+" or "*" ||
+            (host.StartsWith('[') && host.EndsWith(']') && Uri.CheckHostName(host[1..^1]) == UriHostNameType.IPv6) ||
+            Uri.CheckHostName(host) is UriHostNameType.Dns or UriHostNameType.IPv4;
     }
 
     // Kestrel accepts several addresses separated by ';', and each of them has to stay on this machine.

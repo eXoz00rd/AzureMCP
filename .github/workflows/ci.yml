@@ -99,7 +99,7 @@ jobs:
           docker run --detach --name azuremcp --read-only --tmpfs /tmp
           --publish 127.0.0.1:8080:8080
           --env ADOS_COLLECTION_URL=https://devops.example.local/DefaultCollection
-          --env ADOS_HTTP_TOKEN=ci-token
+          --env ADOS_HTTP_TOKEN=ci-token-5c1f0e7b9a2d4e68b3a7c0d9f1e2a4b6
           azuremcp:ci
       - name: Check the user and the HTTP surface
         run: |
@@ -126,7 +126,7 @@ jobs:
             exit 1
           fi
       - name: Talk MCP to the container
-        run: .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8080/mcp --token ci-token
+        run: .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8080/mcp --token ci-token-5c1f0e7b9a2d4e68b3a7c0d9f1e2a4b6
       - name: Serve stub collections over TLS from two certificate authorities
         run: |
           mkdir ca
@@ -150,7 +150,7 @@ jobs:
             local name=$1 port=$2 collection=$3 image=$4
             shift 4
             docker run --detach --name "azuremcp-$name" --add-host ado-stub:host-gateway --read-only --tmpfs /tmp \
-              --publish "127.0.0.1:$port:8080" --env ADOS_COLLECTION_URL="$collection" --env ADOS_HTTP_TOKEN=ci-token \
+              --publish "127.0.0.1:$port:8080" --env ADOS_COLLECTION_URL="$collection" --env ADOS_HTTP_TOKEN=ci-token-5c1f0e7b9a2d4e68b3a7c0d9f1e2a4b6 \
               "$@" "$image"
           }
           run with-ca 8081 https://ado-stub:8443/DefaultCollection azuremcp:ci "${mounted[@]}"
@@ -163,18 +163,18 @@ jobs:
             done
           done
           # The mounted authority is trusted...
-          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8081/mcp --token ci-token --tool list_projects --expect Alpha
+          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8081/mcp --token ci-token-5c1f0e7b9a2d4e68b3a7c0d9f1e2a4b6 --tool list_projects --expect Alpha
           # ...only because it was mounted...
-          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8082/mcp --token ci-token --tool list_projects --expect-error --expect "TLS connection"
+          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8082/mcp --token ci-token-5c1f0e7b9a2d4e68b3a7c0d9f1e2a4b6 --tool list_projects --expect-error --expect "TLS connection"
           # ...and mounting it keeps the system store, where the public roots live.
-          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8083/mcp --token ci-token --tool list_projects --expect Alpha
+          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8083/mcp --token ci-token-5c1f0e7b9a2d4e68b3a7c0d9f1e2a4b6 --tool list_projects --expect Alpha
       - uses: actions/download-artifact@v8
         with:
           name: openwebui-plugin
       - name: Drive the generated plugin through the container, as Open WebUI would
         run: >-
           .venv/bin/python .github/scripts/plugin_check.py --plugin azure_devops_openwebui.py
-          --url http://127.0.0.1:8081/mcp --token ci-token
+          --url http://127.0.0.1:8081/mcp --token ci-token-5c1f0e7b9a2d4e68b3a7c0d9f1e2a4b6
       - name: Container logs
         if: always()
         run: |
@@ -222,7 +222,7 @@ jobs:
           kind load docker-image azuremcp:ci --name chart-testing
       - name: Install the chart and wait for ready pods
         run: |
-          kubectl create secret generic azuremcp-token --from-literal=token=ci-token
+          kubectl create secret generic azuremcp-token --from-literal=token=ci-token-5c1f0e7b9a2d4e68b3a7c0d9f1e2a4b6
           kubectl create configmap company-ca --from-literal=ca.crt="$(openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=CI Internal CA' -keyout /dev/null 2>/dev/null)"
           helm install azuremcp charts/azuremcp --wait --timeout 5m             --set image.repository=azuremcp --set image.tag=ci --set image.pullPolicy=Never             --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection             --set http.tokenSecret.name=azuremcp-token             --set caBundle.configMap=company-ca
           kubectl get pods --selector app.kubernetes.io/name=azuremcp
@@ -235,7 +235,7 @@ jobs:
           done
           python3 -m venv .venv
           .venv/bin/pip install --quiet mcp==1.27.2
-          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8080/mcp --token ci-token
+          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8080/mcp --token ci-token-5c1f0e7b9a2d4e68b3a7c0d9f1e2a4b6
       - name: Check the NetworkPolicy admits Open WebUI pods and nothing else
         run: |
           # kind enforces NetworkPolicy, so the ready pods above also show that probes pass under an enforcing implementation.

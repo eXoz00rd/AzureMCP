@@ -109,6 +109,84 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
         Assert.Contains(AzureDevOpsServerOptions.HttpTokenVariable, result.FailureMessage);
     }
 
+    [Theory]
+    [InlineData("token")]
+    [InlineData("0123456789abcdef0123456789abcde")]
+    public void Validate_OverHttpWithGuessableToken_Fails(string token)
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpToken = token;
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Failed);
+        Assert.Contains($"{AzureDevOpsServerOptions.HttpTokenVariable} must be at least 32 characters", result.FailureMessage);
+    }
+
+    [Fact]
+    public void Validate_OverHttpWithShortTokenPaddedByWhitespace_Fails()
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpToken = new string(' ', 31) + "a" + new string('\t', 8);
+
+        var result = _validator.Validate(null, options);
+
+        // The access guard trims the token, so the padding would not protect anything.
+        Assert.True(result.Failed);
+        Assert.Contains($"{AzureDevOpsServerOptions.HttpTokenVariable} must be at least 32 characters", result.FailureMessage);
+    }
+
+    [Fact]
+    public void Validate_OverHttpWithTokenOfMinimumLength_Succeeds()
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpToken = new string('a', AzureDevOpsServerOptionsValidator.MinimumHttpTokenLength);
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Theory]
+    [InlineData("garbage")]
+    [InlineData("http://+:notaport")]
+    [InlineData("ftp://0.0.0.0:8080")]
+    [InlineData("https://0.0.0.0:8443")]
+    [InlineData("http://0.0.0.0:8080/mcp")]
+    [InlineData("http://:8080")]
+    [InlineData("http://0.0.0.0:70000")]
+    [InlineData("http://127.0.0.1:8080;garbage")]
+    [InlineData(" ; ")]
+    [InlineData("http://::1:8080")]
+    [InlineData("http://[not-an-address]:8080")]
+    [InlineData("http://two words:8080")]
+    public void Validate_OverHttpWithAddressKestrelCannotUse_Fails(string httpUrl)
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpUrl = httpUrl;
+
+        var result = _validator.Validate(null, options);
+
+        // Kestrel would crash on most of these, and would quietly bind port 80 for a port it cannot read.
+        Assert.True(result.Failed);
+        Assert.Contains($"{AzureDevOpsServerOptions.HttpUrlVariable} contains", result.FailureMessage);
+    }
+
+    [Theory]
+    [InlineData("http://[::]:8080")]
+    [InlineData("http://0.0.0.0")]
+    [InlineData("http://127.0.0.1:8080/")]
+    [InlineData("HTTP://localhost:8080")]
+    public void Validate_OverHttpWithAddressKestrelCanUse_Succeeds(string httpUrl)
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpUrl = httpUrl;
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Succeeded, result.FailureMessage);
+    }
+
     [Fact]
     public void Validate_OverHttpWithSharedPersonalAccessToken_Fails()
     {
@@ -189,7 +267,7 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
         var options = CreateValidOptions();
         options.Transport = "http";
         options.PersonalAccessToken = string.Empty;
-        options.HttpToken = "shared-token";
+        options.HttpToken = "shared-token-0123456789abcdef0123456789";
         return options;
     }
 }
