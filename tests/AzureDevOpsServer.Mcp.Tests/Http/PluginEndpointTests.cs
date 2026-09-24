@@ -1,0 +1,120 @@
+using System.Net;
+using AzureDevOpsServer.Mcp.Configuration;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using ModelContextProtocol.Client;
+using Xunit;
+
+namespace AzureDevOpsServer.Mcp.Tests.Http;
+
+public sealed class PluginEndpointTests
+{
+    private const string Token = "shared-test-token";
+
+    [Fact]
+    public async Task Plugin_IsServedWithoutTokenAndPointsAtTheMcpEndpoint()
+    {
+        await using var server = await PluginServer.StartAsync(new AzureDevOpsServerOptions { HttpToken = Token });
+
+        using var response = await server.GetPluginAsync();
+        var plugin = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/x-python", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains($"default=\"{server.McpEndpoint}\",", plugin);
+        Assert.Contains("    async def list_projects(\n", plugin);
+        Assert.DoesNotContain(Token, plugin);
+        Assert.DoesNotContain("%%", plugin);
+    }
+
+    [Fact]
+    public async Task Plugin_OffersExactlyTheToolsTheServerLists()
+    {
+        await using var server = await PluginServer.StartAsync(
+            new AzureDevOpsServerOptions { HttpToken = Token, Toolsets = "workitems", ReadOnly = true }
+        );
+
+        using var response = await server.GetPluginAsync();
+        var plugin = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        await using var client = await server.ConnectAsync();
+        var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var offered = plugin.Split('\n')
+                            .Where(line => line.StartsWith("    async def ", StringComparison.Ordinal))
+                            .Select(line => line["    async def ".Length..].TrimEnd('('))
+                            .Where(name => !name.StartsWith('_'))
+                            .Order(StringComparer.Ordinal);
+        Assert.Equal(tools.Select(tool => tool.Name).Order(StringComparer.Ordinal), offered);
+        Assert.Contains("Toolsets: workitems (read-only).", plugin);
+        Assert.DoesNotContain("    async def update_work_item(\n", plugin);
+    }
+
+    [Fact]
+    public async Task Plugin_WhenDisabled_IsNotServed()
+    {
+        await using var server = await PluginServer.StartAsync(
+            new AzureDevOpsServerOptions { HttpToken = Token, HttpServePlugin = false }
+        );
+
+        using var response = await server.GetPluginAsync();
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    private sealed class PluginServer : IAsyncDisposable
+    {
+        private readonly WebApplication _app;
+        private readonly HttpClient _http = new();
+
+        private PluginServer(WebApplication app, Uri baseAddress, string httpPath)
+        {
+            _app = app;
+            BaseAddress = baseAddress;
+            McpEndpoint = new Uri(baseAddress, httpPath);
+        }
+
+        public Uri BaseAddress { get; }
+
+        public Uri McpEndpoint { get; }
+
+        public static async Task<PluginServer> StartAsync(AzureDevOpsServerOptions options)
+        {
+            var builder = WebApplication.CreateSlimBuilder();
+            builder.WebHost.UseUrls("http://127.0.0.1:0");
+            ToolRegistration.AddTools(builder.Services, options);
+            builder.Services.AddHealthChecks();
+            builder.Services.AddMcpServer().WithHttpTransport(transport => transport.Stateless = true);
+
+            var app = builder.Build();
+            app.MapAzureDevOpsHttpEndpoints(options);
+            await app.StartAsync(TestContext.Current.CancellationToken);
+
+            return new PluginServer(app, new Uri(app.Urls.First()), options.HttpPath);
+        }
+
+        public Task<HttpResponseMessage> GetPluginAsync()
+        {
+            return _http.GetAsync(new Uri(BaseAddress, HttpServerConfiguration.PluginPath), TestContext.Current.CancellationToken);
+        }
+
+        public Task<McpClient> ConnectAsync()
+        {
+            var options = new HttpClientTransportOptions
+            {
+                Endpoint = McpEndpoint,
+                TransportMode = HttpTransportMode.StreamableHttp,
+                AdditionalHeaders = new Dictionary<string, string> { ["Authorization"] = $"Bearer {Token}" }
+            };
+
+            return McpClient.CreateAsync(new HttpClientTransport(options), cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _http.Dispose();
+            await _app.StopAsync(TestContext.Current.CancellationToken);
+            await _app.DisposeAsync();
+        }
+    }
+}

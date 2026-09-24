@@ -230,7 +230,7 @@ Open WebUI ── Bearer token + X-Azure-DevOps-Pat ──▶ AzureMCP (HTTP) �
 ```
 
 - **Transport** — `ADOS_TRANSPORT=http` serves a stateless Streamable HTTP endpoint. stdio stays the default, so Copilot, Claude Code, and every existing client are unaffected
-- **Access** — every request to the MCP endpoint must present `Authorization: Bearer <ADOS_HTTP_TOKEN>`, and one with a browser `Origin` outside `ADOS_HTTP_ALLOWED_ORIGINS` gets `403`. The exceptions: `/healthz` needs no token, `ADOS_HTTP_ALLOW_ANONYMOUS` lifts the token for loopback development, and a request that routing rejects before it chooses an endpoint — a wrong method or content type — gets `405` or `415` without reaching MCP
+- **Access** — every request to the MCP endpoint must present `Authorization: Bearer <ADOS_HTTP_TOKEN>`, and one with a browser `Origin` outside `ADOS_HTTP_ALLOWED_ORIGINS` gets `403`. The exceptions: `/healthz` and the Open WebUI plugin at `/openwebui/azure_devops.py` need no token, `ADOS_HTTP_ALLOW_ANONYMOUS` lifts the token for loopback development, and a request that routing rejects before it chooses an endpoint — a wrong method or content type — gets `405` or `415` without reaching MCP
 - **Identity** — every request carries `X-Azure-DevOps-Pat: <the caller's PAT>`. Tools that never call Azure DevOps, such as `server_info`, work without it
 - **Health** — `GET /healthz` answers `200 Healthy` without a token, for liveness and readiness probes
 - **Scaling** — the endpoint keeps no sessions, so any number of replicas can run behind one service without affinity
@@ -245,6 +245,7 @@ Open WebUI ── Bearer token + X-Azure-DevOps-Pat ──▶ AzureMCP (HTTP) �
 | `ADOS_HTTP_TOKEN` | — | Bearer token every request must present. Required over HTTP, except for loopback development with `ADOS_HTTP_ALLOW_ANONYMOUS` |
 | `ADOS_HTTP_ALLOW_ANONYMOUS` | `false` | Serve without a token for local development. Refused unless every listen address is loopback |
 | `ADOS_HTTP_ALLOWED_ORIGINS` | — | Comma-separated browser origins allowed to call the endpoint. Server-side callers such as Open WebUI send no `Origin` and are unaffected |
+| `ADOS_HTTP_SERVE_PLUGIN` | `true` | Serves the Open WebUI plugin for this server's tools at `/openwebui/azure_devops.py` without a token. The plugin holds no secret; set `false` to stop serving it |
 
 `ADOS_COLLECTION_URL` and the API version, toolset, read-only, and log level variables from [Configuration](#configuration) apply as well. The server refuses to start over HTTP without a token, with `ADOS_PAT` set, or with anonymous access on a routable address.
 
@@ -307,16 +308,16 @@ Pin the chart and image version and raise it deliberately, for example with Reno
 
 ### Open WebUI
 
-Open WebUI reaches the server through a tool plugin that keeps each user's PAT in Open WebUI's per-user valves and sends it with every request. Every release attaches `azure_devops_openwebui.py`, generated from the tools this server registers.
+Open WebUI reaches the server through a tool plugin that keeps each user's PAT in Open WebUI's per-user valves and sends it with every request. The server serves the plugin itself at `/openwebui/azure_devops.py`, generated from the tools it registers under its own `ADOS_TOOLSETS` and `ADOS_READ_ONLY`, so the plugin always matches the server it came from. Every release also attaches it as `azure_devops_openwebui.py`.
 
-1. As an administrator, open **Workspace → Tools → +** and paste the plugin, or use **Import From Link** with the release asset's URL, then save
-2. In the tool's **Valves**, set `server_url` — for example `http://azuremcp.<namespace>.svc.cluster.local:8080/mcp` — and `server_token` to the value of `ADOS_HTTP_TOKEN`
+1. As an administrator, open **Workspace → Tools → Import From Link** and enter the server's plugin address, for example `http://azuremcp.<namespace>.svc.cluster.local:8080/openwebui/azure_devops.py`, then save. Open WebUI fetches the link from its own backend, so it works where GitHub is blocked, and the plugin's `server_url` is already set to the address used. Pasting the release asset works too
+2. In the tool's **Valves**, check `server_url` — for example `http://azuremcp.<namespace>.svc.cluster.local:8080/mcp` — and set `server_token` to the value of `ADOS_HTTP_TOKEN`
 3. Grant access to the users or groups that should see the tool
 4. Each user opens **Integrations → Tools → Valves** in a chat and enters their own PAT
 
 Open WebUI stores valve values in its database in plain text unless `ENABLE_VALVE_ENCRYPTION=true` is set together with a pinned `WEBUI_SECRET_KEY`; enable both before rolling out. The plugin is tested with the `mcp` 1.27.2 client that Open WebUI 0.11.3 ships. The model has to support tool calling; for one that does not, set **Function Calling** to **Legacy** in the model's advanced parameters.
 
-To expose fewer tools, or to fill in the server URL in advance, generate the plugin from source:
+After upgrading the server, import the plugin again so its tools match. To generate it without a running server, for example with fewer tools, use the generator:
 
 ```bash
 dotnet run --project tools/OpenWebUiPluginGenerator -- --output azure_devops_openwebui.py --toolsets projects,workitems --read-only --server-url http://azuremcp.tools.svc.cluster.local:8080/mcp

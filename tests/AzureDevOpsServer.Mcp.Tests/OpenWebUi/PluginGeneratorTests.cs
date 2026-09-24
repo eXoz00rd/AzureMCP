@@ -1,6 +1,6 @@
 using System.Text.Json;
+using AzureDevOpsServer.Mcp.OpenWebUi;
 using ModelContextProtocol.Protocol;
-using OpenWebUiPluginGenerator;
 using Xunit;
 
 namespace AzureDevOpsServer.Mcp.Tests.OpenWebUi;

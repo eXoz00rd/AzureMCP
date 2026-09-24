@@ -112,6 +112,11 @@ jobs:
           done
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/healthz)" = 200
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST --header 'Content-Type: application/json' --data '{}' http://127.0.0.1:8080/mcp)" = 401
+          # Open WebUI imports the plugin from a link without a token, and the plugin must point back at this endpoint.
+          curl --fail --silent --output served_plugin.py http://127.0.0.1:8080/openwebui/azure_devops.py
+          python3 -c "import sys; compile(open(sys.argv[1]).read(), sys.argv[1], 'exec')" served_plugin.py
+          grep --quiet --fixed-strings 'default="http://127.0.0.1:8080/mcp",' served_plugin.py
+          ! grep --quiet --fixed-strings ci-token served_plugin.py
       - name: Check that a healthy start logs nothing
         run: |
           logs=$(docker logs azuremcp 2>&1)

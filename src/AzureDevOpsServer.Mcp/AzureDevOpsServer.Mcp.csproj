@@ -25,6 +25,10 @@
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="OpenWebUi\PluginTemplate.py" LogicalName="PluginTemplate.py" />
+  </ItemGroup>
+
   <PropertyGroup>
     <McpManifestSource>$(MSBuildProjectDirectory)/.mcp/server.json</McpManifestSource>
     <McpManifestVersionToken>0.0.0-managed-by-build</McpManifestVersionToken>

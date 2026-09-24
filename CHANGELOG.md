@@ -6,6 +6,9 @@ which also publishes to [NuGet.org](https://www.nuget.org/packages/AzureDevOpsSe
 
 ## [Unreleased]
 
+### Added
+- **The server serves its own Open WebUI plugin** at `/openwebui/azure_devops.py`, generated from the tools it registers and pointing back at the address it was fetched from. Administrators import it with **Import From Link** from inside the cluster, where GitHub may be blocked, and it always matches the server's version, toolsets, and read-only mode. It needs no token and holds no secret; `ADOS_HTTP_SERVE_PLUGIN=false` turns it off
+
 ## [0.2.1] — 2026-09-24
 
 ### Security

@@ -7,11 +7,21 @@ using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
-namespace OpenWebUiPluginGenerator;
+namespace AzureDevOpsServer.Mcp.OpenWebUi;
 
-internal sealed record PluginSettings(string Version, string Toolsets, string ServerUrl);
+public sealed record PluginSettings(string Version, string Toolsets, string ServerUrl)
+{
+    public static PluginSettings For(string? toolsets, bool readOnly, string serverUrl)
+    {
+        var version = typeof(PluginSettings).Assembly
+                                            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                                            .InformationalVersion.Split('+')[0] ?? "0.0.0";
+        var label = (string.IsNullOrWhiteSpace(toolsets) ? "all" : toolsets) + (readOnly ? " (read-only)" : string.Empty);
+        return new PluginSettings(version, label, serverUrl);
+    }
+}
 
-internal static partial class PluginGenerator
+public static partial class PluginGenerator
 {
     private static readonly HashSet<string> PythonKeywords = new(StringComparer.Ordinal)
     {
@@ -25,9 +35,14 @@ internal static partial class PluginGenerator
         var services = new ServiceCollection();
         ToolRegistration.AddTools(services, new AzureDevOpsServerOptions { Toolsets = toolsets, ReadOnly = readOnly });
         using var provider = services.BuildServiceProvider();
+        return RegisteredTools(provider);
+    }
+
+    public static IReadOnlyList<Tool> RegisteredTools(IServiceProvider services)
+    {
         return
         [
-            .. provider.GetServices<McpServerTool>()
+            .. services.GetServices<McpServerTool>()
                        .Select(tool => tool.ProtocolTool)
                        .OrderBy(tool => tool.Name, StringComparer.Ordinal)
         ];
@@ -196,8 +211,8 @@ internal static partial class PluginGenerator
 
     private static string ReadTemplate()
     {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PluginTemplate.py") ??
-            throw new InvalidOperationException("The plugin template is not embedded in the generator.");
+        using var stream = typeof(PluginGenerator).Assembly.GetManifestResourceStream("PluginTemplate.py") ??
+            throw new InvalidOperationException("The plugin template is not embedded in the server.");
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd().ReplaceLineEndings("\n");
     }
