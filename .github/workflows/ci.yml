@@ -207,6 +207,21 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install --quiet mcp==1.27.2
           .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8080/mcp --token ci-token
+      - name: Check the NetworkPolicy admits Open WebUI pods and nothing else
+        run: |
+          # kind enforces NetworkPolicy, so the ready pods above also show that probes pass under an enforcing implementation.
+          for attempt in 1 2 3; do docker pull --quiet curlimages/curl:8.22.0 && break; sleep 10; done
+          kind load docker-image curlimages/curl:8.22.0 --name chart-testing
+          reach() {
+            kubectl run "$1" --rm --stdin --quiet --restart=Never --labels="$2" \
+              --image=curlimages/curl:8.22.0 --image-pull-policy=Never --command -- \
+              curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 http://azuremcp:8080/healthz || true
+          }
+          allowed=$(reach from-open-webui app.kubernetes.io/name=open-webui)
+          blocked=$(reach from-elsewhere app.kubernetes.io/name=something-else)
+          echo "From an Open WebUI pod: $allowed; from any other pod: $blocked"
+          test "$allowed" = 200
+          test "$blocked" != 200
       - name: Diagnostics
         if: failure()
         run: |

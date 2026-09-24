@@ -43,6 +43,7 @@ service:
 networkPolicy:
   enabled: true
   # Sources allowed to reach the server. Adjust the selector to match the Open WebUI pods.
+  # Kubernetes always admits traffic from a pod's own node, so kubelet probes are unaffected.
   ingressFrom:
     - podSelector:
         matchLabels:
