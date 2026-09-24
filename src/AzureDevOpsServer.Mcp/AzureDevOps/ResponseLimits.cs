@@ -53,6 +53,26 @@ public static class ResponseLimits
         return Resolve(value, defaultValue, MinDepth, MaxDepth, "depth");
     }
 
+    public static void ValidateLineRange(int? startLine, int? endLine)
+    {
+        if (startLine is < 1)
+        {
+            throw new AzureDevOpsClientException($"'startLine' must be at least 1. Received {startLine.Value}.");
+        }
+
+        if (endLine is < 1)
+        {
+            throw new AzureDevOpsClientException($"'endLine' must be at least 1. Received {endLine.Value}.");
+        }
+
+        if (startLine is not null && endLine is not null && endLine < startLine)
+        {
+            throw new AzureDevOpsClientException(
+                $"'endLine' must not be less than 'startLine'. Received {startLine.Value} and {endLine.Value}."
+            );
+        }
+    }
+
     // Rejects out-of-range values instead of clamping them, so a caller that asks for more
     // than the server-side safety limit learns about it rather than silently getting less.
     private static int Resolve(int? value, int defaultValue, int minimum, int maximum, string parameterName)

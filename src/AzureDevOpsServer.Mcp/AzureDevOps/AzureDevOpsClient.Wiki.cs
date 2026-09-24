@@ -24,9 +24,12 @@ public sealed partial class AzureDevOpsClient
         return result?.Value ?? [];
     }
 
-    public async Task<WikiPage> GetWikiPageAsync(
+    public async Task<WikiPageContent> GetWikiPageAsync(
         string wiki,
         string path,
+        int? startLine,
+        int? endLine,
+        int maxChars,
         string? project,
         CancellationToken cancellationToken)
     {
@@ -38,13 +41,21 @@ public sealed partial class AzureDevOpsClient
 
         await EnsureSuccessAsync(response, cancellationToken);
 
-        var page = await response.Content.ReadFromJsonAsync<WikiPage>(cancellationToken);
-        return page ??
+        var page = await response.Content.ReadFromJsonAsync<WikiPage>(cancellationToken) ??
             throw new AzureDevOpsClientException($"The response for wiki page '{path}' could not be parsed.");
+        if (page.Content is null)
+        {
+            return new WikiPageContent(page.Path, null, 0, 0, false);
+        }
+
+        // The wiki API has no line or size parameters, so the page is read whole and narrowed here.
+        var window = TextWindow.Apply(page.Content, startLine, endLine, maxChars);
+        return new WikiPageContent(page.Path, window.Text, window.TotalChars, window.TotalLines, window.Truncated);
     }
 
-    public async Task<WikiPage> GetWikiPageTreeAsync(
+    public async Task<WikiPageTree> GetWikiPageTreeAsync(
         string wiki,
+        int top,
         string? project,
         CancellationToken cancellationToken)
     {
@@ -56,9 +67,44 @@ public sealed partial class AzureDevOpsClient
 
         await EnsureSuccessAsync(response, cancellationToken);
 
-        var root = await response.Content.ReadFromJsonAsync<WikiPage>(cancellationToken);
-        return root ??
+        var root = await response.Content.ReadFromJsonAsync<WikiPage>(cancellationToken) ??
             throw new AzureDevOpsClientException("The wiki page tree response could not be parsed.");
+        return LimitPageTree(root, top);
+    }
+
+    // Keeps the first top pages level by level, so a large wiki still shows every top-level section
+    // before any deep one. A page is only ever kept together with its parent, because a parent is
+    // always reached before its children.
+    private static WikiPageTree LimitPageTree(WikiPage root, int top)
+    {
+        var kept = new HashSet<WikiPage>(ReferenceEqualityComparer.Instance);
+        var total = 0;
+        var queue = new Queue<WikiPage>();
+        queue.Enqueue(root);
+
+        while (queue.TryDequeue(out var page))
+        {
+            foreach (var child in page.SubPages ?? [])
+            {
+                total++;
+                if (kept.Count < top)
+                {
+                    kept.Add(child);
+                }
+
+                queue.Enqueue(child);
+            }
+        }
+
+        return new WikiPageTree(root.Path, KeptSubPages(root, kept), total, total > top);
+    }
+
+    private static List<WikiPage>? KeptSubPages(WikiPage page, HashSet<WikiPage> kept)
+    {
+        return page.SubPages?
+                   .Where(kept.Contains)
+                   .Select(child => child with { SubPages = KeptSubPages(child, kept) })
+                   .ToList();
     }
 
     public async Task<WikiPageUpdate> CreateOrUpdateWikiPageAsync(

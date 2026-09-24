@@ -192,12 +192,51 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
                 }
             }
 
+            if (context.Request.HttpMethod == "GET" && TryBuildReadToolResponse(context.Request, out var readToolResponse))
+            {
+                responseText = readToolResponse;
+                context.Response.StatusCode = (int)HttpStatusCode.OK;
+            }
+
             var body = Encoding.UTF8.GetBytes(responseText);
             context.Response.ContentType = "application/json";
             context.Response.ContentLength64 = body.Length;
             await context.Response.OutputStream.WriteAsync(body).ConfigureAwait(false);
             context.Response.Close();
         }
+    }
+
+    // Models larger-than-a-small-model's-context answers for the tools that bound their responses: a wiki
+    // of twelve pages in three sections and a twelve-line page.
+    private static bool TryBuildReadToolResponse(HttpListenerRequest request, out string body)
+    {
+        var path = request.Url!.AbsolutePath;
+        body = string.Empty;
+
+        if (path.EndsWith("/_apis/wiki/wikis/Alpha.wiki/pages", StringComparison.Ordinal))
+        {
+            body = request.QueryString["recursionLevel"] == "full" ?
+                WikiTreeJson() :
+                $$"""{ "path": "{{request.QueryString["path"]}}", "content": {{JsonSerializer.Serialize(WikiPageText())}} }""";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string WikiTreeJson()
+    {
+        var sections = Enumerable.Range(1, 3).Select(section =>
+        {
+            var pages = string.Join(", ", Enumerable.Range(1, 3).Select(page => $$"""{ "path": "/Section{{section}}/Page{{page}}" }"""));
+            return $$"""{ "path": "/Section{{section}}", "subPages": [ {{pages}} ] }""";
+        });
+        return $$"""{ "path": "/", "subPages": [ {{string.Join(", ", sections)}} ] }""";
+    }
+
+    private static string WikiPageText()
+    {
+        return string.Concat(Enumerable.Range(1, 12).Select(line => $"Line {line:00}\n"));
     }
 
     private static int ReserveLoopbackPort()

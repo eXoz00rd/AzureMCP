@@ -127,4 +127,30 @@ public sealed class ResponseLimitsTests
             ResponseLimits.ResolveDepth(null, ResponseLimits.DefaultQueryDepth)
         );
     }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(1, null)]
+    [InlineData(null, 1)]
+    [InlineData(3, 3)]
+    [InlineData(3, int.MaxValue)]
+    public void ValidateLineRange_WithValidRange_DoesNotThrow(int? startLine, int? endLine)
+    {
+        ResponseLimits.ValidateLineRange(startLine, endLine);
+    }
+
+    [Theory]
+    [InlineData(0, null, "'startLine'")]
+    [InlineData(-4, 9, "'startLine'")]
+    [InlineData(null, 0, "'endLine'")]
+    [InlineData(2, -1, "'endLine'")]
+    [InlineData(5, 4, "'endLine' must not be less than 'startLine'")]
+    public void ValidateLineRange_WithInvalidRange_Throws(int? startLine, int? endLine, string expectedMessage)
+    {
+        var exception = Assert.Throws<AzureDevOpsClientException>(
+            () => ResponseLimits.ValidateLineRange(startLine, endLine)
+        );
+
+        Assert.Contains(expectedMessage, exception.Message);
+    }
 }
