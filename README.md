@@ -240,7 +240,7 @@ Open WebUI ── Bearer token + X-Azure-DevOps-Pat ──▶ AzureMCP (HTTP) �
 | Variable | Default | Description |
 |---|---|---|
 | `ADOS_TRANSPORT` | `stdio` | `stdio` or `http` |
-| `ADOS_HTTP_URL` | `http://127.0.0.1:8080` | Listen address. Loopback by default, so exposing the endpoint is always a deliberate choice; the container image sets `http://+:8080` |
+| `ADOS_HTTP_URL` | `http://127.0.0.1:8080` | Listen address: plain `http://` with a host and a numeric port, several separated by `;`. Loopback by default, so exposing the endpoint is always a deliberate choice; the container image sets `http://+:8080`. TLS belongs to whatever runs in front of the server |
 | `ADOS_HTTP_PATH` | `/mcp` | Endpoint path. Must start with `/` and cannot be `/healthz` |
 | `ADOS_HTTP_TOKEN` | — | Bearer token every request must present, at least 32 characters; generate it, for example with `openssl rand -hex 32`. Required over HTTP, except for loopback development with `ADOS_HTTP_ALLOW_ANONYMOUS` |
 | `ADOS_HTTP_ALLOW_ANONYMOUS` | `false` | Serve without a token for local development. Refused unless every listen address is loopback |

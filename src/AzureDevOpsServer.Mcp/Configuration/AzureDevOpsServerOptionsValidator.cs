@@ -1,3 +1,4 @@
+using System.Globalization;
 using AzureDevOpsServer.Mcp.AzureDevOps;
 using Microsoft.Extensions.Options;
 
@@ -60,6 +61,14 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
             );
         }
 
+        if (overHttp && UnusableAddress(options.HttpUrl) is { } address)
+        {
+            failures.Add(
+                $"{AzureDevOpsServerOptions.HttpUrlVariable} contains '{address}', which is not a plain http:// address with a host and a numeric port. " +
+                "Use addresses such as http://0.0.0.0:8080 or http://+:8080, separated by ';'; the server serves HTTP and leaves TLS to whatever runs in front of it."
+            );
+        }
+
         if (overHttp &&
             string.IsNullOrWhiteSpace(options.HttpToken) &&
             options.HttpAllowAnonymous &&
@@ -74,6 +83,42 @@ public sealed class AzureDevOpsServerOptionsValidator : IValidateOptions<AzureDe
         return failures.Count > 0 ?
             ValidateOptionsResult.Fail(failures) :
             ValidateOptionsResult.Success;
+    }
+
+    // Kestrel binds wildcard hosts such as + and * that Uri rejects, and binds port 80 when it cannot read a port,
+    // so each address is checked by the parts Kestrel uses rather than parsed as a Uri.
+    private static string? UnusableAddress(string urls)
+    {
+        var addresses = urls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (addresses.Length == 0)
+        {
+            // Kestrel would fall back to its own default address instead of the one this server documents.
+            return urls;
+        }
+
+        foreach (var address in addresses)
+        {
+            if (!address.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            {
+                return address;
+            }
+
+            var authority = address["http://".Length..].TrimEnd('/');
+            var portSeparator = authority.LastIndexOf(':');
+            var hasPort = portSeparator > authority.LastIndexOf(']');
+            var host = hasPort ? authority[..portSeparator] : authority;
+            var port = hasPort ? authority[(portSeparator + 1)..] : "80";
+
+            if (host.Length == 0 ||
+                authority.Contains('/', StringComparison.Ordinal) ||
+                !int.TryParse(port, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ||
+                number > 65535)
+            {
+                return address;
+            }
+        }
+
+        return null;
     }
 
     // Kestrel accepts several addresses separated by ';', and each of them has to stay on this machine.

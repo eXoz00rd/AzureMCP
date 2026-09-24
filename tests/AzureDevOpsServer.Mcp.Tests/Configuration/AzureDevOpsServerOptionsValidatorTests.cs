@@ -147,6 +147,43 @@ public sealed class AzureDevOpsServerOptionsValidatorTests
         Assert.True(result.Succeeded);
     }
 
+    [Theory]
+    [InlineData("garbage")]
+    [InlineData("http://+:notaport")]
+    [InlineData("ftp://0.0.0.0:8080")]
+    [InlineData("https://0.0.0.0:8443")]
+    [InlineData("http://0.0.0.0:8080/mcp")]
+    [InlineData("http://:8080")]
+    [InlineData("http://0.0.0.0:70000")]
+    [InlineData("http://127.0.0.1:8080;garbage")]
+    [InlineData(" ; ")]
+    public void Validate_OverHttpWithAddressKestrelCannotUse_Fails(string httpUrl)
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpUrl = httpUrl;
+
+        var result = _validator.Validate(null, options);
+
+        // Kestrel would crash on most of these, and would quietly bind port 80 for a port it cannot read.
+        Assert.True(result.Failed);
+        Assert.Contains($"{AzureDevOpsServerOptions.HttpUrlVariable} contains", result.FailureMessage);
+    }
+
+    [Theory]
+    [InlineData("http://[::]:8080")]
+    [InlineData("http://0.0.0.0")]
+    [InlineData("http://127.0.0.1:8080/")]
+    [InlineData("HTTP://localhost:8080")]
+    public void Validate_OverHttpWithAddressKestrelCanUse_Succeeds(string httpUrl)
+    {
+        var options = CreateValidHttpOptions();
+        options.HttpUrl = httpUrl;
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Succeeded, result.FailureMessage);
+    }
+
     [Fact]
     public void Validate_OverHttpWithSharedPersonalAccessToken_Fails()
     {
