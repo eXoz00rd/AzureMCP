@@ -285,7 +285,8 @@ docker run --detach --name azuremcp --network <open-webui-network> --read-only -
 Every release publishes a Helm chart to `oci://ghcr.io/exoz00rd/charts/azuremcp`:
 
 ```bash
-kubectl create secret generic azuremcp-token --from-literal=token="$(openssl rand -hex 32)"
+kubectl create secret generic azuremcp-token --from-file=token=<(printf %s "$(openssl rand -hex 32)")
+# Only when the Azure DevOps certificate comes from an internal certificate authority:
 kubectl create configmap company-ca --from-file=ca.crt=./company-ca.crt
 helm install azuremcp oci://ghcr.io/exoz00rd/charts/azuremcp --version <version> \
   --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection \
@@ -293,7 +294,7 @@ helm install azuremcp oci://ghcr.io/exoz00rd/charts/azuremcp --version <version>
   --set caBundle.configMap=company-ca
 ```
 
-The token is generated, never typed; read it back for the Open WebUI plugin with `kubectl get secret azuremcp-token --output jsonpath='{.data.token}' | base64 --decode`. Leave out the ConfigMap and `caBundle.configMap` when the Azure DevOps certificate is publicly trusted. The chart runs two stateless replicas as non-root on a read-only root filesystem with no service account token, probes `/healthz`, exposes only a `ClusterIP` service, and adds a `NetworkPolicy` that admits pods labelled `app.kubernetes.io/name: open-webui` — adjust `networkPolicy.ingressFrom` to match your Open WebUI pods. Every setting is described in [`values.yaml`](charts/azuremcp/values.yaml).
+The token is generated and handed over as a file, so it never appears in a command line; read it back for the Open WebUI plugin with `kubectl get secret azuremcp-token --output jsonpath='{.data.token}' | base64 --decode`. Leave out the ConfigMap and `caBundle.configMap` when the Azure DevOps certificate is publicly trusted. The chart runs two stateless replicas as non-root on a read-only root filesystem with no service account token, probes `/healthz`, exposes only a `ClusterIP` service, and adds a `NetworkPolicy` that admits pods labelled `app.kubernetes.io/name: open-webui` — adjust `networkPolicy.ingressFrom` to match your Open WebUI pods. Every setting is described in [`values.yaml`](charts/azuremcp/values.yaml).
 
 Pin the chart and image version and raise it deliberately, for example with Renovate: with `latest`, nodes can run different versions and there is nothing to roll back to. Organizations usually mirror the image into an internal registry, verify it there, and deploy from the mirror.
 
