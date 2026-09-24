@@ -121,7 +121,21 @@ public sealed class HttpAccessMiddlewareTests
         using var mcp = await server.PostToolCallAsync(authorization: null, origin: null);
 
         Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+        Assert.Equal("Healthy", await health.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.Equal(HttpStatusCode.Unauthorized, mcp.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/healthz")]
+    [InlineData("/HEALTHZ/")]
+    public async Task McpPath_ThatWouldShareTheHealthProbeRoute_IsRejected(string httpPath)
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ProbeServer.StartAsync(new AzureDevOpsServerOptions { HttpToken = Token, HttpPath = httpPath })
+        );
+
+        Assert.Contains(AzureDevOpsServerOptions.HttpPathVariable, exception.Message);
+        Assert.Contains(HttpServerConfiguration.HealthPath, exception.Message);
     }
 
     private sealed class ProbeServer : IAsyncDisposable

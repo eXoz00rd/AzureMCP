@@ -14,6 +14,13 @@ public static class HttpServerConfiguration
             throw new InvalidOperationException($"{AzureDevOpsServerOptions.HttpPathVariable} must start with '/'.");
         }
 
+        if (string.Equals(options.HttpPath.TrimEnd('/'), HealthPath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"{AzureDevOpsServerOptions.HttpPathVariable} must not be {HealthPath}, which serves the health probe."
+            );
+        }
+
         // Routing runs first, so the guard protects whichever endpoint it picked, however the request spelled the path.
         // The health endpoint carries no guard metadata, so probes reach it without a token.
         app.UseRouting();
