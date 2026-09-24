@@ -1,0 +1,13 @@
+AzureMCP serves MCP over Streamable HTTP at:
+
+  http://{{ include "azuremcp.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/mcp
+
+Every request needs:
+  Authorization: Bearer <the token in secret {{ .Values.http.tokenSecret.name }}, key {{ .Values.http.tokenSecret.key }}>
+  X-Azure-DevOps-Pat: <the caller's own Azure DevOps PAT>
+
+Health probe, no token required: /healthz
+{{- if .Values.networkPolicy.enabled }}
+
+Ingress is limited by a NetworkPolicy; make sure its selector matches your Open WebUI pods.
+{{- end }}

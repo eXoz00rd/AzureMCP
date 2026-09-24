@@ -1,0 +1,74 @@
+image:
+  repository: ghcr.io/exoz00rd/azuremcp
+  # Defaults to the chart's appVersion. Pin a version and let automation raise it rather than following latest.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# The server keeps no state between requests, so replicas need no session affinity.
+replicaCount: 2
+
+azureDevOps:
+  # Required. The collection every request goes to, e.g. https://devops.example.local/DefaultCollection.
+  collectionUrl: ""
+  defaultProject: ""
+  # Comma-separated toolsets to expose; empty exposes all of them.
+  toolsets: ""
+  readOnly: false
+  # Overrides the REST API version for every area, e.g. 6.0 for Azure DevOps Server 2020.
+  apiVersion: ""
+
+http:
+  # Required. Secret holding the bearer token the Open WebUI plugin sends with every request.
+  tokenSecret:
+    name: ""
+    key: token
+  # Browser origins allowed to call the endpoint; server-side callers such as Open WebUI send no Origin.
+  allowedOrigins: ""
+
+# ConfigMap with the PEM certificate of an internal certificate authority. It is trusted in addition to the public roots.
+caBundle:
+  configMap: ""
+  key: ca.crt
+
+logLevel: Warning
+
+extraEnv: []
+
+service:
+  type: ClusterIP
+  port: 8080
+
+networkPolicy:
+  enabled: true
+  # Sources allowed to reach the server. Adjust the selector to match the Open WebUI pods.
+  # Kubernetes always admits traffic from a pod's own node, so kubelet probes are unaffected.
+  ingressFrom:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: open-webui
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -92,6 +92,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build image
         run: docker build --tag azuremcp:ci .
+      - name: Prepare the Python MCP client Open WebUI 0.11 uses
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet mcp==1.27.2
       - name: Start the container read-only
         run: >-
           docker run --detach --name azuremcp --read-only --tmpfs /tmp
@@ -110,33 +114,133 @@ jobs:
           done
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/healthz)" = 200
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST --header 'Content-Type: application/json' --data '{}' http://127.0.0.1:8080/mcp)" = 401
-      - name: Talk MCP to the container with the Python client Open WebUI 0.11 uses
+      - name: Talk MCP to the container
+        run: .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8080/mcp --token ci-token
+      - name: Serve stub collections over TLS from two certificate authorities
         run: |
-          python3 -m venv .venv
-          .venv/bin/pip install --quiet mcp==1.27.2
-          .venv/bin/python - <<'PY'
-          import asyncio
-
-          from mcp import ClientSession
-          from mcp.client.streamable_http import streamablehttp_client
-
-          HEADERS = {"Authorization": "Bearer ci-token", "X-Azure-DevOps-Pat": "ci-pat"}
-
-
-          async def main() -> None:
-              async with streamablehttp_client("http://127.0.0.1:8080/mcp", headers=HEADERS) as (read, write, _):
-                  async with ClientSession(read, write) as session:
-                      initialized = await session.initialize()
-                      assert initialized.instructions, "the server sent no instructions"
-                      tools = (await session.list_tools()).tools
-                      assert any(tool.name == "list_projects" for tool in tools), [tool.name for tool in tools]
-                      result = await session.call_tool("server_info", {})
-                      assert not result.isError, result
-                      print(f"{len(tools)} tools; server_info: {result.structuredContent}")
-
-
-          asyncio.run(main())
-          PY
+          mkdir ca
+          # An internal authority, which the deployment mounts, and a stand-in for a public one, which lives in the image.
+          for authority in internal public; do
+            openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=CI $authority CA" -keyout "ca/$authority.key" -out "ca/$authority.crt"
+            openssl req -newkey rsa:2048 -nodes -subj "/CN=ado-stub" -addext "subjectAltName=DNS:ado-stub" \
+              -keyout "ca/$authority-server.key" -out "ca/$authority-server.csr"
+            openssl x509 -req -in "ca/$authority-server.csr" -CA "ca/$authority.crt" -CAkey "ca/$authority.key" \
+              -CAcreateserial -days 1 -copy_extensions copyall -out "ca/$authority-server.crt"
+          done
+          chmod 644 ca/*
+          python3 .github/scripts/ado_stub.py ca/internal-server.crt ca/internal-server.key 8443 > ado-stub-internal.log 2>&1 &
+          python3 .github/scripts/ado_stub.py ca/public-server.crt ca/public-server.key 8444 > ado-stub-public.log 2>&1 &
+          # The public roots sit in /etc/ssl/certs, so an image with the stand-in there shows whether that store survives.
+          printf 'FROM azuremcp:ci\nCOPY public.crt /etc/ssl/certs/ci-public-ca.pem\n' | docker build --tag azuremcp:ci-roots --file - ca
+      - name: Trust the internal authority from a mounted directory, as the Helm chart does
+        run: |
+          mounted=(--volume "$PWD/ca/internal.crt:/etc/azuremcp/ca/ca.crt:ro" --env SSL_CERT_DIR=/etc/ssl/certs:/etc/azuremcp/ca)
+          run() {
+            local name=$1 port=$2 collection=$3 image=$4
+            shift 4
+            docker run --detach --name "azuremcp-$name" --add-host ado-stub:host-gateway --read-only --tmpfs /tmp \
+              --publish "127.0.0.1:$port:8080" --env ADOS_COLLECTION_URL="$collection" --env ADOS_HTTP_TOKEN=ci-token \
+              "$@" "$image"
+          }
+          run with-ca 8081 https://ado-stub:8443/DefaultCollection azuremcp:ci "${mounted[@]}"
+          run without-ca 8082 https://ado-stub:8443/DefaultCollection azuremcp:ci
+          run system-root 8083 https://ado-stub:8444/DefaultCollection azuremcp:ci-roots "${mounted[@]}"
+          for port in 8081 8082 8083; do
+            for attempt in $(seq 1 30); do
+              curl --fail --silent --output /dev/null "http://127.0.0.1:$port/healthz" && break
+              sleep 1
+            done
+          done
+          # The mounted authority is trusted...
+          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8081/mcp --token ci-token --tool list_projects --expect Alpha
+          # ...only because it was mounted...
+          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8082/mcp --token ci-token --tool list_projects --expect-error --expect "TLS connection"
+          # ...and mounting it keeps the system store, where the public roots live.
+          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8083/mcp --token ci-token --tool list_projects --expect Alpha
       - name: Container logs
         if: always()
-        run: docker logs azuremcp
+        run: |
+          for container in azuremcp azuremcp-with-ca azuremcp-without-ca azuremcp-system-root; do
+            echo "::group::$container"
+            docker logs "$container" 2>&1 || true
+            echo "::endgroup::"
+          done
+          for stub in ado-stub-internal.log ado-stub-public.log; do
+            echo "::group::$stub"
+            cat "$stub" 2>/dev/null || true
+            echo "::endgroup::"
+          done
+
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Lint the chart
+        run: >-
+          helm lint charts/azuremcp --strict
+          --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection
+          --set http.tokenSecret.name=azuremcp-token
+      - name: Refuse to render incomplete or unsafe values
+        run: |
+          if helm template charts/azuremcp > /dev/null 2>&1; then
+            echo "::error::The chart rendered without azureDevOps.collectionUrl and http.tokenSecret.name"
+            exit 1
+          fi
+          # An empty "from" in a NetworkPolicy admits every source, so an empty list must not render either.
+          if helm template charts/azuremcp --set-json 'networkPolicy.ingressFrom=[]' \
+            --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection \
+            --set http.tokenSecret.name=azuremcp-token > /dev/null 2>&1; then
+            echo "::error::The chart rendered a NetworkPolicy with no sources, which admits everything"
+            exit 1
+          fi
+          # With the policy disabled on purpose, the same values render.
+          helm template charts/azuremcp --set networkPolicy.enabled=false --set-json 'networkPolicy.ingressFrom=[]' \
+            --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection \
+            --set http.tokenSecret.name=azuremcp-token > /dev/null
+      - uses: helm/kind-action@v1
+      - name: Build the image into the cluster
+        run: |
+          docker build --tag azuremcp:ci .
+          kind load docker-image azuremcp:ci --name chart-testing
+      - name: Install the chart and wait for ready pods
+        run: |
+          kubectl create secret generic azuremcp-token --from-literal=token=ci-token
+          kubectl create configmap company-ca --from-literal=ca.crt="$(openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=CI Internal CA' -keyout /dev/null 2>/dev/null)"
+          helm install azuremcp charts/azuremcp --wait --timeout 5m             --set image.repository=azuremcp --set image.tag=ci --set image.pullPolicy=Never             --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection             --set http.tokenSecret.name=azuremcp-token             --set caBundle.configMap=company-ca
+          kubectl get pods --selector app.kubernetes.io/name=azuremcp
+      - name: Talk MCP to the release through its service
+        run: |
+          kubectl port-forward service/azuremcp 8080:8080 > /dev/null 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl --fail --silent --output /dev/null http://127.0.0.1:8080/healthz && break
+            sleep 1
+          done
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet mcp==1.27.2
+          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8080/mcp --token ci-token
+      - name: Check the NetworkPolicy admits Open WebUI pods and nothing else
+        run: |
+          # kind enforces NetworkPolicy, so the ready pods above also show that probes pass under an enforcing implementation.
+          for attempt in 1 2 3; do docker pull --quiet curlimages/curl:8.22.0 && break; sleep 10; done
+          kind load docker-image curlimages/curl:8.22.0 --name chart-testing
+          # Attaching races a container that answers in milliseconds, so each probe runs to completion and is read from its log.
+          reach() {
+            kubectl run "$1" --restart=Never --labels="$2" --image=curlimages/curl:8.22.0 --image-pull-policy=Never --command -- \
+              curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 http://azuremcp:8080/healthz > /dev/null
+            for attempt in $(seq 1 60); do
+              case "$(kubectl get pod "$1" --output jsonpath='{.status.phase}')" in Succeeded|Failed) break ;; esac
+              sleep 1
+            done
+            kubectl logs "$1"
+          }
+          allowed=$(reach from-open-webui app.kubernetes.io/name=open-webui)
+          blocked=$(reach from-elsewhere app.kubernetes.io/name=something-else)
+          echo "From an Open WebUI pod: $allowed; from any other pod: $blocked"
+          test "$allowed" = 200
+          test "$blocked" != 200
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get pods --output wide
+          kubectl describe pods --selector app.kubernetes.io/name=azuremcp
+          kubectl logs --selector app.kubernetes.io/name=azuremcp --all-containers --tail 100

@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "azuremcp.fullname" . }}
+  labels:
+    {{- include "azuremcp.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "azuremcp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "azuremcp.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      # The server talks to Azure DevOps only; it never needs the Kubernetes API.
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: azuremcp
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: ADOS_TRANSPORT
+              value: http
+            - name: ADOS_HTTP_URL
+              value: http://+:8080
+            - name: ADOS_COLLECTION_URL
+              value: {{ required "azureDevOps.collectionUrl is required" .Values.azureDevOps.collectionUrl | quote }}
+            - name: ADOS_HTTP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "http.tokenSecret.name is required" .Values.http.tokenSecret.name }}
+                  key: {{ .Values.http.tokenSecret.key }}
+            - name: ADOS_LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+            - name: ADOS_READ_ONLY
+              value: {{ .Values.azureDevOps.readOnly | quote }}
+            {{- with .Values.azureDevOps.defaultProject }}
+            - name: ADOS_DEFAULT_PROJECT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.azureDevOps.toolsets }}
+            - name: ADOS_TOOLSETS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.azureDevOps.apiVersion }}
+            - name: ADOS_API_VERSION
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.http.allowedOrigins }}
+            - name: ADOS_HTTP_ALLOWED_ORIGINS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.caBundle.configMap }}
+            # .NET reads every file in each listed directory, so the public roots stay trusted next to this one.
+            - name: SSL_CERT_DIR
+              value: /etc/ssl/certs:/etc/azuremcp/ca
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.caBundle.configMap }}
+            - name: ca-bundle
+              mountPath: /etc/azuremcp/ca
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.caBundle.configMap }}
+        - name: ca-bundle
+          configMap:
+            name: {{ .Values.caBundle.configMap }}
+            items:
+              - key: {{ .Values.caBundle.key }}
+                path: ca.crt
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

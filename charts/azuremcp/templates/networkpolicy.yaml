@@ -1,0 +1,24 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- if empty .Values.networkPolicy.ingressFrom }}
+{{- fail "networkPolicy.ingressFrom must name at least one source: an empty list admits every source. Set networkPolicy.enabled=false to run without a policy." }}
+{{- end }}
+# Callers send their Azure DevOps PAT with every request, so only the chat front end should be able to connect.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "azuremcp.fullname" . }}
+  labels:
+    {{- include "azuremcp.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "azuremcp.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- toYaml .Values.networkPolicy.ingressFrom | nindent 8 }}
+      ports:
+        - port: http
+          protocol: TCP
+{{- end }}

@@ -123,3 +123,12 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+      - name: Publish the Helm chart
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          ACTOR: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          helm package charts/azuremcp --version "$VERSION" --app-version "$VERSION" --destination dist
+          echo "$REGISTRY_PASSWORD" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
+          helm push "dist/azuremcp-$VERSION.tgz" "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
