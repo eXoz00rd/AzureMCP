@@ -242,7 +242,7 @@ Open WebUI ── Bearer token + X-Azure-DevOps-Pat ──▶ AzureMCP (HTTP) �
 | `ADOS_TRANSPORT` | `stdio` | `stdio` or `http` |
 | `ADOS_HTTP_URL` | `http://127.0.0.1:8080` | Listen address. Loopback by default, so exposing the endpoint is always a deliberate choice; the container image sets `http://+:8080` |
 | `ADOS_HTTP_PATH` | `/mcp` | Endpoint path. Must start with `/` and cannot be `/healthz` |
-| `ADOS_HTTP_TOKEN` | — | Bearer token every request must present. Required over HTTP |
+| `ADOS_HTTP_TOKEN` | — | Bearer token every request must present. Required over HTTP, except for loopback development with `ADOS_HTTP_ALLOW_ANONYMOUS` |
 | `ADOS_HTTP_ALLOW_ANONYMOUS` | `false` | Serve without a token for local development. Refused unless every listen address is loopback |
 | `ADOS_HTTP_ALLOWED_ORIGINS` | — | Comma-separated browser origins allowed to call the endpoint. Server-side callers such as Open WebUI send no `Origin` and are unaffected |
 
@@ -252,21 +252,32 @@ Open WebUI ── Bearer token + X-Azure-DevOps-Pat ──▶ AzureMCP (HTTP) �
 
 Every release publishes `ghcr.io/exoz00rd/azuremcp` for `linux/amd64` and `linux/arm64`, built on the chiseled ASP.NET 10 runtime: no shell, no package manager, non-root.
 
-Run it on the Docker network Open WebUI already uses, and publish no port:
+Generate the bearer token into a file only you can read, so it never appears on a command line or in shell history:
+
+```bash
+(umask 077 && printf 'ADOS_HTTP_TOKEN=%s\n' "$(openssl rand -hex 32)" > azuremcp.env)
+```
+
+Run the server on the Docker network Open WebUI already uses, and publish no port:
 
 ```bash
 docker run --detach --name azuremcp --network <open-webui-network> --read-only --tmpfs /tmp \
   --env ADOS_COLLECTION_URL=https://devops.example.local/DefaultCollection \
-  --env ADOS_HTTP_TOKEN=<a long random token> \
+  --env-file azuremcp.env \
   ghcr.io/exoz00rd/azuremcp:<version>
 ```
 
-Open WebUI then reaches it at `http://azuremcp:8080/mcp`, and nothing outside that network can connect — which matters, because the PAT travels in every request. `docker inspect <open-webui-container> --format '{{json .NetworkSettings.Networks}}'` shows the network's name. To try the server from the host alone, add `--publish 127.0.0.1:8080:8080` and use `http://127.0.0.1:8080/mcp`.
+Open WebUI then reaches it at `http://azuremcp:8080/mcp` with the token from `azuremcp.env`, and nothing outside that network can connect — which matters, because the PAT travels in every request. `docker inspect <open-webui-container> --format '{{json .NetworkSettings.Networks}}'` shows the network's name. To try the server from the host alone, add `--publish 127.0.0.1:8080:8080` and use `http://127.0.0.1:8080/mcp`.
 
 When Azure DevOps Server uses a certificate from an internal certificate authority, mount the authority's PEM and add its directory to the trust store. The public roots stay trusted:
 
 ```bash
-docker run ... --volume ./company-ca.crt:/etc/azuremcp/ca/ca.crt:ro --env SSL_CERT_DIR=/etc/ssl/certs:/etc/azuremcp/ca ...
+docker run --detach --name azuremcp --network <open-webui-network> --read-only --tmpfs /tmp \
+  --env ADOS_COLLECTION_URL=https://devops.example.local/DefaultCollection \
+  --env-file azuremcp.env \
+  --volume "$PWD/company-ca.crt:/etc/azuremcp/ca/ca.crt:ro" \
+  --env SSL_CERT_DIR=/etc/ssl/certs:/etc/azuremcp/ca \
+  ghcr.io/exoz00rd/azuremcp:<version>
 ```
 
 ### Kubernetes
@@ -274,7 +285,7 @@ docker run ... --volume ./company-ca.crt:/etc/azuremcp/ca/ca.crt:ro --env SSL_CE
 Every release publishes a Helm chart to `oci://ghcr.io/exoz00rd/charts/azuremcp`:
 
 ```bash
-kubectl create secret generic azuremcp-token --from-literal=token=<a long random token>
+kubectl create secret generic azuremcp-token --from-literal=token="$(openssl rand -hex 32)"
 kubectl create configmap company-ca --from-file=ca.crt=./company-ca.crt
 helm install azuremcp oci://ghcr.io/exoz00rd/charts/azuremcp --version <version> \
   --set azureDevOps.collectionUrl=https://devops.example.local/DefaultCollection \
@@ -282,7 +293,7 @@ helm install azuremcp oci://ghcr.io/exoz00rd/charts/azuremcp --version <version>
   --set caBundle.configMap=company-ca
 ```
 
-Leave out the ConfigMap and `caBundle.configMap` when the Azure DevOps certificate is publicly trusted. The chart runs two stateless replicas as non-root on a read-only root filesystem with no service account token, probes `/healthz`, exposes only a `ClusterIP` service, and adds a `NetworkPolicy` that admits pods labelled `app.kubernetes.io/name: open-webui` — adjust `networkPolicy.ingressFrom` to match your Open WebUI pods. Every setting is described in [`values.yaml`](charts/azuremcp/values.yaml).
+The token is generated, never typed; read it back for the Open WebUI plugin with `kubectl get secret azuremcp-token --output jsonpath='{.data.token}' | base64 --decode`. Leave out the ConfigMap and `caBundle.configMap` when the Azure DevOps certificate is publicly trusted. The chart runs two stateless replicas as non-root on a read-only root filesystem with no service account token, probes `/healthz`, exposes only a `ClusterIP` service, and adds a `NetworkPolicy` that admits pods labelled `app.kubernetes.io/name: open-webui` — adjust `networkPolicy.ingressFrom` to match your Open WebUI pods. Every setting is described in [`values.yaml`](charts/azuremcp/values.yaml).
 
 Pin the chart and image version and raise it deliberately, for example with Renovate: with `latest`, nodes can run different versions and there is nothing to roll back to. Organizations usually mirror the image into an internal registry, verify it there, and deploy from the mirror.
 

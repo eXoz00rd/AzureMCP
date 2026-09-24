@@ -140,7 +140,8 @@ First public preview.
 - 16 tools across projects, work items, repositories, pull requests, and builds
 - CI on GitHub Actions plus a tag-triggered release workflow publishing through NuGet Trusted Publishing
 
-[Unreleased]: https://github.com/eXoz00rd/AzureMCP/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/eXoz00rd/AzureMCP/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.1.3
 [0.1.2]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.1.2
 [0.1.1]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.1.1
 [0.1.0]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.1.0
