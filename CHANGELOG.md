@@ -6,6 +6,11 @@ which also publishes to [NuGet.org](https://www.nuget.org/packages/AzureDevOpsSe
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-09-24
+
+### Security
+- **The server no longer keeps cookies from Azure DevOps.** Over HTTP every caller shares one pooled connection handler, and in 0.2.0 it stored the cookies Azure DevOps set and sent them with later requests from other callers, next to those callers' own PATs. Each request now carries its caller's PAT and nothing another caller left behind. stdio serves a single user and was not affected ([#64](https://github.com/eXoz00rd/AzureMCP/pull/64))
+
 ## [0.2.0] — 2026-09-24
 
 ### Added
@@ -142,7 +147,8 @@ First public preview.
 - 16 tools across projects, work items, repositories, pull requests, and builds
 - CI on GitHub Actions plus a tag-triggered release workflow publishing through NuGet Trusted Publishing
 
-[Unreleased]: https://github.com/eXoz00rd/AzureMCP/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/eXoz00rd/AzureMCP/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.2.1
 [0.2.0]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.2.0
 [0.1.3]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.1.3
 [0.1.2]: https://github.com/eXoz00rd/AzureMCP/releases/tag/v0.1.2

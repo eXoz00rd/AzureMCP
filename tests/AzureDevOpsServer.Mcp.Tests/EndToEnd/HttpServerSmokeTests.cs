@@ -154,6 +154,34 @@ public sealed class HttpServerSmokeTests
     }
 
     [Fact]
+    public async Task Server_OverHttp_NeverSendsOneCallersCookieWithAnothersRequest()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var azureDevOps = new StubAzureDevOpsServer();
+
+        using var server = await ServerProcess.StartListeningAsync(
+            new Dictionary<string, string>
+            {
+                [AzureDevOpsServerOptions.CollectionUrlVariable] = azureDevOps.CollectionUrl,
+                [AzureDevOpsServerOptions.TransportVariable] = "http",
+                [AzureDevOpsServerOptions.HttpTokenVariable] = HttpToken
+            },
+            cancellationToken
+        );
+
+        foreach (var pat in new[] { AlicePersonalAccessToken, BobPersonalAccessToken, AlicePersonalAccessToken })
+        {
+            await using var caller = await ConnectAsync(server.Endpoint, pat, cancellationToken);
+            var result = await caller.CallToolAsync("list_projects", cancellationToken: cancellationToken);
+            Assert.True(result.IsError is null or false, $"Expected a successful tool call, but IsError was {result.IsError}.");
+        }
+
+        // Every answer set a session cookie; the server keeps none, so none can carry one caller's session into another's call.
+        Assert.Equal(3, azureDevOps.CookieHeaders.Count);
+        Assert.All(azureDevOps.CookieHeaders, Assert.Null);
+    }
+
+    [Fact]
     public async Task Server_OverHttpAtDefaultLogLevel_WritesNothing()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

@@ -18,6 +18,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
     private readonly object _requestsGate = new();
     private readonly List<string> _requestPaths = [];
     private readonly List<string?> _authorizationHeaders = [];
+    private readonly List<string?> _cookieHeaders = [];
     private readonly string _projectsResponse;
     private readonly string _workItemResponse;
 
@@ -116,6 +117,19 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
         }
     }
 
+    // The project list sets a session cookie naming its caller, the way a real server may, so tests can see
+    // whether a cookie issued to one caller ever comes back on another caller's request.
+    public IReadOnlyList<string?> CookieHeaders
+    {
+        get
+        {
+            lock (_requestsGate)
+            {
+                return [.. _cookieHeaders];
+            }
+        }
+    }
+
     private async Task AcceptLoopAsync()
     {
         while (!_stopping.IsCancellationRequested)
@@ -135,6 +149,7 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
             {
                 _requestPaths.Add(path);
                 _authorizationHeaders.Add(context.Request.Headers["Authorization"]);
+                _cookieHeaders.Add(context.Request.Headers["Cookie"]);
             }
 
             var isKnownProjectsRequest = context.Request.HttpMethod == "GET" &&
@@ -147,6 +162,14 @@ public sealed class StubAzureDevOpsServer : IAsyncDisposable
             context.Response.StatusCode = isKnownProjectsRequest || isKnownWorkItemRequest ?
                 (int)HttpStatusCode.OK :
                 (int)HttpStatusCode.NotFound;
+            if (isKnownProjectsRequest)
+            {
+                context.Response.AppendHeader(
+                    "Set-Cookie",
+                    $"Session-of={CallerFingerprint(context.Request.Headers["Authorization"])}; Path=/"
+                );
+            }
+
             var responseText = isKnownProjectsRequest ?
                 _projectsResponse.Replace("__CALLER__", CallerFingerprint(context.Request.Headers["Authorization"]), StringComparison.Ordinal) :
                 isKnownWorkItemRequest ? _workItemResponse :
