@@ -2,9 +2,9 @@ namespace AzureDevOpsServer.Mcp.AzureDevOps;
 
 public static class ResponseLimits
 {
-    public const int DefaultMaxChars = 30_000;
+    public const int DefaultMaxChars = 8_000;
     public const int DefaultMaxItems = 500;
-    public const int DefaultListTop = 100;
+    public const int DefaultListTop = 25;
     public const int DefaultBuildCount = 20;
     public const int DefaultReleaseCount = 20;
     public const int DefaultCommitCount = 20;
@@ -19,6 +19,10 @@ public static class ResponseLimits
     public const int MaxItems = 10_000;
     public const int MinDepth = 0;
     public const int MaxDepth = 10;
+
+    // Bounds the bodies the server reads for its own use (error messages, a work item's current
+    // revision). It is not a tool default, so lowering what tools return must not shrink it.
+    public const int MaxInternalReadChars = 30_000;
 
     // Azure DevOps Server's work item batch API rejects a request over roughly this many ids
     // with an opaque server error, so it is rejected client-side with a clear message instead.

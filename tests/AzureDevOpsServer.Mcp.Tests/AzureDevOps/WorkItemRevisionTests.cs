@@ -34,7 +34,7 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
     public async Task LargeDiagnosticBody_PreservesPatchErrorWithoutBuffering(HttpStatusCode status)
     {
         using var rejected = JsonResponse(RevisionError, HttpStatusCode.BadRequest);
-        using var content = new StreamingErrorContent(new string('x', ResponseLimits.DefaultMaxChars + 1));
+        using var content = new StreamingErrorContent(new string('x', ResponseLimits.MaxInternalReadChars + 1));
         using var diagnostic = new HttpResponseMessage(status) { Content = content };
         var client = CreateClient(out var handler, rejected, diagnostic);
         var error = await Assert.ThrowsAsync<AzureDevOpsClientException>(() =>
@@ -66,7 +66,9 @@ public sealed class WorkItemRevisionTests : AzureDevOpsClientTestsBase
     [InlineData(true)]
     public async Task ErrorBody_IsStreamedOnceAndReportsTruncation(bool oversized)
     {
-        var payload = oversized ? new string('x', ResponseLimits.DefaultMaxChars + 1) : """{"message":"Invalid field"}""";
+        var payload = oversized ?
+            new string('x', ResponseLimits.MaxInternalReadChars + 1) :
+            """{"message":"Invalid field"}""";
         using var content = new StreamingErrorContent(payload);
         using var rejected = new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = content };
         var client = CreateClient(out var handler, rejected);

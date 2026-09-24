@@ -9,6 +9,9 @@ which also publishes to [NuGet.org](https://www.nuget.org/packages/AzureDevOpsSe
 ### Added
 - **The server serves its own Open WebUI plugin** at `/openwebui/azure_devops.py`, generated from the tools it registers and pointing back at the address it was fetched from. Administrators import it with **Import From Link** from inside the cluster, where GitHub may be blocked, and it always matches the server's version, toolsets, and read-only mode. It needs no token and holds no secret; `ADOS_HTTP_SERVE_PLUGIN=false` turns it off
 
+### Changed
+- **Tools return less when no limit is given, so one call no longer fills a small model's context window.** List tools now return at most 25 items instead of 100 (`top`), and `get_build_log` and `get_file_content` return at most 8 000 characters instead of 30 000 (`maxChars`). The maximums are unchanged, so a caller that needs more still asks for it with `top` up to 1 000 or `maxChars` up to 1 000 000, and every truncated result still reports that it was cut. Callers that relied on the old defaults must now pass the limit explicitly ([#67](https://github.com/eXoz00rd/AzureMCP/issues/67))
+
 ## [0.2.1] — 2026-09-24
 
 ### Security

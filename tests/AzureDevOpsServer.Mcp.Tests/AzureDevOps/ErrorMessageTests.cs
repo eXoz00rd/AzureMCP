@@ -94,6 +94,21 @@ public sealed class ErrorMessageTests : AzureDevOpsClientTestsBase
         Assert.DoesNotContain("typeKey", exception.Message);
     }
 
+    [Fact]
+    public async Task EnsureSuccessAsync_WithErrorBodyLargerThanToolDefault_DoesNotReportTruncation()
+    {
+        using var response = new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent(new string('x', ResponseLimits.DefaultMaxChars + 1))
+        };
+        var client = CreateClient(out _, response);
+
+        var exception = await Assert.ThrowsAsync<AzureDevOpsClientException>(
+            () => client.GetProjectsAsync(TestContext.Current.CancellationToken));
+
+        Assert.DoesNotContain("Error response truncated.", exception.Message);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized)]
     [InlineData(HttpStatusCode.NonAuthoritativeInformation)]

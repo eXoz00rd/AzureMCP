@@ -78,7 +78,7 @@ public sealed class ReleaseTools
     )]
     public Task<LimitedList<ReleaseApproval>> ListReleaseApprovalsAsync(
         [Description("Optional release id to filter by.")] int? releaseId = null,
-        [Description("Maximum number of approvals to return. Defaults to 100. Valid range 1-1000.")]
+        [Description("Maximum number of approvals to return. Defaults to 25. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project = null,

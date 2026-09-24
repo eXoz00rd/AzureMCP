@@ -162,7 +162,7 @@ public sealed class WorkItemTools
     [Description("Lists the discussion comments of a work item with their authors and dates.")]
     public Task<WorkItemCommentList> ListWorkItemCommentsAsync(
         [Description("Work item id.")] int id,
-        [Description("Maximum number of comments to return. Defaults to 100. Valid range 1-1000.")]
+        [Description("Maximum number of comments to return. Defaults to 25. Valid range 1-1000.")]
         int? top = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]
         string? project = null,
@@ -182,7 +182,7 @@ public sealed class WorkItemTools
     )]
     public async Task<LimitedList<WorkItem>> GetWorkItemRevisionsAsync(
         [Description("Work item id.")] int id,
-        [Description("Maximum number of revisions to return. Defaults to 100. Valid range 1-1000.")]
+        [Description("Maximum number of revisions to return. Defaults to 25. Valid range 1-1000.")]
         int? top = null,
         [Description(
             "Format for a fixed set of built-in rich-text fields (System.Description, System.History, Repro Steps, System Info, Acceptance Criteria, and the CMMI Justification/Symptom fields): 'html' (default, unchanged) or 'text' (tags stripped, entities decoded). All other fields, including any custom HTML field a process template adds, are always returned exactly as sent."

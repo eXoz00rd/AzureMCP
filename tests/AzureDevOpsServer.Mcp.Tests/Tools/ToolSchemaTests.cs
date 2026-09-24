@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AzureDevOpsServer.Mcp.AzureDevOps;
 using AzureDevOpsServer.Mcp.Configuration;
 using AzureDevOpsServer.Mcp.Tools;
 using ModelContextProtocol.Server;
@@ -107,6 +108,47 @@ public sealed partial class ToolSchemaTests
         Assert.Empty(offenders);
     }
 
+    [Fact]
+    public void LimitParameters_StateADefaultTheServerApplies()
+    {
+        Dictionary<string, int[]> defaults = new()
+        {
+            ["top"] =
+            [
+                ResponseLimits.DefaultListTop,
+                ResponseLimits.DefaultBuildCount,
+                ResponseLimits.DefaultReleaseCount,
+                ResponseLimits.DefaultCommitCount
+            ],
+            ["maxChars"] = [ResponseLimits.DefaultMaxChars],
+            ["maxItems"] = [ResponseLimits.DefaultMaxItems],
+            ["depth"] = [ResponseLimits.DefaultQueryDepth, ResponseLimits.DefaultNodeDepth]
+        };
+        var offenders = new List<string>();
+
+        foreach (var toolType in Toolsets.Resolve(null))
+        {
+            foreach (var method in ToolMethods(toolType))
+            {
+                var tool = method.GetCustomAttribute<McpServerToolAttribute>()!.Name;
+                offenders.AddRange(
+                    method.GetParameters()
+                          .Where(parameter => parameter.Name is not null && defaults.ContainsKey(parameter.Name))
+                          .Where(parameter =>
+                          {
+                              var text = parameter.GetCustomAttribute<DescriptionAttribute>()?.Description ?? string.Empty;
+                              var stated = DefaultsToPattern().Match(text);
+                              return !stated.Success ||
+                                  !defaults[parameter.Name!].Contains(int.Parse(stated.Groups[1].Value));
+                          })
+                          .Select(parameter => $"{tool}.{parameter.Name}")
+                );
+            }
+        }
+
+        Assert.Empty(offenders);
+    }
+
     private static IEnumerable<MethodInfo> ToolMethods(Type toolType)
     {
         return toolType
@@ -124,4 +166,7 @@ public sealed partial class ToolSchemaTests
 
     [GeneratedRegex(@"\bvalid range\b", RegexOptions.IgnoreCase)]
     private static partial Regex ValidRangePattern();
+
+    [GeneratedRegex(@"\bDefaults to (\d+)\b")]
+    private static partial Regex DefaultsToPattern();
 }

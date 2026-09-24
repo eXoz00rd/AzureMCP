@@ -448,7 +448,7 @@ public sealed partial class AzureDevOpsClient
         if (expectedRevision is not null &&
             response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed)
         {
-            var body = await BoundedText.ReadAsync(response.Content, ResponseLimits.DefaultMaxChars, cancellationToken);
+            var body = await BoundedText.ReadAsync(response.Content, ResponseLimits.MaxInternalReadChars, cancellationToken);
             if (!body.Truncated && IsRevisionMismatch(body.Text))
             {
                 var currentRevision = await TryGetCurrentRevisionAsync(id, cancellationToken);
@@ -503,7 +503,7 @@ public sealed partial class AzureDevOpsClient
                 return null;
             }
 
-            var body = await BoundedText.ReadAsync(response.Content, ResponseLimits.DefaultMaxChars, cancellationToken);
+            var body = await BoundedText.ReadAsync(response.Content, ResponseLimits.MaxInternalReadChars, cancellationToken);
             if (body.Truncated)
             {
                 return null;

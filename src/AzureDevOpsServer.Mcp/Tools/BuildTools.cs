@@ -89,7 +89,7 @@ public sealed class BuildTools
         [Description("Optional 1-based last line to return.")]
         int? endLine = null,
         [Description(
-            "Maximum number of characters to return. Defaults to 30000, valid range 1-1000000; the result reports the total length and whether it was truncated."
+            "Maximum number of characters to return. Defaults to 8000, valid range 1-1000000; the result reports the total length and whether it was truncated."
         )]
         int? maxChars = null,
         [Description("Optional project name. Falls back to ADOS_DEFAULT_PROJECT when omitted.")]

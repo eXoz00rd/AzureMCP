@@ -45,7 +45,7 @@ public sealed class BuildToolsTests : ToolTestsBase
 
         var log = await tools.GetBuildLogAsync(500, 7, null, null, null, null, TestContext.Current.CancellationToken);
 
-        Assert.Equal(ResponseLimits.DefaultMaxChars, log.Content.Length);
+        Assert.Equal(8_000, log.Content.Length);
         Assert.True(log.Truncated);
         Assert.Equal(45_000, log.TotalChars);
     }
