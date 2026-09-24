@@ -116,25 +116,35 @@ jobs:
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST --header 'Content-Type: application/json' --data '{}' http://127.0.0.1:8080/mcp)" = 401
       - name: Talk MCP to the container
         run: .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8080/mcp --token ci-token
-      - name: Serve a stub collection over TLS from an internal certificate authority
+      - name: Serve stub collections over TLS from two certificate authorities
         run: |
           mkdir ca
-          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=CI Internal CA" -keyout ca/ca.key -out ca/ca.crt
-          openssl req -newkey rsa:2048 -nodes -subj "/CN=ado-stub" -addext "subjectAltName=DNS:ado-stub" -keyout ca/server.key -out ca/server.csr
-          openssl x509 -req -in ca/server.csr -CA ca/ca.crt -CAkey ca/ca.key -CAcreateserial -days 1 -copy_extensions copyall -out ca/server.crt
+          # An internal authority, which the deployment mounts, and a stand-in for a public one, which lives in the image.
+          for authority in internal public; do
+            openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=CI $authority CA" -keyout "ca/$authority.key" -out "ca/$authority.crt"
+            openssl req -newkey rsa:2048 -nodes -subj "/CN=ado-stub" -addext "subjectAltName=DNS:ado-stub" \
+              -keyout "ca/$authority-server.key" -out "ca/$authority-server.csr"
+            openssl x509 -req -in "ca/$authority-server.csr" -CA "ca/$authority.crt" -CAkey "ca/$authority.key" \
+              -CAcreateserial -days 1 -copy_extensions copyall -out "ca/$authority-server.crt"
+          done
           chmod 644 ca/*
-          docker network create ci
-          docker run --detach --name ado-stub --network ci             --volume "$PWD/.github/scripts:/scripts:ro" --volume "$PWD/ca:/ca:ro"             python:3.12-alpine python /scripts/ado_stub.py /ca/server.crt /ca/server.key
+          python3 .github/scripts/ado_stub.py ca/internal-server.crt ca/internal-server.key 8443 > ado-stub-internal.log 2>&1 &
+          python3 .github/scripts/ado_stub.py ca/public-server.crt ca/public-server.key 8444 > ado-stub-public.log 2>&1 &
+          # The public roots sit in /etc/ssl/certs, so an image with the stand-in there shows whether that store survives.
+          printf 'FROM azuremcp:ci\nCOPY public.crt /etc/ssl/certs/ci-public-ca.pem\n' | docker build --tag azuremcp:ci-roots --file - ca
       - name: Trust the internal authority from a mounted directory, as the Helm chart does
         run: |
-          for variant in with-ca without-ca public; do
-            case "$variant" in
-              with-ca) port=8081; collection=https://ado-stub:8443/DefaultCollection; trust=(--volume "$PWD/ca/ca.crt:/etc/azuremcp/ca/ca.crt:ro" --env SSL_CERT_DIR=/etc/ssl/certs:/etc/azuremcp/ca) ;;
-              without-ca) port=8082; collection=https://ado-stub:8443/DefaultCollection; trust=() ;;
-              public) port=8083; collection=https://github.com/DefaultCollection; trust=(--volume "$PWD/ca/ca.crt:/etc/azuremcp/ca/ca.crt:ro" --env SSL_CERT_DIR=/etc/ssl/certs:/etc/azuremcp/ca) ;;
-            esac
-            docker run --detach --name "azuremcp-$variant" --network ci --read-only --tmpfs /tmp               --publish "127.0.0.1:$port:8080" --env ADOS_COLLECTION_URL="$collection" --env ADOS_HTTP_TOKEN=ci-token               "${trust[@]}" azuremcp:ci
-          done
+          mounted=(--volume "$PWD/ca/internal.crt:/etc/azuremcp/ca/ca.crt:ro" --env SSL_CERT_DIR=/etc/ssl/certs:/etc/azuremcp/ca)
+          run() {
+            local name=$1 port=$2 collection=$3 image=$4
+            shift 4
+            docker run --detach --name "azuremcp-$name" --add-host ado-stub:host-gateway --read-only --tmpfs /tmp \
+              --publish "127.0.0.1:$port:8080" --env ADOS_COLLECTION_URL="$collection" --env ADOS_HTTP_TOKEN=ci-token \
+              "$@" "$image"
+          }
+          run with-ca 8081 https://ado-stub:8443/DefaultCollection azuremcp:ci "${mounted[@]}"
+          run without-ca 8082 https://ado-stub:8443/DefaultCollection azuremcp:ci
+          run system-root 8083 https://ado-stub:8444/DefaultCollection azuremcp:ci-roots "${mounted[@]}"
           for port in 8081 8082 8083; do
             for attempt in $(seq 1 30); do
               curl --fail --silent --output /dev/null "http://127.0.0.1:$port/healthz" && break
@@ -145,14 +155,19 @@ jobs:
           .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8081/mcp --token ci-token --tool list_projects --expect Alpha
           # ...only because it was mounted...
           .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8082/mcp --token ci-token --tool list_projects --expect-error --expect "TLS connection"
-          # ...and adding it keeps the public roots: a public server fails for other reasons, never on its certificate.
-          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8083/mcp --token ci-token --tool list_projects --expect-error --reject "TLS connection"
+          # ...and mounting it keeps the system store, where the public roots live.
+          .venv/bin/python .github/scripts/mcp_check.py --url http://127.0.0.1:8083/mcp --token ci-token --tool list_projects --expect Alpha
       - name: Container logs
         if: always()
         run: |
-          for container in azuremcp azuremcp-with-ca azuremcp-without-ca azuremcp-public ado-stub; do
+          for container in azuremcp azuremcp-with-ca azuremcp-without-ca azuremcp-system-root; do
             echo "::group::$container"
             docker logs "$container" 2>&1 || true
+            echo "::endgroup::"
+          done
+          for stub in ado-stub-internal.log ado-stub-public.log; do
+            echo "::group::$stub"
+            cat "$stub" 2>/dev/null || true
             echo "::endgroup::"
           done
 

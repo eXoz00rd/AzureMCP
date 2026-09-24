@@ -37,7 +37,8 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     certificate, key = sys.argv[1], sys.argv[2]
-    server = ThreadingHTTPServer(("0.0.0.0", 8443), Handler)
+    port = int(sys.argv[3]) if len(sys.argv) > 3 else 8443
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(certificate, key)
     server.socket = context.wrap_socket(server.socket, server_side=True)
