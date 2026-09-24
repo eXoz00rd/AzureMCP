@@ -109,21 +109,9 @@ public sealed partial class ToolSchemaTests
     }
 
     [Fact]
-    public void LimitParameters_StateADefaultTheServerApplies()
+    public void LimitParameters_StateTheDefaultTheServerAppliesToThatTool()
     {
-        Dictionary<string, int[]> defaults = new()
-        {
-            ["top"] =
-            [
-                ResponseLimits.DefaultListTop,
-                ResponseLimits.DefaultBuildCount,
-                ResponseLimits.DefaultReleaseCount,
-                ResponseLimits.DefaultCommitCount
-            ],
-            ["maxChars"] = [ResponseLimits.DefaultMaxChars],
-            ["maxItems"] = [ResponseLimits.DefaultMaxItems],
-            ["depth"] = [ResponseLimits.DefaultQueryDepth, ResponseLimits.DefaultNodeDepth]
-        };
+        string[] limitNames = ["top", "maxChars", "maxItems", "depth"];
         var offenders = new List<string>();
 
         foreach (var toolType in Toolsets.Resolve(null))
@@ -133,13 +121,13 @@ public sealed partial class ToolSchemaTests
                 var tool = method.GetCustomAttribute<McpServerToolAttribute>()!.Name;
                 offenders.AddRange(
                     method.GetParameters()
-                          .Where(parameter => parameter.Name is not null && defaults.ContainsKey(parameter.Name))
+                          .Where(parameter => limitNames.Contains(parameter.Name))
                           .Where(parameter =>
                           {
                               var text = parameter.GetCustomAttribute<DescriptionAttribute>()?.Description ?? string.Empty;
                               var stated = DefaultsToPattern().Match(text);
                               return !stated.Success ||
-                                  !defaults[parameter.Name!].Contains(int.Parse(stated.Groups[1].Value));
+                                  int.Parse(stated.Groups[1].Value) != EffectiveDefault(tool, parameter.Name!);
                           })
                           .Select(parameter => $"{tool}.{parameter.Name}")
                 );
@@ -147,6 +135,23 @@ public sealed partial class ToolSchemaTests
         }
 
         Assert.Empty(offenders);
+    }
+
+    private static int EffectiveDefault(string? tool, string parameter)
+    {
+        return parameter switch
+        {
+            "maxChars" => ResponseLimits.DefaultMaxChars,
+            "maxItems" => ResponseLimits.DefaultMaxItems,
+            "depth" => tool == "list_queries" ? ResponseLimits.DefaultQueryDepth : ResponseLimits.DefaultNodeDepth,
+            _ => tool switch
+            {
+                "list_builds" => ResponseLimits.DefaultBuildCount,
+                "list_releases" => ResponseLimits.DefaultReleaseCount,
+                "list_commits" => ResponseLimits.DefaultCommitCount,
+                _ => ResponseLimits.DefaultListTop
+            }
+        };
     }
 
     private static IEnumerable<MethodInfo> ToolMethods(Type toolType)
